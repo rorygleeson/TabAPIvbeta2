@@ -85,6 +85,10 @@ const falseCollectiveFinish = goodResponse();
 falseCollectiveFinish.scenes[group67Index].payoffHeadline = 'Both runners second';
 assert.throws(() => validateCopyResponse(input, falseCollectiveFinish), /concrete fact outside a fact atom/);
 
+const ordinaryNarrativeOrdinal = goodResponse();
+ordinaryNarrativeOrdinal.scenes[0].openingTeaser = 'The first chapter is about to unfold.';
+assert.doesNotThrow(() => validateCopyResponse(input, ordinaryNarrativeOrdinal));
+
 const dayIndex = input.scenes.findIndex(scene => scene.sceneType === 6);
 const ambiguousWinners = goodResponse();
 ambiguousWinners.scenes[dayIndex].dayVerdict = 'Three winners shaped the day';
