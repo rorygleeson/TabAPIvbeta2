@@ -52,7 +52,7 @@ function schemaCheck(validate, value, stage) {
 function validateSource(b) {
   const bets=b.bets, s=b.summary;
   if (bets.length!==s.totalBets) fail('BETTINGS_SEMANTICS','summary.totalBets does not equal bets.length.');
-  bets.forEach((x,i)=>{ if(x.sequence!==i+1) fail('BETTINGS_SEMANTICS',`Bet sequence must be contiguous and ascending; expected ${i+1}.`); if(!sameMoney(x.profitLoss,x.return-x.stake)) fail('BETTINGS_SEMANTICS',`Bet ${x.sequence}: profitLoss must equal return - stake.`); const expected=i===0?x.profitLoss:bets[i-1].runningPnl+x.profitLoss; if(!sameMoney(x.runningPnl,expected)) fail('BETTINGS_SEMANTICS',`Bet ${x.sequence}: runningPnl is inconsistent.`); if(x.replayUrl!==null && x.replayUrl!=='' && !validHttps(x.replayUrl)) fail('BETTINGS_SEMANTICS',`Bet ${x.sequence}: replayUrl must be HTTPS when supplied.`); });
+  bets.forEach((x,i)=>{ if(x.sequence!==i+1) fail('BETTINGS_SEMANTICS',`Bet sequence must be contiguous and ascending; expected ${i+1}.`); if(!sameMoney(x.profitLoss,x.return-x.stake)) fail('BETTINGS_SEMANTICS',`Bet ${x.sequence}: profitLoss must equal return - stake.`); const expected=i===0?x.profitLoss:bets[i-1].runningPnl+x.profitLoss; if(!sameMoney(x.runningPnl,expected)) fail('BETTINGS_SEMANTICS',`Bet ${x.sequence}: runningPnl is inconsistent.`); });
   const wins=bets.filter(x=>x.result==='WIN'), losses=bets.filter(x=>x.result==='LOSS');
   if(!sameMoney(s.totalStaked,sum(bets.map(x=>x.stake)))) fail('BETTINGS_SEMANTICS','summary.totalStaked mismatch.');
   if(!sameMoney(s.totalReturned,sum(bets.map(x=>x.return)))) fail('BETTINGS_SEMANTICS','summary.totalReturned mismatch.');
@@ -79,7 +79,7 @@ function validatePlan(b,p) {
     if(s.sceneType===2) coverage.push(s.betSequence);
     if(s.sceneType===5){ if(s.betSequences.some((x,j)=>j&&x!==s.betSequences[j-1]+1)) fail('SCENE_PLAN_SEMANTICS',`Scene array item ${i+1} (sceneType 5): sequences must be consecutive.`); coverage.push(...s.betSequences); }
     if(s.sceneType===8){ if(s.betSequences.some((x,j)=>j&&x!==s.betSequences[j-1]+1)) fail('SCENE_PLAN_SEMANTICS',`Scene array item ${i+1} (sceneType 8): sequences must be consecutive.`); if(s.comments.length!==s.betSequences.length) fail('SCENE_PLAN_SEMANTICS',`Scene array item ${i+1} (sceneType 8): comments.length must equal betSequences.length.`); coverage.push(...s.betSequences); }
-    if(s.sceneType===3){ const prev=scenes[i-1], bet=b.bets[s.betSequence-1]; if(!prev||prev.sceneType!==2||prev.betSequence!==s.betSequence) fail('SCENE_PLAN_SEMANTICS',`Scene array item ${i+1} (sceneType 3): replay must immediately follow Scene 2 for same bet.`); if(!bet||bet.result!=='WIN'||bet.showReplay!==true||!bet.replayUrl||!validHttps(bet.replayUrl)) fail('SCENE_PLAN_SEMANTICS',`Scene array item ${i+1} (sceneType 3): bet ${s.betSequence} is not replay eligible.`); }
+    if(s.sceneType===3){ const prev=scenes[i-1], bet=b.bets[s.betSequence-1]; if(!prev||prev.sceneType!==2||prev.betSequence!==s.betSequence) fail('SCENE_PLAN_SEMANTICS',`Scene array item ${i+1} (sceneType 3): replay must immediately follow Scene 2 for same bet.`); if(!bet||bet.result!=='WIN'||!bet.replayUrl||!validHttps(bet.replayUrl)) fail('SCENE_PLAN_SEMANTICS',`Scene array item ${i+1} (sceneType 3): bet ${s.betSequence} is not replay eligible.`); }
   });
   if(coverage.length!==total || coverage.some((x,i)=>x!==i+1)) fail('SCENE_PLAN_SEMANTICS','Primary bet coverage must be exactly 1..totalBets once, in order.');
   validateMidpoint(scenes,total);
