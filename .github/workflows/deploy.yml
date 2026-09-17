@@ -168,6 +168,7 @@ jobs:
           cd ../..
           cp lambda/scene-planner/bootstrap.js dist/scene-planner-package/bootstrap.js
           cp lambda/scene-planner/index.js dist/scene-planner-package/index.js
+          cp lambda/scene-planner/contract-loader.js dist/scene-planner-package/contract-loader.js
           cp lambda/scene-planner/scene-planner.js dist/scene-planner-package/scene-planner.js
           cp lambda/scene-planner/planner-policy.js dist/scene-planner-package/planner-policy.js
           cp lambda/scene-planner/llm-copy-input.js dist/scene-planner-package/llm-copy-input.js
@@ -182,6 +183,7 @@ jobs:
           cp contracts/runtime-contract.json dist/scene-planner-package/contracts/runtime-contract.json
           test -f dist/scene-planner-package/bootstrap.js
           test -f dist/scene-planner-package/index.js
+          test -f dist/scene-planner-package/contract-loader.js
           test -f dist/scene-planner-package/scene-planner.js
           test -f dist/scene-planner-package/planner-policy.js
           test -f dist/scene-planner-package/llm-copy-input.js
@@ -200,6 +202,7 @@ jobs:
           zip -qr ../scene-planner.zip .
           cd ../..
           unzip -l dist/scene-planner.zip | grep 'bootstrap.js'
+          unzip -l dist/scene-planner.zip | grep 'contract-loader.js'
           unzip -l dist/scene-planner.zip | grep 'scene-planner.js'
           unzip -l dist/scene-planner.zip | grep 'llm-copy-input.js'
           unzip -l dist/scene-planner.zip | grep 'llm-copy-response.js'
