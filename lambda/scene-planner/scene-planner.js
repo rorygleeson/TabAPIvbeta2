@@ -25,8 +25,14 @@ function buildDeterministicScenePlan(bettings, options = {}) {
     eligibleReplayBets.length,
     policy.replay.maxCount
   );
+  const minimumReplayCount = calculateMinimumRequiredReplayCount(
+    facts.totalBets,
+    eligibleReplayBets.length,
+    maximumReplayCount,
+    policy.replay
+  );
 
-  for (let replayCount = maximumReplayCount; replayCount >= 0; replayCount -= 1) {
+  for (let replayCount = maximumReplayCount; replayCount >= minimumReplayCount; replayCount -= 1) {
     const replaySequences = new Set(
       eligibleReplayBets.slice(0, replayCount).map(bet => bet.sequence)
     );
@@ -55,7 +61,7 @@ function buildDeterministicScenePlan(bettings, options = {}) {
         distanceFromTarget: Math.abs(duration.plannedSeconds - targetDurationSeconds)
       };
 
-      if (candidate.conservativeSeconds > runtime.durationPolicy.hardMaxSeconds) {
+      if (candidate.plannedSeconds > runtime.durationPolicy.hardMaxSeconds) {
         continue;
       }
 
@@ -105,6 +111,14 @@ function validatePlannerInput(bettings, policy) {
 
   if (!policy.feature || !Array.isArray(policy.feature.extraScene2ByBets)) {
     throw new TypeError('planner policy feature.extraScene2ByBets is required.');
+  }
+
+  if (!policy.scene8 || !Number.isInteger(policy.scene8.minTotalBets) || policy.scene8.minTotalBets < 1) {
+    throw new TypeError('planner policy scene8.minTotalBets must be a positive integer.');
+  }
+
+  if (!Array.isArray(policy.replay.minimumRequiredByBets)) {
+    throw new TypeError('planner policy replay.minimumRequiredByBets is required.');
   }
 }
 
@@ -158,6 +172,14 @@ function calculateDesiredReplayCount(totalBets, replayPolicy) {
   );
 
   return rule ? Math.min(rule.minCount, replayPolicy.maxCount) : 0;
+}
+
+function calculateMinimumRequiredReplayCount(totalBets, eligibleCount, maximumReplayCount, replayPolicy) {
+  const rule = replayPolicy.minimumRequiredByBets.find(item =>
+    item.maxBets === null || totalBets <= item.maxBets
+  );
+  const requestedMinimum = rule ? Math.max(0, Number(rule.minCount) || 0) : 0;
+  return Math.min(requestedMinimum, eligibleCount, maximumReplayCount);
 }
 
 function calculateExtraScene2Allowance(totalBets, rules) {
@@ -229,7 +251,7 @@ function buildScenes(facts, policy, featuredSequences, replaySequences) {
       sequence += 1;
     }
 
-    primaryScenes.push(...groupGap(gap));
+    primaryScenes.push(...groupGap(gap, facts.totalBets >= policy.scene8.minTotalBets));
   }
 
   const midpointAfter = calculateMidpointBoundary(primaryScenes, facts.totalBets, policy.midpoint);
@@ -253,7 +275,7 @@ function buildScenes(facts, policy, featuredSequences, replaySequences) {
   return scenes;
 }
 
-function groupGap(sequences) {
+function groupGap(sequences, allowScene8) {
   const scenes = [];
   let index = 0;
   let remaining = sequences.length;
@@ -261,7 +283,12 @@ function groupGap(sequences) {
   while (remaining > 0) {
     let size;
 
-    if (remaining === 1) size = 1;
+    if (!allowScene8) {
+      if (remaining === 1) size = 1;
+      else if (remaining === 2) size = 2;
+      else if (remaining === 4) size = 2;
+      else size = 3;
+    } else if (remaining === 1) size = 1;
     else if (remaining === 2 || remaining === 3) size = remaining;
     else if (remaining === 4 || remaining === 5) size = remaining;
     else {
@@ -400,5 +427,6 @@ module.exports = {
   buildDeterministicScenePlan,
   calculateTargetDurationSeconds,
   calculateDesiredReplayCount,
+  calculateMinimumRequiredReplayCount,
   calculateExtraScene2Allowance
 };
