@@ -31,16 +31,19 @@ function buildDeterministicScenePlan(bettings, options = {}) {
       eligibleReplayBets.slice(0, replayCount).map(bet => bet.sequence)
     );
 
-    const minimumFeaturedCount = Math.max(1, replaySequences.size);
-    const maximumFeaturedCount = Math.min(policy.feature.maxScene2Count, facts.totalBets);
+    const maxExtraScene2 = calculateExtraScene2Allowance(
+      facts.totalBets,
+      policy.feature.extraScene2ByBets
+    );
+
     let bestCandidate = null;
 
-    for (let featuredCount = minimumFeaturedCount; featuredCount <= maximumFeaturedCount; featuredCount += 1) {
+    for (let extraScene2Count = 0; extraScene2Count <= maxExtraScene2; extraScene2Count += 1) {
       const featuredSequences = selectFeaturedSequences(
         facts,
         policy,
         replaySequences,
-        featuredCount
+        replaySequences.size + extraScene2Count
       );
 
       const scenes = buildScenes(facts, policy, featuredSequences, replaySequences);
@@ -99,6 +102,10 @@ function validatePlannerInput(bettings, policy) {
   if (!policy.replay || !Array.isArray(policy.replay.minimumByBets)) {
     throw new TypeError('planner policy replay.minimumByBets is required.');
   }
+
+  if (!policy.feature || !Array.isArray(policy.feature.extraScene2ByBets)) {
+    throw new TypeError('planner policy feature.extraScene2ByBets is required.');
+  }
 }
 
 function derivePlannerFacts(bettings, policy) {
@@ -151,6 +158,11 @@ function calculateDesiredReplayCount(totalBets, replayPolicy) {
   );
 
   return rule ? Math.min(rule.minCount, replayPolicy.maxCount) : 0;
+}
+
+function calculateExtraScene2Allowance(totalBets, rules) {
+  const rule = rules.find(item => item.maxBets === null || totalBets <= item.maxBets);
+  return rule ? Math.max(0, Number(rule.maxExtra) || 0) : 0;
 }
 
 function isReplayEligible(bet) {
@@ -387,5 +399,6 @@ function validateDeterministicPlan(scenes, facts, replaySequences) {
 module.exports = {
   buildDeterministicScenePlan,
   calculateTargetDurationSeconds,
-  calculateDesiredReplayCount
+  calculateDesiredReplayCount,
+  calculateExtraScene2Allowance
 };
