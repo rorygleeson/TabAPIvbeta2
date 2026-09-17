@@ -1,5 +1,14 @@
 'use strict';
 
+const ATOM_PATTERN = /\{\{([A-Z][A-Z0-9_]*)\}\}/g;
+const SENSITIVE_RAW_PATTERN = /(?:[$%@]|\d|\b(?:win|wins|winner|winners|winning|won|loss|losses|lost|lose|losing|profit|profits|return|returns|returned|stake|staked|odds)\b)/iu;
+const POSITION_WORD = '(?:first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|eleventh|twelfth|thirteenth|fourteenth|fifteenth|sixteenth|seventeenth|eighteenth|nineteenth|twentieth)';
+const POSITION_CLAIM_PATTERN = new RegExp(
+  '\\b(?:finished|finishing|ran|placed|came)\\s+' + POSITION_WORD + '\\b' +
+  '|\\b(?:both|all)\\s+(?:(?:the\\s+)?(?:runners?|horses?)\\s+)?(?:finished\\s+|ran\\s+|placed\\s+|came\\s+)?' + POSITION_WORD + '\\b',
+  'iu'
+);
+
 function parseJsonObject(text) {
   const source = String(text || '').trim();
   if (!source) throw new Error('LLM returned no text content.');
@@ -30,6 +39,8 @@ function validateCopyResponse(copyInput, response) {
     throw new Error('LLM copy response scene count does not match copy input.');
   }
 
+  const normalized = { scenes: [] };
+
   response.scenes.forEach((item, index) => {
     const source = copyInput.scenes[index];
     if (!item || typeof item !== 'object' || Array.isArray(item)) {
@@ -45,38 +56,110 @@ function validateCopyResponse(copyInput, response) {
       if (!allowed.has(key)) throw new Error('LLM copy scene ' + index + ' returned unexpected field ' + key + '.');
     }
 
+    const normalizedItem = { sceneIndex: index };
+
     for (const [field, rule] of Object.entries(fieldRules)) {
       if (!Object.prototype.hasOwnProperty.call(item, field)) {
         throw new Error('LLM copy scene ' + index + ' missing field ' + field + '.');
       }
-      validateField(item[field], rule, index, field);
+      const value = normalizeGroundedValue(item[field], rule, source, index, field);
+      validateField(value, rule, index, field);
+      normalizedItem[field] = value;
     }
 
-    if (source.sceneType === 8 && Array.isArray(item.comments)) {
-      if (item.comments.length !== source.betSequences.length) {
+    if (source.sceneType === 8 && Array.isArray(normalizedItem.comments)) {
+      if (normalizedItem.comments.length !== source.betSequences.length) {
         throw new Error('Scene 8 comments count must equal betSequences count.');
       }
     }
 
-    if (source.sceneType === 6 && item.standoutHighlightType) {
+    if (source.sceneType === 6 && normalizedItem.standoutHighlightType) {
       const eligible = new Set((source.context?.standoutOptions || []).map(x => x.type));
-      if (!eligible.has(item.standoutHighlightType)) {
+      if (!eligible.has(normalizedItem.standoutHighlightType)) {
         throw new Error('Scene 6 standoutHighlightType is not eligible.');
       }
     }
 
-    if (source.sceneType === 7 && Array.isArray(item.selectedFinalHighlights)) {
+    if (source.sceneType === 7 && Array.isArray(normalizedItem.selectedFinalHighlights)) {
       const eligible = new Set((source.context?.availableFinalHighlights || []).map(x => x.type));
-      for (const value of item.selectedFinalHighlights) {
+      for (const value of normalizedItem.selectedFinalHighlights) {
         if (!eligible.has(value)) throw new Error('Scene 7 selectedFinalHighlights contains ineligible value ' + value + '.');
       }
-      if (new Set(item.selectedFinalHighlights).size !== item.selectedFinalHighlights.length) {
+      if (new Set(normalizedItem.selectedFinalHighlights).size !== normalizedItem.selectedFinalHighlights.length) {
         throw new Error('Scene 7 selectedFinalHighlights must be unique.');
       }
     }
+
+    normalized.scenes.push(normalizedItem);
   });
 
-  return response;
+  return normalized;
+}
+
+function normalizeGroundedValue(value, rule, source, sceneIndex, field) {
+  if (rule.enum) return clone(value);
+
+  if (typeof value === 'string') {
+    return expandGroundedString(value, source, rule.phase, null, sceneIndex, field);
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((item, itemIndex) => {
+      if (typeof item !== 'string') return item;
+      return expandGroundedString(item, source, rule.phase, itemIndex, sceneIndex, field);
+    });
+  }
+
+  return value;
+}
+
+function expandGroundedString(rawValue, source, phase, itemIndex, sceneIndex, field) {
+  const raw = String(rawValue);
+  const label = 'Scene ' + sceneIndex + ' field ' + field + (itemIndex === null ? '' : '[' + itemIndex + ']');
+  const atomMap = atomsForPhase(source, phase, itemIndex);
+  const referenced = [];
+
+  const withoutAtoms = raw.replace(ATOM_PATTERN, (_, id) => {
+    referenced.push(id);
+    if (!Object.prototype.hasOwnProperty.call(atomMap, id)) {
+      throw new Error(label + ' references unknown or wrong-phase fact atom ' + id + '.');
+    }
+    return ' ';
+  });
+
+  if (/[{}]/u.test(withoutAtoms)) {
+    throw new Error(label + ' contains malformed fact atom syntax.');
+  }
+
+  validateUngroundedRawText(withoutAtoms, source, label);
+
+  return raw.replace(ATOM_PATTERN, (_, id) => String(atomMap[id]));
+}
+
+function atomsForPhase(source, phase, itemIndex) {
+  const scoped = source.context?.factAtomsByPhase?.[phase];
+  if (Array.isArray(scoped)) {
+    if (!Number.isInteger(itemIndex) || !scoped[itemIndex] || typeof scoped[itemIndex] !== 'object') {
+      return {};
+    }
+    return scoped[itemIndex];
+  }
+  return scoped && typeof scoped === 'object' ? scoped : {};
+}
+
+function validateUngroundedRawText(rawText, source, label) {
+  const text = String(rawText || '');
+  if (SENSITIVE_RAW_PATTERN.test(text) || POSITION_CLAIM_PATTERN.test(text)) {
+    throw new Error(label + ' contains a concrete fact outside a fact atom.');
+  }
+
+  const lower = text.toLocaleLowerCase('en-AU');
+  for (const term of source.context?.protectedTerms || []) {
+    const normalized = String(term || '').trim().toLocaleLowerCase('en-AU');
+    if (normalized && lower.includes(normalized)) {
+      throw new Error(label + ' contains protected factual text outside a fact atom: ' + term + '.');
+    }
+  }
 }
 
 function hardCharLimit(target) {
@@ -126,9 +209,18 @@ function countWords(value) {
   return String(value).trim().split(/\s+/u).filter(token => /[\p{L}\p{N}]/u.test(token)).length;
 }
 
+function clone(value) {
+  return JSON.parse(JSON.stringify(value));
+}
+
 module.exports = {
   parseJsonObject,
   validateCopyResponse,
   countWords,
-  hardCharLimit
+  hardCharLimit,
+  __test: {
+    atomsForPhase,
+    expandGroundedString,
+    validateUngroundedRawText
+  }
 };

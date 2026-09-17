@@ -341,16 +341,18 @@ Kubrick V2 should make one primary LLM call for copy generation after structure 
 The LLM receives:
 
 - the fixed ordered scene skeleton
-- factual context required for each scene
+- deterministic, phase-scoped factual atoms required for each scene
 - field-level copy requirements
-- word/character limits
+- word/character targets
 - style guidance
+
+Fresh copy generation uses `FACT_ATOMS_V1`. Concrete names, results, finishing positions, money, odds, counts and other sensitive factual wording are supplied as deterministic placeholders such as `{{B6_FINISH}}`. The LLM remains free to write connective, emotional and narrative language around those atoms, but it must not independently reconstruct the factual clause.
 
 The LLM does **not** receive authority to restructure the plan.
 
-The response should contain only the text fields required to decorate the skeleton, ideally keyed by stable scene identifiers.
+There is still exactly one LLM copy call per recap. There is no second verifier model, no per-scene model fan-out and no structural/copy repair loop.
 
-If copy validation later proves a repair path is required, it must remain generic and bounded. Do not recreate the old architecture with a growing family of special-case repair functions.
+Planner validation rejects unknown or wrong-phase atom use and expands valid atoms before merge. Atom metadata never reaches final `scene.json`, so the existing Builder interface remains unchanged.
 
 Soft stylistic imperfections should not fail an otherwise structurally valid recap.
 

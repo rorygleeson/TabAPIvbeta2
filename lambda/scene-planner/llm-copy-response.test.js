@@ -30,7 +30,8 @@ function goodResponse() {
 }
 
 const parsed = parseJsonObject(JSON.stringify(goodResponse()));
-assert.doesNotThrow(() => validateCopyResponse(input, parsed));
+const normalized = validateCopyResponse(input, parsed);
+assert.strictEqual(normalized.scenes.length, input.scenes.length);
 
 const unexpected = goodResponse();
 unexpected.scenes[0].sceneType = 1;
@@ -67,4 +68,49 @@ const badIndex = goodResponse();
 badIndex.scenes[1].sceneIndex = 99;
 assert.throws(() => validateCopyResponse(input, badIndex), /sceneIndex mismatch/);
 
-console.log('LLM copy response validation tests passed.');
+const group67Index = input.scenes.findIndex(scene =>
+  scene.sceneType === 5 &&
+  JSON.stringify(scene.betSequences) === JSON.stringify([6, 7])
+);
+assert.ok(group67Index >= 0);
+
+const groundedGroup = goodResponse();
+groundedGroup.scenes[group67Index].payoffHeadline = '{{B6_FINISH}}, while {{B7_FINISH}}';
+groundedGroup.scenes[group67Index].contextLine = '{{BLOCK_PROFIT_LOSS}} and the pressure was building.';
+const groundedGroupNormalized = validateCopyResponse(input, groundedGroup);
+assert.strictEqual(groundedGroupNormalized.scenes[group67Index].payoffHeadline, 'GIN AND BARE IT finished 4th, while INSAIN CHAOS finished 2nd');
+assert.strictEqual(groundedGroupNormalized.scenes[group67Index].contextLine, 'the block lost $85 and the pressure was building.');
+
+const falseCollectiveFinish = goodResponse();
+falseCollectiveFinish.scenes[group67Index].payoffHeadline = 'Both runners second';
+assert.throws(() => validateCopyResponse(input, falseCollectiveFinish), /concrete fact outside a fact atom/);
+
+const ordinaryNarrativeOrdinal = goodResponse();
+ordinaryNarrativeOrdinal.scenes[0].openingTeaser = 'The first chapter is about to unfold.';
+assert.doesNotThrow(() => validateCopyResponse(input, ordinaryNarrativeOrdinal));
+
+const dayIndex = input.scenes.findIndex(scene => scene.sceneType === 6);
+const ambiguousWinners = goodResponse();
+ambiguousWinners.scenes[dayIndex].dayVerdict = 'Three winners shaped the day';
+assert.throws(() => validateCopyResponse(input, ambiguousWinners), /concrete fact outside a fact atom/);
+
+const groundedWinningBets = goodResponse();
+groundedWinningBets.scenes[dayIndex].dayVerdict = '{{DAY_WINNING_BETS}} shaped the day.';
+const groundedDayNormalized = validateCopyResponse(input, groundedWinningBets);
+assert.strictEqual(groundedDayNormalized.scenes[dayIndex].dayVerdict, '3 winning bets shaped the day.');
+
+const bet3SceneIndex = input.scenes.findIndex(scene => scene.sceneType === 2 && scene.betSequence === 3);
+const protectedRunner = goodResponse();
+protectedRunner.scenes[bet3SceneIndex].tensionLine = 'ROCEM is ready to go';
+assert.throws(() => validateCopyResponse(input, protectedRunner), /protected factual text outside a fact atom/);
+
+const groundedRunner = goodResponse();
+groundedRunner.scenes[bet3SceneIndex].tensionLine = '{{B3_RUNNER}} is ready to go';
+const groundedRunnerNormalized = validateCopyResponse(input, groundedRunner);
+assert.strictEqual(groundedRunnerNormalized.scenes[bet3SceneIndex].tensionLine, 'ROCEM is ready to go');
+
+const wrongPhaseAtom = goodResponse();
+wrongPhaseAtom.scenes[bet3SceneIndex].tensionLine = '{{B3_FINISH}} is the story';
+assert.throws(() => validateCopyResponse(input, wrongPhaseAtom), /unknown or wrong-phase fact atom B3_FINISH/);
+
+console.log('Grounded LLM copy response validation tests passed.');

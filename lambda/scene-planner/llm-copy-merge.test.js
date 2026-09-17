@@ -6,6 +6,7 @@ const path = require('path');
 
 const { buildDeterministicScenePlan } = require('./scene-planner');
 const { buildLlmCopyInput } = require('./llm-copy-input');
+const { validateCopyResponse } = require('./llm-copy-response');
 const { mergeCopyIntoPlan } = require('./llm-copy-merge');
 const { buildRecap } = require('../builder-recap/recap-builder');
 
@@ -34,7 +35,7 @@ function mockCopyFromInput(copyInput) {
           item.replayComments = ['Here we go', 'Get there'];
           break;
         case 4:
-          item.lookingBackStory = 'The first half delivered enough movement to shape the day.';
+          item.lookingBackStory = 'The early stretch delivered enough movement to shape the day.';
           item.lookingAheadTeaser = 'Plenty remained on the card before the final result.';
           break;
         case 5:
@@ -44,14 +45,14 @@ function mockCopyFromInput(copyInput) {
           item.contextLine = 'Those races moved the running position again.';
           break;
         case 6:
-          item.dayVerdict = 'The day moved through several swings before the final result.';
+          item.dayVerdict = '{{DAY_WINNING_BETS}} shaped a day with several swings.';
           item.standoutHighlightType = 'totalReturned';
-          item.standoutCopy = 'Total returns give the clearest single snapshot of the day.';
+          item.standoutCopy = 'That was the clearest single turning point of the day.';
           break;
         case 7:
           item.selectedFinalHighlights = ['totalBets', 'wins', 'finalPnl'];
-          item.finalSummary = 'Every bet is accounted for and the racing day is complete.';
-          item.shareCaption = 'My full racing-day recap, from the first bet to the final result.';
+          item.finalSummary = '{{DAY_FINAL_PNL}} when it was all done.';
+          item.shareCaption = 'My full racing-day recap, from the opening move to the closing chapter.';
           break;
         case 8:
           item.headline = 'THE NEXT RUN OF BETS';
@@ -84,7 +85,8 @@ for (const totalBets of [5, 8, 16, 32, 75]) {
   const deterministicPlan = buildDeterministicScenePlan(bettings);
   const copyInput = buildLlmCopyInput(bettings, deterministicPlan);
   const copyResponse = mockCopyFromInput(copyInput);
-  const finalPlan = mergeCopyIntoPlan(deterministicPlan, copyResponse);
+  const validatedCopy = validateCopyResponse(copyInput, copyResponse);
+  const finalPlan = mergeCopyIntoPlan(deterministicPlan, validatedCopy);
 
   assert.strictEqual(finalPlan.planVersion, '2.0');
   assert.deepStrictEqual(
@@ -95,6 +97,7 @@ for (const totalBets of [5, 8, 16, 32, 75]) {
 
   assert.strictEqual('artifactType' in finalPlan, false);
   assert.strictEqual('artifactVersion' in finalPlan, false);
+  assert.strictEqual(JSON.stringify(finalPlan).includes('{{'), false, 'Final scene plan must not contain fact atom placeholders');
 
   const result = buildRecap({ bettings, scenePlan: finalPlan });
   assert.ok(result.html.includes('data-scene-type='));

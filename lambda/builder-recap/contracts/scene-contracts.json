@@ -1,5 +1,5 @@
 {
-  "contractVersion": "2.0.10",
+  "contractVersion": "2.0.11",
   "companionContracts": [
     "contracts/bettings.schema.json",
     "contracts/scene-plan.schema.json",
@@ -43,6 +43,15 @@
       "wordLimits": "maxWords and itemMaxWords are generation targets only and never fail an otherwise valid recap.",
       "characterTargets": "maxChars and itemMaxChars remain the requested design targets supplied to the LLM.",
       "hardCharacterTolerance": "Validation fails only above target + min(ceil(target * 0.10), 12 characters), applied uniformly to every LLM-owned string and string-array item."
+    },
+    "groundedCopyProtocol": {
+      "version": "FACT_ATOMS_V1",
+      "copyInputVersion": "2.0",
+      "modelCallPolicy": "One LLM copy call per recap. Fact atoms do not add verifier, repair or per-scene model calls.",
+      "rule": "Concrete factual wording in fresh LLM copy must be expressed through deterministic phase-scoped fact atom placeholders. Free text outside atoms is narrative/connective only.",
+      "semanticDistinction": "A winning bet is not necessarily a race-winning runner. Race-win wording requires finishingPosition=1; bet-result wording follows the wager result.",
+      "validation": "Planner rejects unknown or wrong-phase atom placeholders, malformed placeholders, protected factual literals typed outside atoms, and raw sensitive numeric/outcome wording outside atoms. Valid atoms are expanded before final scene-plan merge.",
+      "finalPlan": "Fact atom IDs and grounding metadata are copy-stage-only and are stripped before scene.json. Builder interface remains unchanged."
     }
   },
   "fieldSources": {
