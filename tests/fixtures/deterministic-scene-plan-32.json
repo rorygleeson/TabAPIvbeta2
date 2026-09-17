@@ -1,0 +1,26 @@
+{
+  "artifactType": "deterministicScenePlan",
+  "artifactVersion": "1.0",
+  "scenes": [
+    { "sceneType": 1 },
+    { "sceneType": 2, "betSequence": 1 },
+    { "sceneType": 2, "betSequence": 2 },
+    { "sceneType": 3, "betSequence": 2 },
+    { "sceneType": 5, "betSequences": [3, 4, 5] },
+    { "sceneType": 2, "betSequence": 6 },
+    { "sceneType": 3, "betSequence": 6 },
+    { "sceneType": 5, "betSequences": [7, 8] },
+    { "sceneType": 2, "betSequence": 9 },
+    { "sceneType": 3, "betSequence": 9 },
+    { "sceneType": 8, "betSequences": [10, 11, 12, 13, 14] },
+    { "sceneType": 4, "checkpointAfterBetSequence": 14 },
+    { "sceneType": 8, "betSequences": [15, 16, 17, 18, 19] },
+    { "sceneType": 8, "betSequences": [20, 21, 22, 23, 24] },
+    { "sceneType": 5, "betSequences": [25, 26] },
+    { "sceneType": 2, "betSequence": 27 },
+    { "sceneType": 3, "betSequence": 27 },
+    { "sceneType": 8, "betSequences": [28, 29, 30, 31, 32] },
+    { "sceneType": 6 },
+    { "sceneType": 7 }
+  ]
+}
