@@ -205,12 +205,6 @@ async function processMessage(context) {
     return { jobId, status: before.status, sceneS3Key: before.sceneS3Key, idempotent: true };
   }
 
-  const recovered = await tryGetJsonFromS3(sceneS3Key);
-  if (recovered) {
-    schemaCheck(validateScenePlanSchema, recovered, 'scene.json');
-    return { jobId, status: before.status, sceneS3Key, idempotent: true, recovered: true };
-  }
-
   const claim = await claimJob(jobId);
   if (!claim.claimed) {
     if ((claim.current.status === 'RENDERING' || claim.current.status === 'READY') && claim.current.sceneS3Key) {
@@ -225,6 +219,13 @@ async function processMessage(context) {
   const attemptId = claim.attemptId;
 
   try {
+    const recovered = await tryGetJsonFromS3(sceneS3Key);
+    if (recovered) {
+      schemaCheck(validateScenePlanSchema, recovered, 'scene.json');
+      await markRendering(jobId, attemptId, sceneS3Key);
+      return { jobId, status: 'RENDERING', sceneS3Key, idempotent: true, recovered: true };
+    }
+
     const bettings = await getJsonFromS3(bettingsS3Key);
     schemaCheck(validateBettingsSchema, bettings, 'bettings.json');
 
