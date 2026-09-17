@@ -123,6 +123,7 @@ jobs:
           test -f lambda/scene-planner/planner-policy.js
           test -f lambda/scene-planner/scene-planner.js
           node --check lambda/scene-planner/bootstrap.js
+          node --check lambda/scene-planner/contract-loader.js
           node --check lambda/scene-planner/index.js
           node --check lambda/scene-planner/index.test.js
           node --check lambda/scene-planner/planner-policy.js
