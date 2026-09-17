@@ -52,7 +52,7 @@ function mockCopyFromInput(copyInput) {
         case 7:
           item.selectedFinalHighlights = ['totalBets', 'wins', 'finalPnl'];
           item.finalSummary = '{{DAY_FINAL_PNL}} when it was all done.';
-          item.shareCaption = 'My full racing-day recap, from the first bet to the final result.';
+          item.shareCaption = 'My full racing-day recap, from the opening move to the closing chapter.';
           break;
         case 8:
           item.headline = 'THE NEXT RUN OF BETS';
