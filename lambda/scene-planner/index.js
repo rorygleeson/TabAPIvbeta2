@@ -1,7 +1,5 @@
 'use strict';
 
-const fs = require('fs');
-const path = require('path');
 const { randomUUID } = require('crypto');
 const Ajv2020 = require('ajv/dist/2020');
 const addFormats = require('ajv-formats');
@@ -13,6 +11,7 @@ const { buildDeterministicScenePlan } = require('./scene-planner');
 const { buildLlmCopyInput } = require('./llm-copy-input');
 const { parseJsonObject, validateCopyResponse } = require('./llm-copy-response');
 const { mergeCopyIntoPlan } = require('./llm-copy-merge');
+const { loadContract, loadContractText } = require('./contract-loader');
 
 const REGION = process.env.AWS_REGION || 'ap-southeast-2';
 const STORAGE_BUCKET = process.env.STORAGE_BUCKET;
@@ -24,12 +23,9 @@ const s3 = new S3Client({ region: REGION });
 const ddb = new DynamoDBClient({ region: REGION });
 const bedrock = new BedrockRuntimeClient({ region: REGION });
 
-const ROOT = __dirname;
-const read = p => fs.readFileSync(path.join(ROOT, p), 'utf8');
-const json = p => JSON.parse(read(p));
-const plannerPrompt = read('contracts/planner-prompt.md');
-const bettingsSchema = json('contracts/bettings.schema.json');
-const scenePlanSchema = json('contracts/scene-plan.schema.json');
+const plannerPrompt = loadContractText('planner-prompt.md');
+const bettingsSchema = loadContract('bettings.schema.json');
+const scenePlanSchema = loadContract('scene-plan.schema.json');
 
 const ajv = new Ajv2020({ allErrors: true, strict: false });
 addFormats(ajv);
