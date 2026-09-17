@@ -1,0 +1,100 @@
+name: V2 Canonical Cleanup Once
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/v2-canonical-cleanup-once.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply targeted canonical cleanup
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          # 1) Canonical fixtures: remove only the two retired bet-input fields.
+          for name in ['bettings-baseline.json', 'bettings-75.json']:
+              p = Path('tests/fixtures') / name
+              data = json.loads(p.read_text(encoding='utf-8'))
+              for bet in data.get('bets', []):
+                  bet.pop('sceneType', None)
+                  bet.pop('showReplay', None)
+              p.write_text(json.dumps(data, indent=2, ensure_ascii=False) + '\n', encoding='utf-8')
+
+          # 2) Pass-3 normaliser: stop calculating/emitting sceneType/showReplay.
+          p = Path('tests/normaliser/normaliser.py')
+          s = p.read_text(encoding='utf-8')
+          old = '''    replay = e.get("replayUrl")\n    show_replay = bool(\n        result == "WIN"\n        and bet.get("betType") == "WIN"\n        and replay\n    )\n    required=e.get("required") is True\n'''
+          new = '''    replay = e.get("replayUrl")\n    required=e.get("required") is True\n'''
+          if old not in s:
+              raise SystemExit('normaliser.py: expected show_replay block not found')
+          s = s.replace(old, new, 1)
+          s = s.replace('        "sceneType": None,\n        "showReplay": show_replay,\n', '', 1)
+          p.write_text(s, encoding='utf-8')
+
+          # 3) Normaliser logic spec: canonical output is replayUrl-only for replay availability.
+          p = Path('docs/NORMALISER-LOGIC-SPEC.md')
+          s = p.read_text(encoding='utf-8')
+          s = s.replace('''runningPnl\nsceneType\nshowReplay\nreplayUrl\n''', '''runningPnl\nreplayUrl\n''')
+          s = s.replace('''Current baseline:\n\n```text\nresult == WIN\nbetType == WIN\nvalid replayUrl exists\n```\n\nMissing replay is optional enrichment and never invalidates a bet.''', '''Canonical replay availability is represented only by `replayUrl`. A valid non-empty HTTPS `replayUrl` means replay media is available; null or invalid means unavailable. Kubrick owns the decision to use an available replay. Missing replay is optional enrichment and never invalidates a bet.''')
+          p.write_text(s, encoding='utf-8')
+
+          # 4) Enrichment doc: Pass 2 supplies replayUrl; Pass 3 does not own a replay flag.
+          p = Path('lambda/normaliser/ENRICHMENT.md')
+          s = p.read_text(encoding='utf-8')
+          s = s.replace('Pass 2 does not decide final `showReplay` eligibility. Pass 3 should apply the application rule, including result and URL availability.', 'Pass 2 supplies `replayUrl` when available. Canonical `bettings.json` has no replay-selection flag; replay availability is represented only by `replayUrl`, and Kubrick owns replay selection.')
+          s = s.replace('''runningPnl\nshowReplay\nfinal summary calculations''', '''runningPnl\nfinal summary calculations''')
+          p.write_text(s, encoding='utf-8')
+
+          # 5) Old planner-prompt copies: the retired input field no longer exists, so remove legacy-ignore wording.
+          for path in ['contracts/planner-prompt.md', 'lambda/builder-recap/contracts/planner-prompt.md']:
+              p = Path(path)
+              s = p.read_text(encoding='utf-8')
+              s = s.replace('- Ignore legacy `bets[].sceneType`.\n', '')
+              p.write_text(s, encoding='utf-8')
+
+          # 6) Verify targeted stale input references are gone from live tracked source/test/docs.
+          forbidden = ['showReplay', 'bets[].sceneType']
+          roots = [Path('contracts'), Path('docs'), Path('lambda'), Path('tests')]
+          hits = []
+          for root in roots:
+              for p in root.rglob('*'):
+                  if not p.is_file():
+                      continue
+                  try:
+                      text = p.read_text(encoding='utf-8')
+                  except UnicodeDecodeError:
+                      continue
+                  for token in forbidden:
+                      if token in text:
+                          hits.append(f'{p}: {token}')
+          if hits:
+              raise SystemExit('Forbidden legacy input references remain:\n' + '\n'.join(hits))
+          PY
+
+          # The helper is intentionally one-shot; remove it in the cleanup commit itself.
+          rm .github/workflows/v2-canonical-cleanup-once.yml
+
+          git diff --check
+          git status --short
+
+      - name: Commit cleanup
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add tests/fixtures/bettings-baseline.json tests/fixtures/bettings-75.json tests/normaliser/normaliser.py docs/NORMALISER-LOGIC-SPEC.md lambda/normaliser/ENRICHMENT.md contracts/planner-prompt.md lambda/builder-recap/contracts/planner-prompt.md .github/workflows/v2-canonical-cleanup-once.yml
+          git commit -m "Complete V2 canonical bettings input cleanup"
+          git push origin HEAD:main
