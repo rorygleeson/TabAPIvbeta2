@@ -534,8 +534,6 @@ finishingPosition
 return
 profitLoss
 runningPnl
-sceneType
-showReplay
 replayUrl
 ```
 
@@ -602,15 +600,7 @@ A later-stage exception must not overwrite valid Pass-1 output. `job-error.json`
 
 ## 18. Replay
 
-Current baseline:
-
-```text
-result == WIN
-betType == WIN
-valid replayUrl exists
-```
-
-Missing replay is optional enrichment and never invalidates a bet.
+Canonical replay availability is represented only by `replayUrl`. A valid non-empty HTTPS `replayUrl` means replay media is available; null or invalid means unavailable. Kubrick owns the decision to use an available replay. Missing replay is optional enrichment and never invalidates a bet.
 
 ## 19. Historical jurisdiction scope
 

@@ -1492,11 +1492,6 @@ def map_to_final_bet(bet, sequence, running_pnl, running_complete):
         final_running = None
     result = bet.get("betResult")
     replay = e.get("replayUrl")
-    show_replay = bool(
-        result == "WIN"
-        and bet.get("betType") == "WIN"
-        and replay
-    )
     required=e.get("required") is True
     missing=missing_enrichment_fields(bet)
     record = {
@@ -1519,8 +1514,6 @@ def map_to_final_bet(bet, sequence, running_pnl, running_complete):
         "return": float(returned) if returned is not None else None,
         "profitLoss": pnl,
         "runningPnl": final_running,
-        "sceneType": None,
-        "showReplay": show_replay,
         "replayUrl": replay,
         "domainClassification": bet.get("domainClassification"),
         "enrichmentStatus": e.get("status"),

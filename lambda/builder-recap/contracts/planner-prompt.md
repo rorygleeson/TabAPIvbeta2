@@ -20,7 +20,6 @@ Exception: if this same system message explicitly enters `FIELD REPAIR MODE`, th
 - Every factual assertion in LLM prose, numeric or non-numeric, must be explicitly supported by `bettings.json` or deterministically implied by its validated structure.
 - Do not infer external racing facts from race names, runner names, meeting names, finishing positions, bet types, odds or other context. Narrative colour is allowed only when it does not introduce a new factual claim.
 - Never output FACT, builder-DERIVED, CONTROLLED or RUNTIME fields. `checkpointAfterBetSequence` is planner-code-owned and MUST NOT be authored or relied upon by you; planner code will discard/overwrite any value and set the final checkpoint after your grouping is known.
-- Ignore legacy `bets[].sceneType`.
 - Numbers and numeric facts are allowed in LLM prose when they make the recap clearer, more natural or more engaging, subject to the hard monetary-format rule below.
 - Every factual number, count, amount, odds value, percentage, race number or other quantity used in LLM prose must be directly supported by `bettings.json` or deterministically implied by its validated structure.
 - Preserve both the exact value and its semantic meaning. Never swap or mislabel stake, return, profit/loss, running P&L, odds, counts, race numbers or other quantities. For example, a profit/loss value must never be described as a return.

@@ -244,7 +244,7 @@ Pass 2 recursively inspects the race payload for explicit replay/video/media URL
 
 `replayUrl` can remain null.
 
-Pass 2 does not decide final `showReplay` eligibility. Pass 3 should apply the application rule, including result and URL availability.
+Pass 2 supplies `replayUrl` when available. Canonical `bettings.json` has no replay-selection flag; replay availability is represented only by `replayUrl`, and Kubrick owns replay selection.
 
 ## 12. Financial ownership
 
@@ -463,7 +463,6 @@ final sequence mapping
 return
 profitLoss
 runningPnl
-showReplay
 final summary calculations
 Tote W&P component expansion when reconciled
 final contract treatment of exotic/multi-event wagers
