@@ -178,7 +178,7 @@ async function invokeCopyModel(copyInput) {
 
   const outputText = (response.output?.message?.content || []).map(x => x.text || '').join('').trim();
   const parsed = parseJsonObject(outputText);
-  validateCopyResponse(copyInput, parsed);
+  const validatedCopy = validateCopyResponse(copyInput, parsed);
 
   console.log(JSON.stringify({
     event: 'llm-copy-completed',
@@ -188,7 +188,7 @@ async function invokeCopyModel(copyInput) {
     latencyMs: response.metrics?.latencyMs
   }));
 
-  return parsed;
+  return validatedCopy;
 }
 
 async function processMessage(context) {
