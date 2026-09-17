@@ -1,5 +1,5 @@
 {
-  "contractVersion": "2.0.9",
+  "contractVersion": "2.0.10",
   "companionContracts": [
     "contracts/bettings.schema.json",
     "contracts/scene-plan.schema.json",
@@ -38,7 +38,12 @@
       "runtime/recap-runtime.js",
       "eight approved scene templates"
     ],
-    "safeCanonicalization": "Kubrick V2 does not use LLM structural canonicalization or structural repair. The deterministic planner emits canonical structure directly. Copy-stage merge may add only contract-declared LLM-owned fields to the matching deterministic scene index; all structural fields remain byte-for-byte authoritative from the deterministic plan."
+    "safeCanonicalization": "Kubrick V2 does not use LLM structural canonicalization or structural repair. The deterministic planner emits canonical structure directly. Copy-stage merge may add only contract-declared LLM-owned fields to the matching deterministic scene index; all structural fields remain byte-for-byte authoritative from the deterministic plan.",
+    "llmCopyLengthPolicy": {
+      "wordLimits": "maxWords and itemMaxWords are generation targets only and never fail an otherwise valid recap.",
+      "characterTargets": "maxChars and itemMaxChars remain the requested design targets supplied to the LLM.",
+      "hardCharacterTolerance": "Validation fails only above target + min(ceil(target * 0.10), 12 characters), applied uniformly to every LLM-owned string and string-array item."
+    }
   },
   "fieldSources": {
     "FACT": "Read from validated bettings.json; display variants are DERIVED.",

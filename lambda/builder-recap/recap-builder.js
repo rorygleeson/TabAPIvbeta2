@@ -28,7 +28,7 @@ const fail = (stage, message) => { throw new BuildError(stage, message); };
 const cents = n => Math.round(Number(n) * 100);
 const sameMoney = (a,b) => cents(a) === cents(b);
 const sum = xs => xs.reduce((a,b)=>a+Number(b),0);
-const words = s => String(s).trim().split(/\s+/u).filter(token => /[\p{L}\p{N}]/u.test(token)).length;
+const hardCharLimit = target => { const n=Number(target); return Number.isFinite(n)&&n>0 ? n+Math.min(Math.ceil(n*.10),12) : null; };
 const containsMarkup = s => /[<>]/u.test(String(s));
 const signClass = n => Number(n) > 0 ? 'positive' : Number(n) < 0 ? 'negative' : 'zero';
 const esc = v => String(v ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -99,14 +99,14 @@ function validateNarrativeLimits(p){
     for(const [k,v] of Object.entries(c)){
       if(!v||typeof v!=='object'||v.source!=='LLM')continue;
       if(typeof s[k]==='string'){
-        if(v.maxWords&&words(s[k])>v.maxWords)fail('SCENE_PLAN_SEMANTICS',`Scene array item ${i+1} (sceneType ${s.sceneType}) ${k} exceeds ${v.maxWords} words.`);
-        if(v.maxChars&&s[k].length>v.maxChars)fail('SCENE_PLAN_SEMANTICS',`Scene array item ${i+1} (sceneType ${s.sceneType}) ${k} exceeds ${v.maxChars} characters.`);
+        const hardMaxChars=hardCharLimit(v.maxChars);
+        if(hardMaxChars&&s[k].length>hardMaxChars)fail('SCENE_PLAN_SEMANTICS',`Scene array item ${i+1} (sceneType ${s.sceneType}) ${k} exceeds hard character tolerance ${hardMaxChars}.`);
         if(containsMarkup(s[k]))fail('SCENE_PLAN_SEMANTICS',`Scene array item ${i+1} (sceneType ${s.sceneType}) ${k} contains forbidden markup characters.`);
       }
-      if(Array.isArray(s[k])&&v.itemMaxWords){
+      if(Array.isArray(s[k])&&v.itemMaxChars){
         s[k].forEach((x,j)=>{
-          if(words(x)>v.itemMaxWords)fail('SCENE_PLAN_SEMANTICS',`Scene array item ${i+1} (sceneType ${s.sceneType}) ${k}[${j}] exceeds ${v.itemMaxWords} words.`);
-          if(v.itemMaxChars&&x.length>v.itemMaxChars)fail('SCENE_PLAN_SEMANTICS',`Scene array item ${i+1} (sceneType ${s.sceneType}) ${k}[${j}] exceeds ${v.itemMaxChars} characters.`);
+          const hardItemMaxChars=hardCharLimit(v.itemMaxChars);
+          if(hardItemMaxChars&&x.length>hardItemMaxChars)fail('SCENE_PLAN_SEMANTICS',`Scene array item ${i+1} (sceneType ${s.sceneType}) ${k}[${j}] exceeds hard character tolerance ${hardItemMaxChars}.`);
           if(containsMarkup(x))fail('SCENE_PLAN_SEMANTICS',`Scene array item ${i+1} (sceneType ${s.sceneType}) ${k}[${j}] contains forbidden markup characters.`);
         });
       }

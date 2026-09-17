@@ -79,6 +79,12 @@ function validateCopyResponse(copyInput, response) {
   return response;
 }
 
+function hardCharLimit(target) {
+  const n = Number(target);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return n + Math.min(Math.ceil(n * 0.10), 12);
+}
+
 function validateField(value, rule, sceneIndex, field) {
   const label = 'Scene ' + sceneIndex + ' field ' + field;
 
@@ -94,8 +100,8 @@ function validateField(value, rule, sceneIndex, field) {
 
   if (typeof value === 'string') {
     if (!value.trim()) throw new Error(label + ' must not be empty.');
-    if (rule.maxChars && value.length > rule.maxChars) throw new Error(label + ' exceeds maxChars.');
-    if (rule.maxWords && countWords(value) > rule.maxWords) throw new Error(label + ' exceeds maxWords.');
+    const hardMaxChars = hardCharLimit(rule.maxChars);
+    if (hardMaxChars && value.length > hardMaxChars) throw new Error(label + ' exceeds hard maxChars tolerance (' + hardMaxChars + ').');
     if (/[<>]/u.test(value)) throw new Error(label + ' contains forbidden markup.');
     return;
   }
@@ -105,8 +111,8 @@ function validateField(value, rule, sceneIndex, field) {
     if (rule.maxItems !== undefined && value.length > rule.maxItems) throw new Error(label + ' has too many items.');
     for (const item of value) {
       if (typeof item !== 'string' || !item.trim()) throw new Error(label + ' items must be non-empty strings.');
-      if (rule.itemMaxChars && item.length > rule.itemMaxChars) throw new Error(label + ' item exceeds itemMaxChars.');
-      if (rule.itemMaxWords && countWords(item) > rule.itemMaxWords) throw new Error(label + ' item exceeds itemMaxWords.');
+      const hardItemMaxChars = hardCharLimit(rule.itemMaxChars);
+      if (hardItemMaxChars && item.length > hardItemMaxChars) throw new Error(label + ' item exceeds hard itemMaxChars tolerance (' + hardItemMaxChars + ').');
       if (/[<>]/u.test(item)) throw new Error(label + ' item contains forbidden markup.');
     }
     return;
@@ -123,5 +129,6 @@ function countWords(value) {
 module.exports = {
   parseJsonObject,
   validateCopyResponse,
-  countWords
+  countWords,
+  hardCharLimit
 };
