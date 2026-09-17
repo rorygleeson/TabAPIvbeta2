@@ -1,6 +1,7 @@
 'use strict';
 
-const sceneContracts = require('../../contracts/scene-contracts.json');
+const { loadContract } = require('./contract-loader');
+const sceneContracts = loadContract('scene-contracts.json');
 
 const FIELD_PHASES = {
   1: { openingTeaser: 'PRE_RESULT_DAY' },
