@@ -1,0 +1,115 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "contracts/deterministic-scene-plan.schema.json",
+  "title": "TAB Deterministic Scene Plan",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["artifactType", "artifactVersion", "scenes"],
+  "properties": {
+    "artifactType": {
+      "const": "deterministicScenePlan"
+    },
+    "artifactVersion": {
+      "const": "1.0"
+    },
+    "scenes": {
+      "type": "array",
+      "minItems": 4,
+      "items": {
+        "oneOf": [
+          { "$ref": "#/$defs/s1" },
+          { "$ref": "#/$defs/s2" },
+          { "$ref": "#/$defs/s3" },
+          { "$ref": "#/$defs/s4" },
+          { "$ref": "#/$defs/s5" },
+          { "$ref": "#/$defs/s6" },
+          { "$ref": "#/$defs/s7" },
+          { "$ref": "#/$defs/s8" }
+        ]
+      }
+    }
+  },
+  "$defs": {
+    "s1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sceneType"],
+      "properties": {
+        "sceneType": { "const": 1 }
+      }
+    },
+    "s2": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sceneType", "betSequence"],
+      "properties": {
+        "sceneType": { "const": 2 },
+        "betSequence": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "s3": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sceneType", "betSequence"],
+      "properties": {
+        "sceneType": { "const": 3 },
+        "betSequence": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "s4": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sceneType", "checkpointAfterBetSequence"],
+      "properties": {
+        "sceneType": { "const": 4 },
+        "checkpointAfterBetSequence": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "s5": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sceneType", "betSequences"],
+      "properties": {
+        "sceneType": { "const": 5 },
+        "betSequences": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 3,
+          "uniqueItems": true,
+          "items": { "type": "integer", "minimum": 1 }
+        }
+      }
+    },
+    "s6": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sceneType"],
+      "properties": {
+        "sceneType": { "const": 6 }
+      }
+    },
+    "s7": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sceneType"],
+      "properties": {
+        "sceneType": { "const": 7 }
+      }
+    },
+    "s8": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sceneType", "betSequences"],
+      "properties": {
+        "sceneType": { "const": 8 },
+        "betSequences": {
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 5,
+          "uniqueItems": true,
+          "items": { "type": "integer", "minimum": 1 }
+        }
+      }
+    }
+  }
+}
