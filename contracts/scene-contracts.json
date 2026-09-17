@@ -1,5 +1,5 @@
 {
-  "contractVersion": "2.0.7",
+  "contractVersion": "2.0.8",
   "companionContracts": [
     "contracts/bettings.schema.json",
     "contracts/scene-plan.schema.json",
@@ -24,7 +24,7 @@
     "unknownFieldsRejected": true,
     "missingRequiredFieldsRejected": true,
     "primaryCoverage": "Every input bet appears exactly once chronologically in Scene 2, Scene 5 or Scene 8. Scene 3 never counts.",
-    "semanticValidationBoundary": "The planner may first apply context-safe deterministic canonicalization to an otherwise schema-valid candidate. It never reorders Scene 2/5/8 primary chronology or splits/merges/moves Scene 8. When exactly one Scene 4 exists and primary coverage is canonical, planner code owns its final midpoint placement and checkpointAfterBetSequence; any LLM-supplied checkpoint is discarded/overwritten. Hard plan generation has a separate budget of at most one controlled LLM repair/regeneration attempt after the initial generation; the resulting candidate is fully schema- and semantic-validated before any quality-only calls. After hard validation succeeds, runtime may make at most one optional Scene 8 headline-only quality repair when the diversity/meaning gate fails and sufficient Lambda time remains, and may make at most one separate optional Scene 4 narration-finalization call when Scene 4 exists and sufficient Lambda time remains. These optional quality calls are fallback-safe and do not increase the hard repair/regeneration budget. The planner deterministically rejects mechanically provable Scene 8 headline spoilers such as obvious grouped outcome language, outcome-only grouped money values, and explicit grouped finishing-position leaks before storage. Subtle natural-language spoiler implications and emotional quality remain planner-prompt/live-inspection responsibilities. The builder independently repeats deterministic schema/semantic validation before rendering. Planned duration is deterministically calculated and the hard maximum is enforced before storage.",
+    "semanticValidationBoundary": "Kubrick V2 deterministic planner code exclusively owns scene structure, chronology, Scene 2/5/8 grouping, replay selection, Scene 3 placement, Scene 4 presence/placement/checkpoint, midpoint choice and duration feasibility. The LLM copy stage receives the completed deterministic scene structure and may generate only fields whose source is LLM. It cannot add, remove, duplicate, reorder, regroup or repair scenes and cannot change any structural field. LLM copy is validated before deterministic merge, then the completed scene plan is schema- and semantic-validated before storage. The builder independently repeats deterministic schema/semantic validation before rendering.",
     "wordCountAlgorithm": "Trim the string, split on whitespace, and count only tokens containing at least one Unicode letter or digit. Standalone punctuation does not count as a word.",
     "llmNarrativeNumericPolicy": "Numbers and numeric facts are allowed in LLM-owned prose only when directly supported by validated bettings.json or deterministically implied by it. Every value must preserve exact value and semantic meaning; stakes, returns, profit/loss, running P&L, odds, counts, race numbers and percentages must never be invented, rounded, swapped or mislabelled. Natural grounded phrasing such as two bets or eight races down is allowed when correct.",
     "llmMarkupPolicy": "LLM-owned prose must not contain HTML/markup angle brackets.",
@@ -38,13 +38,13 @@
       "runtime/recap-runtime.js",
       "eight approved scene templates"
     ],
-    "safeCanonicalization": "Context-safe deterministic canonicalization may move one existing Scene 1 first; one existing Scene 6 and one existing Scene 7 to second-last/last together; one eligible unique Scene 3 immediately after its matching Scene 2 when primary coverage is already canonical; and one existing Scene 4 to the deterministic midpoint boundary when primary coverage is canonical. Scene 4 checkpointAfterBetSequence is then set by planner code to the completed-primary sequence at that boundary. Primary Scene 2/5/8 order is immutable. Scene 8 groups are never automatically split, merged, reordered or relocated."
+    "safeCanonicalization": "Kubrick V2 does not use LLM structural canonicalization or structural repair. The deterministic planner emits canonical structure directly. Copy-stage merge may add only contract-declared LLM-owned fields to the matching deterministic scene index; all structural fields remain byte-for-byte authoritative from the deterministic plan."
   },
   "fieldSources": {
     "FACT": "Read from validated bettings.json; display variants are DERIVED.",
     "DERIVED": "Calculated deterministically by builder.",
-    "PLANNER_DERIVED": "Calculated deterministically by planner code after LLM scene grouping; LLM output is not authoritative for this field.",
-    "LLM": "Only planner fields in scene-plan.schema.json.",
+    "PLANNER_DERIVED": "Calculated deterministically by planner code before the LLM copy stage; LLM output is never authoritative for this field.",
+    "LLM": "Generated only by the copy stage for fields explicitly marked LLM; the caller validates and merges these fields into the immutable deterministic structure.",
     "CONTROLLED": "Fixed value declared in this contract/runtime contract.",
     "RUNTIME": "Calculated by executable runtime after page load."
   },
@@ -52,34 +52,87 @@
     "scene1ClosingHook": "LET'S RUN IT BACK."
   },
   "scene8HeadlineTaxonomy": {
-    "EXPOSURE": { "meaning": "Lead with the exact total stake/exposure across this Scene 8 block.", "eligibility": "Always eligible when the grouped stake can be summed exactly from the Scene 8 bets; use only those bets and never outcome-derived values." },
-    "DAY_POSITION": { "meaning": "Lead with the exact running P&L immediately before this Scene 8 block begins.", "eligibility": "Eligible when the exact pre-block running P&L is available from completed earlier bets; before the first bet the position is 0, but avoid a trivial zero-position headline when a stronger category is available." },
-    "POSITION_PLUS_EXPOSURE": { "meaning": "Combine the exact pre-block running P&L with the exact stake/exposure inside this Scene 8 block.", "eligibility": "Eligible only when both values are exact and the headline remains pre-result and non-predictive." },
-    "RECOVERY_OR_PROTECTION_CONTEXT": { "meaning": "Frame the already-known non-zero day position as recovery from a deficit or protection of a lead without predicting the block result.", "eligibility": "Eligible only when the exact pre-block running P&L is non-zero. Negative may support recovery/chasing language; positive may support protection/lead language." },
-    "MEETING_OR_VENUE": { "meaning": "Lead with meeting or venue names actually present in the block.", "eligibility": "Eligible when grounded solely in supplied meeting/venue names; do not infer importance, conditions, geography, prestige or atmosphere." },
-    "BET_TYPE_MIX": { "meaning": "Lead with a factual mix of bet types across the block.", "eligibility": "Eligible only when at least two distinct supplied bet types occur in the block and any counts used are exact." },
-    "ODDS_PROFILE": { "meaning": "Lead with exact supplied odds or an exact odds range/profile for the block.", "eligibility": "Eligible when every odds statement is directly supported by the grouped bets; prefer exact values/ranges over subjective labels such as short or long." },
-    "STAKE_PATTERN": { "meaning": "Lead with a factual stake-size pattern across the block.", "eligibility": "Eligible when the pattern is directly demonstrable from exact grouped stakes, such as equal stakes, a repeated amount, a clear exact range or one exact standout stake." },
-    "RACE_SEQUENCE_OR_DAY_STAGE": { "meaning": "Lead with exact race/bet sequence or deterministic position within the betting day.", "eligibility": "Eligible when based on exact supplied race numbers, bet sequences or mathematically determinable day position; avoid vague significance claims." },
-    "RUNNER_OR_RACE_HOOK": { "meaning": "Lead with a distinctive supplied runner or race-name hook from the block.", "eligibility": "Eligible when wording uses only supplied runner/race names and does not infer form, importance, rivalry, conditions or other external facts." }
+    "EXPOSURE": {
+      "meaning": "Lead with the exact total stake/exposure across this Scene 8 block.",
+      "eligibility": "Always eligible when the grouped stake can be summed exactly from the Scene 8 bets; use only those bets and never outcome-derived values."
+    },
+    "DAY_POSITION": {
+      "meaning": "Lead with the exact running P&L immediately before this Scene 8 block begins.",
+      "eligibility": "Eligible when the exact pre-block running P&L is available from completed earlier bets; before the first bet the position is 0, but avoid a trivial zero-position headline when a stronger category is available."
+    },
+    "POSITION_PLUS_EXPOSURE": {
+      "meaning": "Combine the exact pre-block running P&L with the exact stake/exposure inside this Scene 8 block.",
+      "eligibility": "Eligible only when both values are exact and the headline remains pre-result and non-predictive."
+    },
+    "RECOVERY_OR_PROTECTION_CONTEXT": {
+      "meaning": "Frame the already-known non-zero day position as recovery from a deficit or protection of a lead without predicting the block result.",
+      "eligibility": "Eligible only when the exact pre-block running P&L is non-zero. Negative may support recovery/chasing language; positive may support protection/lead language."
+    },
+    "MEETING_OR_VENUE": {
+      "meaning": "Lead with meeting or venue names actually present in the block.",
+      "eligibility": "Eligible when grounded solely in supplied meeting/venue names; do not infer importance, conditions, geography, prestige or atmosphere."
+    },
+    "BET_TYPE_MIX": {
+      "meaning": "Lead with a factual mix of bet types across the block.",
+      "eligibility": "Eligible only when at least two distinct supplied bet types occur in the block and any counts used are exact."
+    },
+    "ODDS_PROFILE": {
+      "meaning": "Lead with exact supplied odds or an exact odds range/profile for the block.",
+      "eligibility": "Eligible when every odds statement is directly supported by the grouped bets; prefer exact values/ranges over subjective labels such as short or long."
+    },
+    "STAKE_PATTERN": {
+      "meaning": "Lead with a factual stake-size pattern across the block.",
+      "eligibility": "Eligible when the pattern is directly demonstrable from exact grouped stakes, such as equal stakes, a repeated amount, a clear exact range or one exact standout stake."
+    },
+    "RACE_SEQUENCE_OR_DAY_STAGE": {
+      "meaning": "Lead with exact race/bet sequence or deterministic position within the betting day.",
+      "eligibility": "Eligible when based on exact supplied race numbers, bet sequences or mathematically determinable day position; avoid vague significance claims."
+    },
+    "RUNNER_OR_RACE_HOOK": {
+      "meaning": "Lead with a distinctive supplied runner or race-name hook from the block.",
+      "eligibility": "Eligible when wording uses only supplied runner/race names and does not infer form, importance, rivalry, conditions or other external facts."
+    }
   },
   "scene8HeadlineDiversityPolicy": {
     "freshGenerationRequiresHeadlineCategory": true,
-    "enforcementClass": "SOFT_QUALITY_AFTER_HARD_PLAN_VALIDATION",
-    "freshGenerationQualityGate": "Every fresh plan containing Scene 8 is checked for headlineCategory presence, deterministic eligibility, category meaning where mechanically provable, and diversity allocation before optional headline repair is considered. A separate deterministic Scene 8 no-spoiler guard rejects mechanically provable grouped-outcome leaks before this soft quality fallback can be used.",
-    "noSpoilerBoundary": "Mechanically provable Scene 8 headline spoilers are storage-fatal: obvious grouped outcome language, outcome-only grouped money values, and explicit grouped finishing-position leaks are rejected deterministically. Subtle semantic implications that cannot be proved safely with deterministic checks remain prompt-enforced and must be inspected in live acceptance testing.",
-    "fallbackException": "If the optional Scene 8 headline-only repair is skipped because the Lambda remaining-time budget is too low, or if that repair fails or remains invalid, runtime may continue with the pre-repair plan only when full scene-plan schema and hard semantic validation have already passed. That fallback may retain missing, ineligible, meaning-mismatched or non-diverse headlineCategory metadata/headline quality. It does not bypass the separate deterministic Scene 8 obvious-spoiler guard, primary coverage, scene structure, duration limits, replay eligibility, midpoint ownership or other hard validation rules; subtler semantic no-spoiler quality remains prompt/live-inspection enforced.",
+    "enforcementClass": "COPY_STAGE_QUALITY_RULE",
+    "freshGenerationQualityGate": "Every fresh Scene 8 copy response must provide headlineCategory and headline wording consistent with the deterministic block facts, category eligibility, category meaning and recap-level diversity policy. The copy stage may not alter Scene 8 structure to satisfy this rule.",
+    "noSpoilerBoundary": "Scene 8 headlines are pre-result. Mechanically provable spoilers are storage-fatal, including obvious grouped outcome language, outcome-only grouped money values, and explicit grouped finishing-position leaks. Subtle semantic implications that cannot be proved safely with deterministic checks remain prompt and live-inspection responsibilities.",
     "generationProcedure": [
-      "Determine the eligible headline categories for every Scene 8 block first.",
-      "Allocate one headlineCategory to every Scene 8 block across the recap as one global set before writing any Scene 8 headline wording.",
+      "Using only the already-determined Scene 8 blocks, determine the eligible headline categories for every Scene 8 block.",
+      "Allocate one headlineCategory to every Scene 8 block across the recap as one global copy decision; do not alter grouping or chronology.",
       "Make the allocation satisfy the applicable diversity tier whenever enough eligible categories exist.",
-      "Only after the category allocation is complete, write each headline to match its assigned headlineCategory."
+      "Only after category allocation is complete, write each headline to match its assigned headlineCategory."
     ],
     "tiers": [
-      { "minScene8Blocks": 1, "maxScene8Blocks": 2, "minimumDistinctCategories": 1, "maximumCategoryShare": 1.0, "maximumConsecutiveSameCategory": 2 },
-      { "minScene8Blocks": 3, "maxScene8Blocks": 5, "minimumDistinctCategories": 2, "maximumCategoryShare": 0.67, "maximumConsecutiveSameCategory": 2 },
-      { "minScene8Blocks": 6, "maxScene8Blocks": 9, "minimumDistinctCategories": 3, "maximumCategoryShare": 0.5, "maximumConsecutiveSameCategory": 2 },
-      { "minScene8Blocks": 10, "maxScene8Blocks": null, "minimumDistinctCategories": 4, "maximumCategoryShare": 0.35, "maximumConsecutiveSameCategory": 2 }
+      {
+        "minScene8Blocks": 1,
+        "maxScene8Blocks": 2,
+        "minimumDistinctCategories": 1,
+        "maximumCategoryShare": 1,
+        "maximumConsecutiveSameCategory": 2
+      },
+      {
+        "minScene8Blocks": 3,
+        "maxScene8Blocks": 5,
+        "minimumDistinctCategories": 2,
+        "maximumCategoryShare": 0.67,
+        "maximumConsecutiveSameCategory": 2
+      },
+      {
+        "minScene8Blocks": 6,
+        "maxScene8Blocks": 9,
+        "minimumDistinctCategories": 3,
+        "maximumCategoryShare": 0.5,
+        "maximumConsecutiveSameCategory": 2
+      },
+      {
+        "minScene8Blocks": 10,
+        "maxScene8Blocks": null,
+        "minimumDistinctCategories": 4,
+        "maximumCategoryShare": 0.35,
+        "maximumConsecutiveSameCategory": 2
+      }
     ],
     "precedence": "Factual eligibility and no-spoiler safety outrank diversity. Never assign an ineligible category merely to hit a diversity target. Where multiple categories are eligible, prefer under-used categories and avoid repeating either the same category or the same headline syntax nearby.",
     "categoryMeaningRule": "headlineCategory must describe the actual factual lens used by headline; do not label one category while writing a headline from another category."
@@ -108,53 +161,456 @@
       "highestOddsWinner": "<horseName> @ <oddsDisplay> HIGHEST-ODDS WIN"
     }
   },
-  "runtimeFxRegistry": ["greenSweep","lossTreatment","winEmotion","lossEmotion","bigWinEmphasis","comebackEmphasis","replayEnter","replayLiveComments","videoFade","musicDuck","musicRestore","positiveFinale","negativeFinale","breakEvenFinale"],
+  "runtimeFxRegistry": [
+    "greenSweep",
+    "lossTreatment",
+    "winEmotion",
+    "lossEmotion",
+    "bigWinEmphasis",
+    "comebackEmphasis",
+    "replayEnter",
+    "replayLiveComments",
+    "videoFade",
+    "musicDuck",
+    "musicRestore",
+    "positiveFinale",
+    "negativeFinale",
+    "breakEvenFinale"
+  ],
   "scenes": {
     "1": {
       "name": "Opening / Pre-race",
       "template": "templates/scene-1-opening-pre-race-template.html",
       "position": "always-first",
       "fields": {
-        "dateDisplay": "DERIVED","userName": "FACT","totalBets": "FACT","totalStakedDisplay": "DERIVED","meetingCount": "DERIVED","meetingJourney": "DERIVED",
-        "openingTeaser": { "source": "LLM", "maxWords": 16, "maxChars": 160 },
-        "closingHook": { "source": "CONTROLLED", "value": "LET'S RUN IT BACK." },"sceneDurationMs": "RUNTIME"
+        "dateDisplay": "DERIVED",
+        "userName": "FACT",
+        "totalBets": "FACT",
+        "totalStakedDisplay": "DERIVED",
+        "meetingCount": "DERIVED",
+        "meetingJourney": "DERIVED",
+        "openingTeaser": {
+          "source": "LLM",
+          "maxWords": 16,
+          "maxChars": 160
+        },
+        "closingHook": {
+          "source": "CONTROLLED",
+          "value": "LET'S RUN IT BACK."
+        },
+        "sceneDurationMs": "RUNTIME"
       }
     },
     "2": {
-      "name": "Single-race card","template": "templates/scene-2-single-race-card-template.html","plannerInput": { "betSequence": "required" },
-      "fields": {
-        "meetingRace": "DERIVED","userName": "FACT","horseName": "FACT","stakeDisplay": "DERIVED","betType": "FACT","oddsDisplay": "DERIVED","finishingPositionText": "DERIVED","betResult": "FACT","runningPnl": "FACT","previousRunningPnl": "DERIVED","runningPnlDisplay": "DERIVED",
-        "resultKind": { "source": "DERIVED", "enum": ["WIN", "LOSS"] },"pnlSignClass": { "source": "DERIVED", "enum": ["positive", "negative", "zero"] },
-        "tensionLine": { "source": "LLM", "maxWords": 11, "maxChars": 120 },"reactionLine": { "source": "LLM", "maxWords": 10, "maxChars": 120 },"fxPackage": "DERIVED","sceneDurationMs": "RUNTIME"
+      "name": "Single-race card",
+      "template": "templates/scene-2-single-race-card-template.html",
+      "plannerInput": {
+        "betSequence": "required"
       },
-      "runtimeFx": { "WIN": { "mandatory": ["greenSweep", "winEmotion"], "conditional": { "bigWinEmphasis": "profitLoss equals day's max positive WIN profitLoss; ties qualify", "comebackEmphasis": "previousRunningPnl<0 and runningPnl>0" } }, "LOSS": { "mandatory": ["lossTreatment", "lossEmotion"] } }
+      "fields": {
+        "meetingRace": "DERIVED",
+        "userName": "FACT",
+        "horseName": "FACT",
+        "stakeDisplay": "DERIVED",
+        "betType": "FACT",
+        "oddsDisplay": "DERIVED",
+        "finishingPositionText": "DERIVED",
+        "betResult": "FACT",
+        "runningPnl": "FACT",
+        "previousRunningPnl": "DERIVED",
+        "runningPnlDisplay": "DERIVED",
+        "resultKind": {
+          "source": "DERIVED",
+          "enum": [
+            "WIN",
+            "LOSS"
+          ]
+        },
+        "pnlSignClass": {
+          "source": "DERIVED",
+          "enum": [
+            "positive",
+            "negative",
+            "zero"
+          ]
+        },
+        "tensionLine": {
+          "source": "LLM",
+          "maxWords": 11,
+          "maxChars": 120
+        },
+        "reactionLine": {
+          "source": "LLM",
+          "maxWords": 10,
+          "maxChars": 120
+        },
+        "fxPackage": "DERIVED",
+        "sceneDurationMs": "RUNTIME"
+      },
+      "runtimeFx": {
+        "WIN": {
+          "mandatory": [
+            "greenSweep",
+            "winEmotion"
+          ],
+          "conditional": {
+            "bigWinEmphasis": "profitLoss equals day's max positive WIN profitLoss; ties qualify",
+            "comebackEmphasis": "previousRunningPnl<0 and runningPnl>0"
+          }
+        },
+        "LOSS": {
+          "mandatory": [
+            "lossTreatment",
+            "lossEmotion"
+          ]
+        }
+      }
     },
     "3": {
-      "name": "Race replay","template": "templates/scene-3-race-replay-template.html","position": "immediately-after-scene-2-same-bet","eligibility": "result=WIN AND valid non-empty HTTPS replayUrl",
-      "fields": {"meetingRace":"DERIVED","userName":"FACT","horseName":"FACT","stakeDisplay":"DERIVED","betType":"FACT","oddsDisplay":"DERIVED","replayUrl":"FACT","replayLabel":{"source":"LLM","maxWords":4,"maxChars":64},"replayComments":{"source":"LLM","minItems":2,"maxItems":4,"itemMaxWords":5,"itemMaxChars":64},"replayStartMode":"CONTROLLED","replayStartRatio":"CONTROLLED","replayClipSeconds":"CONTROLLED","videoFadeSeconds":"RUNTIME"},
-      "runtimeData":{"payload":["replayUrl","replayComments"]},"runtimeFx":{"delivery":"scene-lifecycle","capabilities":["replayEnter","replayLiveComments","videoFade","musicDuck","musicRestore"]}
+      "name": "Race replay",
+      "template": "templates/scene-3-race-replay-template.html",
+      "position": "immediately-after-scene-2-same-bet",
+      "eligibility": "result=WIN AND valid non-empty HTTPS replayUrl",
+      "fields": {
+        "meetingRace": "DERIVED",
+        "userName": "FACT",
+        "horseName": "FACT",
+        "stakeDisplay": "DERIVED",
+        "betType": "FACT",
+        "oddsDisplay": "DERIVED",
+        "replayUrl": "FACT",
+        "replayLabel": {
+          "source": "LLM",
+          "maxWords": 4,
+          "maxChars": 64
+        },
+        "replayComments": {
+          "source": "LLM",
+          "minItems": 2,
+          "maxItems": 4,
+          "itemMaxWords": 5,
+          "itemMaxChars": 64
+        },
+        "replayStartMode": "CONTROLLED",
+        "replayStartRatio": "CONTROLLED",
+        "replayClipSeconds": "CONTROLLED",
+        "videoFadeSeconds": "RUNTIME"
+      },
+      "runtimeData": {
+        "payload": [
+          "replayUrl",
+          "replayComments"
+        ]
+      },
+      "runtimeFx": {
+        "delivery": "scene-lifecycle",
+        "capabilities": [
+          "replayEnter",
+          "replayLiveComments",
+          "videoFade",
+          "musicDuck",
+          "musicRestore"
+        ]
+      }
     },
     "4": {
-      "name":"Status / Story summary","template":"templates/scene-4-status-story-summary-template.html","position":"optional-deterministic-midpoint","placementRule":"LLM may choose whether Scene4 is present, but planner code exclusively owns its final position. Select the primary Scene2/5/8 boundary minimizing abs(completed/totalBets-.5), earlier tie. Set checkpointAfterBetSequence to that completed-primary sequence. If the selected boundary ends in a Scene2 with attached Scene3, Scene4 renders after that replay; checkpoint remains the same completed-primary count. Never split a Scene8 group to create a midpoint.",
-      "fields":{"checkpointAfterBetSequence":{"source":"PLANNER_DERIVED"},"userName":"FACT","totalBets":"FACT","betsCompleted":"DERIVED","currentRunningPnlDisplay":"DERIVED","pnlSignClass":{"source":"DERIVED","enum":["positive","negative","zero"]},"winnersSoFar":"DERIVED","bestWinSummarySoFar":"DERIVED","lookingBackStory":{"source":"LLM","maxWords":30,"maxChars":320},"lookingAheadTeaser":{"source":"LLM","maxWords":30,"maxChars":320}}
+      "name": "Status / Story summary",
+      "template": "templates/scene-4-status-story-summary-template.html",
+      "position": "optional-deterministic-midpoint",
+      "placementRule": "Deterministic planner code exclusively decides whether Scene 4 is present, its final position, and checkpointAfterBetSequence. When present, choose the primary Scene 2/5/8 boundary minimizing abs(completed/totalBets-.5), earlier tie. If the selected boundary ends in a Scene 2 with attached Scene 3, Scene 4 renders after that replay while the checkpoint remains the same completed-primary count. Never split a Scene 8 group to create a midpoint.",
+      "fields": {
+        "checkpointAfterBetSequence": {
+          "source": "PLANNER_DERIVED"
+        },
+        "userName": "FACT",
+        "totalBets": "FACT",
+        "betsCompleted": "DERIVED",
+        "currentRunningPnlDisplay": "DERIVED",
+        "pnlSignClass": {
+          "source": "DERIVED",
+          "enum": [
+            "positive",
+            "negative",
+            "zero"
+          ]
+        },
+        "winnersSoFar": "DERIVED",
+        "bestWinSummarySoFar": "DERIVED",
+        "lookingBackStory": {
+          "source": "LLM",
+          "maxWords": 30,
+          "maxChars": 320
+        },
+        "lookingAheadTeaser": {
+          "source": "LLM",
+          "maxWords": 30,
+          "maxChars": 320
+        }
+      }
     },
     "5": {
-      "name":"Multi-race scene","template":"templates/scene-5-multi-race-scene-template.html","plannerInput":{"betSequences":{"minItems":2,"maxItems":3,"consecutive":true}},
-      "fields":{"raceCount":"DERIVED","setupKicker":{"source":"LLM","maxWords":9,"maxChars":100},"setupHeadline":{"source":"LLM","maxWords":8,"maxChars":100},"races":{"source":"DERIVED","items":{"outcomeClass":{"source":"DERIVED","enum":["win","loss"]},"raceIndex":"DERIVED","horseName":"FACT","meetingName":"FACT","raceNumber":"FACT","betType":"FACT","stakeDisplay":"DERIVED","oddsDisplay":"DERIVED","returnText":"DERIVED","finishingPositionText":"DERIVED","betResult":"FACT","betProfitLossDisplay":"DERIVED","fxPackage":"DERIVED"}},"payoffHeadline":{"source":"LLM","maxWords":9,"maxChars":110},"contextLine":{"source":"LLM","maxWords":30,"maxChars":320},"runningPnlAfterGroup":"FACT","previousRunningPnlBeforeGroup":"DERIVED","runningPnlDisplay":"DERIVED","pnlSignClass":{"source":"DERIVED","enum":["positive","negative","zero"]}}
+      "name": "Multi-race scene",
+      "template": "templates/scene-5-multi-race-scene-template.html",
+      "plannerInput": {
+        "betSequences": {
+          "minItems": 2,
+          "maxItems": 3,
+          "consecutive": true
+        }
+      },
+      "fields": {
+        "raceCount": "DERIVED",
+        "setupKicker": {
+          "source": "LLM",
+          "maxWords": 9,
+          "maxChars": 100
+        },
+        "setupHeadline": {
+          "source": "LLM",
+          "maxWords": 8,
+          "maxChars": 100
+        },
+        "races": {
+          "source": "DERIVED",
+          "items": {
+            "outcomeClass": {
+              "source": "DERIVED",
+              "enum": [
+                "win",
+                "loss"
+              ]
+            },
+            "raceIndex": "DERIVED",
+            "horseName": "FACT",
+            "meetingName": "FACT",
+            "raceNumber": "FACT",
+            "betType": "FACT",
+            "stakeDisplay": "DERIVED",
+            "oddsDisplay": "DERIVED",
+            "returnText": "DERIVED",
+            "finishingPositionText": "DERIVED",
+            "betResult": "FACT",
+            "betProfitLossDisplay": "DERIVED",
+            "fxPackage": "DERIVED"
+          }
+        },
+        "payoffHeadline": {
+          "source": "LLM",
+          "maxWords": 9,
+          "maxChars": 110
+        },
+        "contextLine": {
+          "source": "LLM",
+          "maxWords": 30,
+          "maxChars": 320
+        },
+        "runningPnlAfterGroup": "FACT",
+        "previousRunningPnlBeforeGroup": "DERIVED",
+        "runningPnlDisplay": "DERIVED",
+        "pnlSignClass": {
+          "source": "DERIVED",
+          "enum": [
+            "positive",
+            "negative",
+            "zero"
+          ]
+        }
+      }
     },
     "6": {
-      "name":"Daily summary","template":"templates/scene-6-daily-summary-template.html","position":"always-second-last",
-      "fields":{"userName":"FACT","totalBets":"FACT","totalStakedDisplay":"DERIVED","totalReturnedDisplay":"DERIVED","finalPnlDisplay":"DERIVED","winsLossesDisplay":"DERIVED","biggestWinSummary":"DERIVED","finalPnlSignClass":{"source":"DERIVED","enum":["positive","negative","zero"]},"dayVerdict":{"source":"LLM","maxWords":30,"maxChars":320},"standoutHighlightType":{"source":"LLM","enum":["biggestWin","highestOddsWinner","biggestRecovery","longestLosingStreak","strongestFinish","totalReturned"],"eligibility":{"biggestWin":"at least one WIN with positive profitLoss","highestOddsWinner":"at least one WIN","biggestRecovery":"at least one bet with positive profitLoss","longestLosingStreak":"at least one LOSS","strongestFinish":"at least one bet; always resolvable","totalReturned":"always"}},"standoutCopy":{"source":"LLM","maxWords":30,"maxChars":320}}
+      "name": "Daily summary",
+      "template": "templates/scene-6-daily-summary-template.html",
+      "position": "always-second-last",
+      "fields": {
+        "userName": "FACT",
+        "totalBets": "FACT",
+        "totalStakedDisplay": "DERIVED",
+        "totalReturnedDisplay": "DERIVED",
+        "finalPnlDisplay": "DERIVED",
+        "winsLossesDisplay": "DERIVED",
+        "biggestWinSummary": "DERIVED",
+        "finalPnlSignClass": {
+          "source": "DERIVED",
+          "enum": [
+            "positive",
+            "negative",
+            "zero"
+          ]
+        },
+        "dayVerdict": {
+          "source": "LLM",
+          "maxWords": 30,
+          "maxChars": 320
+        },
+        "standoutHighlightType": {
+          "source": "LLM",
+          "enum": [
+            "biggestWin",
+            "highestOddsWinner",
+            "biggestRecovery",
+            "longestLosingStreak",
+            "strongestFinish",
+            "totalReturned"
+          ],
+          "eligibility": {
+            "biggestWin": "at least one WIN with positive profitLoss",
+            "highestOddsWinner": "at least one WIN",
+            "biggestRecovery": "at least one bet with positive profitLoss",
+            "longestLosingStreak": "at least one LOSS",
+            "strongestFinish": "at least one bet; always resolvable",
+            "totalReturned": "always"
+          }
+        },
+        "standoutCopy": {
+          "source": "LLM",
+          "maxWords": 30,
+          "maxChars": 320
+        }
+      }
     },
     "7": {
-      "name":"Final / Share","template":"templates/scene-7-final-share-template.html","position":"always-last-permanent",
-      "fields":{"userName":"FACT","userNameUpper":"DERIVED","heroOutcomeClass":{"source":"DERIVED","enum":["positive","negative","break-even"]},"finalHeroText":"DERIVED","selectedFinalHighlights":{"source":"LLM","minItems":3,"maxItems":4,"unique":true,"enum":["totalBets","wins","losses","totalStaked","totalReturned","finalPnl","biggestWin","highestOddsWinner"],"rule":"biggestWin requires positive WIN; highestOddsWinner requires any WIN."},"resolvedFinalHighlights":"DERIVED","finalSummary":{"source":"LLM","maxWords":32,"maxChars":360},"shareCaption":{"source":"LLM","maxWords":40,"maxChars":440},"shareTitle":"RUNTIME","shareUrl":"RUNTIME"},
-      "runtimeData":{"payload":["shareCaption"]},"runtimeFx":{"delivery":"scene-lifecycle-by-heroOutcomeClass","positive":["positiveFinale"],"negative":["negativeFinale"],"break-even":["breakEvenFinale"]}
+      "name": "Final / Share",
+      "template": "templates/scene-7-final-share-template.html",
+      "position": "always-last-permanent",
+      "fields": {
+        "userName": "FACT",
+        "userNameUpper": "DERIVED",
+        "heroOutcomeClass": {
+          "source": "DERIVED",
+          "enum": [
+            "positive",
+            "negative",
+            "break-even"
+          ]
+        },
+        "finalHeroText": "DERIVED",
+        "selectedFinalHighlights": {
+          "source": "LLM",
+          "minItems": 3,
+          "maxItems": 4,
+          "unique": true,
+          "enum": [
+            "totalBets",
+            "wins",
+            "losses",
+            "totalStaked",
+            "totalReturned",
+            "finalPnl",
+            "biggestWin",
+            "highestOddsWinner"
+          ],
+          "rule": "biggestWin requires positive WIN; highestOddsWinner requires any WIN."
+        },
+        "resolvedFinalHighlights": "DERIVED",
+        "finalSummary": {
+          "source": "LLM",
+          "maxWords": 32,
+          "maxChars": 360
+        },
+        "shareCaption": {
+          "source": "LLM",
+          "maxWords": 40,
+          "maxChars": 440
+        },
+        "shareTitle": "RUNTIME",
+        "shareUrl": "RUNTIME"
+      },
+      "runtimeData": {
+        "payload": [
+          "shareCaption"
+        ]
+      },
+      "runtimeFx": {
+        "delivery": "scene-lifecycle-by-heroOutcomeClass",
+        "positive": [
+          "positiveFinale"
+        ],
+        "negative": [
+          "negativeFinale"
+        ],
+        "break-even": [
+          "breakEvenFinale"
+        ]
+      }
     },
     "8": {
-      "name":"Fast results run","template":"templates/scene-8-fast-results-template.html","plannerInput":{"betSequences":{"minItems":4,"maxItems":5,"consecutive":true}},"purpose":"Rapid-fire chronological compression for ordinary consecutive bets in groups of four or five only. Rows are materially thinner than Scene5; results reveal one at a time with fast stagger and lightweight effects that never extend scene duration.",
-      "fields":{"betCount":"DERIVED","headline":{"source":"LLM","maxWords":6,"maxChars":80,"phase":"PRE_RESULT","noSpoiler":"Must not reveal or imply any grouped result, win/loss count, finishing position, return, profit/loss, running P&L direction or later outcome before the staggered reveals. Planner code hard-rejects mechanically provable leaks including obvious grouped outcome language, outcome-only grouped money values and explicit grouped finishing positions; subtler semantic implications remain prompt/live-inspection enforced."},"headlineCategory":{"source":"LLM","freshGenerationRequired":true,"optionalForStoredPlanCompatibility":true,"qualityFallbackException":"After a fresh plan has passed all hard scene-plan validation, the optional Scene 8 quality-repair stage may fall back to that pre-repair plan when repair is skipped for remaining-time budget or fails validation. In that fallback only, headlineCategory quality constraints remain best-effort rather than storage-fatal; the separate deterministic obvious-spoiler guard still applies.","enum":["EXPOSURE","DAY_POSITION","POSITION_PLUS_EXPOSURE","RECOVERY_OR_PROTECTION_CONTEXT","MEETING_OR_VENUE","BET_TYPE_MIX","ODDS_PROFILE","STAKE_PATTERN","RACE_SEQUENCE_OR_DAY_STAGE","RUNNER_OR_RACE_HOOK"],"rule":"Must identify the factual lens actually used by headline and obey scene8HeadlineTaxonomy plus scene8HeadlineDiversityPolicy."},"comments":{"source":"LLM","minItems":4,"maxItems":5,"itemMaxWords":5,"itemMaxChars":64,"cardinality":"Must exactly equal betSequences.length; item i belongs to betSequences[i]."},"races":{"source":"DERIVED","items":{"outcomeClass":{"source":"DERIVED","enum":["win","loss"]},"raceIndex":"DERIVED","horseName":"FACT","meetingName":"FACT","raceNumber":"FACT","betType":"FACT","stakeDisplay":"DERIVED","oddsDisplay":"DERIVED","finishingPositionText":"DERIVED","betResult":"FACT","returnText":"DERIVED","betProfitLossDisplay":"DERIVED","runningPnl":"FACT","runningPnlDisplay":"DERIVED","comment":"LLM_BY_INDEX"}},"sceneDurationMs":"RUNTIME"},
-      "runtimeFx":{"delivery":"fast-stagger","rule":"Results resolve strictly in betSequences order. Lightweight row flash, result colour and emoji/pop effects run inside fixed scene timing and never add delay. Heavy Scene2 emotion packages are not used."}
+      "name": "Fast results run",
+      "template": "templates/scene-8-fast-results-template.html",
+      "plannerInput": {
+        "betSequences": {
+          "minItems": 4,
+          "maxItems": 5,
+          "consecutive": true
+        }
+      },
+      "purpose": "Rapid-fire chronological compression for ordinary consecutive bets in groups of four or five only. Rows are materially thinner than Scene5; results reveal one at a time with fast stagger and lightweight effects that never extend scene duration.",
+      "fields": {
+        "betCount": "DERIVED",
+        "headline": {
+          "source": "LLM",
+          "maxWords": 6,
+          "maxChars": 80,
+          "phase": "PRE_RESULT",
+          "noSpoiler": "Must not reveal or imply any grouped result, win/loss count, finishing position, return, profit/loss, running P&L direction or later outcome before the staggered reveals. Planner code hard-rejects mechanically provable leaks including obvious grouped outcome language, outcome-only grouped money values and explicit grouped finishing positions; subtler semantic implications remain prompt/live-inspection enforced."
+        },
+        "headlineCategory": {
+          "source": "LLM",
+          "freshGenerationRequired": true,
+          "optionalForStoredPlanCompatibility": true,
+          "enum": [
+            "EXPOSURE",
+            "DAY_POSITION",
+            "POSITION_PLUS_EXPOSURE",
+            "RECOVERY_OR_PROTECTION_CONTEXT",
+            "MEETING_OR_VENUE",
+            "BET_TYPE_MIX",
+            "ODDS_PROFILE",
+            "STAKE_PATTERN",
+            "RACE_SEQUENCE_OR_DAY_STAGE",
+            "RUNNER_OR_RACE_HOOK"
+          ],
+          "rule": "Must identify the factual lens actually used by headline and obey scene8HeadlineTaxonomy plus scene8HeadlineDiversityPolicy. It never affects Scene 8 grouping or placement."
+        },
+        "comments": {
+          "source": "LLM",
+          "minItems": 4,
+          "maxItems": 5,
+          "itemMaxWords": 5,
+          "itemMaxChars": 64,
+          "cardinality": "Must exactly equal betSequences.length; item i belongs to betSequences[i]."
+        },
+        "races": {
+          "source": "DERIVED",
+          "items": {
+            "outcomeClass": {
+              "source": "DERIVED",
+              "enum": [
+                "win",
+                "loss"
+              ]
+            },
+            "raceIndex": "DERIVED",
+            "horseName": "FACT",
+            "meetingName": "FACT",
+            "raceNumber": "FACT",
+            "betType": "FACT",
+            "stakeDisplay": "DERIVED",
+            "oddsDisplay": "DERIVED",
+            "finishingPositionText": "DERIVED",
+            "betResult": "FACT",
+            "returnText": "DERIVED",
+            "betProfitLossDisplay": "DERIVED",
+            "runningPnl": "FACT",
+            "runningPnlDisplay": "DERIVED",
+            "comment": "LLM_BY_INDEX"
+          }
+        },
+        "sceneDurationMs": "RUNTIME"
+      },
+      "runtimeFx": {
+        "delivery": "fast-stagger",
+        "rule": "Results resolve strictly in betSequences order. Lightweight row flash, result colour and emoji/pop effects run inside fixed scene timing and never add delay. Heavy Scene2 emotion packages are not used."
+      }
     }
   }
 }
