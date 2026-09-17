@@ -1,0 +1,185 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "contracts/scene-plan.schema.json",
+  "title": "TAB Racing Day Scene Plan",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "planVersion",
+    "scenes"
+  ],
+  "properties": {
+    "planVersion": {
+      "const": "2.0"
+    },
+    "scenes": {
+      "type": "array",
+      "minItems": 4,
+      "items": {
+        "oneOf": [
+          { "$ref": "#/$defs/s1" },
+          { "$ref": "#/$defs/s2" },
+          { "$ref": "#/$defs/s3" },
+          { "$ref": "#/$defs/s4" },
+          { "$ref": "#/$defs/s5" },
+          { "$ref": "#/$defs/s6" },
+          { "$ref": "#/$defs/s7" },
+          { "$ref": "#/$defs/s8" }
+        ]
+      }
+    }
+  },
+  "$defs": {
+    "s1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sceneType", "openingTeaser"],
+      "properties": {
+        "sceneType": { "const": 1 },
+        "openingTeaser": { "type": "string", "pattern": "\\S", "maxLength": 160 }
+      }
+    },
+    "s2": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sceneType", "betSequence", "tensionLine", "reactionLine"],
+      "properties": {
+        "sceneType": { "const": 2 },
+        "betSequence": { "type": "integer", "minimum": 1 },
+        "tensionLine": { "type": "string", "pattern": "\\S", "maxLength": 120 },
+        "reactionLine": { "type": "string", "pattern": "\\S", "maxLength": 120 }
+      }
+    },
+    "s3": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sceneType", "betSequence", "replayLabel", "replayComments"],
+      "properties": {
+        "sceneType": { "const": 3 },
+        "betSequence": { "type": "integer", "minimum": 1 },
+        "replayLabel": { "type": "string", "pattern": "\\S", "maxLength": 64 },
+        "replayComments": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 4,
+          "items": { "type": "string", "pattern": "\\S", "maxLength": 64 }
+        }
+      }
+    },
+    "s4": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sceneType", "lookingBackStory", "lookingAheadTeaser"],
+      "properties": {
+        "sceneType": { "const": 4 },
+        "checkpointAfterBetSequence": { "type": "integer", "minimum": 1 },
+        "lookingBackStory": { "type": "string", "pattern": "\\S", "maxLength": 220 },
+        "lookingAheadTeaser": { "type": "string", "pattern": "\\S", "maxLength": 220 }
+      }
+    },
+    "s5": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sceneType", "betSequences", "setupKicker", "setupHeadline", "payoffHeadline", "contextLine"],
+      "properties": {
+        "sceneType": { "const": 5 },
+        "betSequences": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 3,
+          "uniqueItems": true,
+          "items": { "type": "integer", "minimum": 1 }
+        },
+        "setupKicker": { "type": "string", "pattern": "\\S", "maxLength": 100 },
+        "setupHeadline": { "type": "string", "pattern": "\\S", "maxLength": 100 },
+        "payoffHeadline": { "type": "string", "pattern": "\\S", "maxLength": 110 },
+        "contextLine": { "type": "string", "pattern": "\\S", "maxLength": 220 }
+      }
+    },
+    "s6": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sceneType", "dayVerdict", "standoutHighlightType", "standoutCopy"],
+      "properties": {
+        "sceneType": { "const": 6 },
+        "dayVerdict": { "type": "string", "pattern": "\\S", "maxLength": 220 },
+        "standoutHighlightType": {
+          "enum": ["biggestWin", "highestOddsWinner", "biggestRecovery", "longestLosingStreak", "strongestFinish", "totalReturned"]
+        },
+        "standoutCopy": { "type": "string", "pattern": "\\S", "maxLength": 220 }
+      }
+    },
+    "s7": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sceneType", "selectedFinalHighlights", "finalSummary", "shareCaption"],
+      "properties": {
+        "sceneType": { "const": 7 },
+        "selectedFinalHighlights": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 4,
+          "uniqueItems": true,
+          "items": {
+            "enum": ["totalBets", "wins", "losses", "totalStaked", "totalReturned", "finalPnl", "biggestWin", "highestOddsWinner"]
+          }
+        },
+        "finalSummary": { "type": "string", "pattern": "\\S", "maxLength": 240 },
+        "shareCaption": { "type": "string", "pattern": "\\S", "maxLength": 280 }
+      }
+    },
+    "s8": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sceneType", "betSequences", "headline", "comments"],
+      "properties": {
+        "sceneType": { "const": 8 },
+        "betSequences": {
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 5,
+          "uniqueItems": true,
+          "items": { "type": "integer", "minimum": 1 }
+        },
+        "headline": { "type": "string", "pattern": "\\S", "maxLength": 80 },
+        "headlineCategory": {
+          "description": "Fresh LLM generation is instructed to emit this for every Scene 8. It remains schema-optional for previously stored-plan recovery and for the explicit post-validation Scene 8 quality-fallback exception defined in scene-contracts.json. Category meaning, eligibility and diversity policy are owned by scene-contracts.json.",
+          "enum": [
+            "EXPOSURE",
+            "DAY_POSITION",
+            "POSITION_PLUS_EXPOSURE",
+            "RECOVERY_OR_PROTECTION_CONTEXT",
+            "MEETING_OR_VENUE",
+            "BET_TYPE_MIX",
+            "ODDS_PROFILE",
+            "STAKE_PATTERN",
+            "RACE_SEQUENCE_OR_DAY_STAGE",
+            "RUNNER_OR_RACE_HOOK"
+          ]
+        },
+        "comments": {
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 5,
+          "items": { "type": "string", "pattern": "\\S", "maxLength": 64 }
+        }
+      }
+    }
+  },
+  "semanticValidation": [
+    "Planner may apply context-safe deterministic canonicalization before semantic validation. It never reorders Scene 2/5/8 primary chronology or splits/merges/moves Scene 8. When exactly one Scene 4 exists and primary coverage is canonical, planner code owns its final midpoint placement and checkpointAfterBetSequence; any LLM-supplied checkpoint value is discarded/overwritten. Builder independently repeats deterministic midpoint validation before rendering.",
+    "Scene 1 first exactly once; Scene 6 second-last exactly once; Scene 7 last exactly once.",
+    "Scene 4 at most once; if present planner code places it at the actual Scene2/5/8 primary boundary minimizing abs(completed/totalBets - 0.5), earlier tie, and sets checkpointAfterBetSequence to that completed-primary sequence. If the boundary ends in Scene2 with attached Scene3, Scene4 follows that replay. Never split Scene8 for midpoint.",
+    "Every input bet sequence appears exactly once as primary coverage in Scene 2, Scene 5 or Scene 8; Scene 3 never counts.",
+    "Primary coverage is ascending with no gaps, duplicates or reordering.",
+    "Scene 5 contains exactly 2 or 3 consecutive ascending sequences.",
+    "Scene 8 contains exactly 4 or 5 consecutive ascending sequences and comments.length must equal betSequences.length. Fresh LLM generation is instructed to emit headlineCategory; the field remains schema-optional for stored-plan recovery and the explicit post-validation quality-fallback exception. Category meaning, eligibility and diversity policy are owned by scene-contracts.json.",
+    "Scene 8 pre-result headlines are deterministically rejected when code can mechanically prove an obvious grouped-result leak, including explicit outcome language, outcome-derived money values that are not valid pre-result facts, and explicit grouped finishing-position disclosure. Subtle semantic spoilers that cannot be proved safely by deterministic checks remain planner-prompt and live-inspection responsibilities.",
+    "Scene 3 immediately follows Scene 2 for same sequence and requires WIN + showReplay=true + replayUrl; Scene3 may not attach to Scene5 or Scene8.",
+    "Planner fields only: FACT, builder-DERIVED, CONTROLLED and RUNTIME fields are forbidden. checkpointAfterBetSequence is the sole planner-code-owned structural field and is never authoritative from LLM output.",
+    "Planner and builder enforce word/character limits and factual-grounding/markup prose policy from scene-contracts.json.",
+    "Planner and builder deterministically calculate planned duration from runtime-contract.json. Conservative planned duration must not exceed the hard maximum.",
+    "Scene 8 headlineCategory meaning, eligibility and diversity are a fresh-generation quality gate. After all hard plan validation has passed, runtime may use the scene-contracts.json quality-fallback exception when the optional headline-only repair is skipped for time budget or fails validation.",
+    "Natural-language quality and any no-spoiler meaning beyond the mechanically provable Scene 8 guard remain planner-prompt responsibilities."
+  ]
+}

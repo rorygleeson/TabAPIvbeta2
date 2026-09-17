@@ -1,0 +1,35 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Private S3 storage for the TAB Daily Recap vbeta1 pilot.
+
+Resources:
+  PilotStorageBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: tab-recap-vbeta1
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        IgnorePublicAcls: true
+        BlockPublicPolicy: true
+        RestrictPublicBuckets: true
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      Tags:
+        - Key: Project
+          Value: TabAPIvbeta1
+        - Key: Environment
+          Value: pilot
+
+Outputs:
+  BucketName:
+    Description: Private pilot storage bucket name.
+    Value: !Ref PilotStorageBucket
+  BucketArn:
+    Description: Private pilot storage bucket ARN.
+    Value: !GetAtt PilotStorageBucket.Arn

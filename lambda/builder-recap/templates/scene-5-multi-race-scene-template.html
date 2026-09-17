@@ -1,0 +1,316 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>Scene 5 Template</title><style>
+/* PREVIEW_ONLY_CSS */:root{--green:#22dc80;--green-soft:#8af0b7;--red:#ff5b6b;--white:#f7f9f8;--muted:#96a39d;--line:rgba(255,255,255,.12);--shell-top:58px;--shell-bottom:56px}*{box-sizing:border-box}html,body{margin:0;height:100%;background:#050807;color:var(--white);font-family:Arial,sans-serif;overflow:hidden}@media(orientation:portrait){:root{--shell-top:92px;--shell-bottom:76px}}
+
+/* SCENE_PRODUCTION_CSS_START */
+.scene-type-5{--green:#22dc80;--green-soft:#8af0b7;--red:#ff5b6b;--white:#f7f9f8;--muted:#96a39d;--line:rgba(255,255,255,.12);position:absolute;left:0;right:0;top:var(--shell-top);bottom:var(--shell-bottom);padding:34px 7vw 78px;overflow:hidden;background:radial-gradient(circle at 45% 28%,rgba(34,220,128,.12),transparent 34%),linear-gradient(180deg,#07100c,#050807 58%,#020403)}
+.scene-type-5::before{content:"";position:absolute;inset:0;background-image:linear-gradient(rgba(255,255,255,.025) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.025) 1px,transparent 1px);background-size:34px 34px;mask-image:linear-gradient(to bottom,transparent,black 10%,black 88%,transparent);pointer-events:none}
+.scene-type-5 .s5-wrap{position:relative;z-index:1;width:min(880px,86vw);margin:auto}
+.scene-type-5 .s5-kicker{font-size:clamp(13px,2.7vw,18px);letter-spacing:.18em;font-weight:900;color:var(--green-soft);opacity:0;transform:translateY(8px)}
+.scene-type-5 .s5-headline{margin-top:12px;font-size:clamp(38px,10vw,72px);line-height:.96;font-weight:950;opacity:0;transform:translateY(10px)}
+.scene-type-5 .s5-races{margin-top:24px;display:grid;gap:12px}
+.scene-type-5 .s5-race{position:relative;border:1px solid var(--line);border-radius:18px;background:rgba(8,13,11,.78);padding:15px 17px;display:grid;grid-template-columns:minmax(110px,1.25fr) minmax(0,2.7fr) auto;gap:14px;align-items:center;opacity:0;transform:translateY(12px)}
+.scene-type-5 .s5-horse{font-size:clamp(18px,4.5vw,30px);font-weight:950}
+.scene-type-5 .s5-details{color:var(--muted);font-size:clamp(12px,2.6vw,17px);font-weight:700}
+.scene-type-5 .s5-result{text-align:right;min-width:112px;opacity:0;transform:translateX(8px)}
+.scene-type-5 .s5-finish{font-size:clamp(11px,2.3vw,14px);color:#b8c3be;font-weight:900}
+.scene-type-5 .s5-verdict{margin-top:3px;font-size:clamp(12px,2.5vw,15px);font-weight:950;letter-spacing:.08em}
+.scene-type-5 .s5-outcome{margin-top:2px;font-size:clamp(20px,4.8vw,30px);font-weight:950}
+.scene-type-5 .s5-race.loss .s5-verdict,.scene-type-5 .s5-race.loss .s5-outcome{color:var(--red)}
+.scene-type-5 .s5-race.win .s5-verdict,.scene-type-5 .s5-race.win .s5-outcome{color:var(--green-soft)}
+.scene-type-5 .s5-emotion{position:absolute;right:12px;top:50%;font-size:36px;opacity:0;pointer-events:none;transform:translateY(-50%)}
+.scene-type-5 .s5-race.win .s5-emotion::before{content:"✓";color:var(--green-soft)}
+.scene-type-5 .s5-race.loss .s5-emotion::before{content:"×";color:var(--red)}
+.scene-type-5 .s5-payoff{margin-top:18px;font-size:clamp(28px,7vw,48px);font-weight:950;opacity:0;transform:translateY(8px)}
+.scene-type-5 .s5-context{margin-top:10px;color:#c2ccc7;font-size:clamp(15px,3.5vw,22px);font-weight:700;opacity:0;transform:translateY(8px)}
+.scene-type-5 .s5-pnl{margin-top:22px;border-top:1px solid var(--line);padding-top:14px;display:flex;align-items:end;justify-content:space-between;gap:18px;opacity:0;transform:translateY(8px)}
+.scene-type-5 .s5-pnl-label{font-size:12px;letter-spacing:.12em;font-weight:900;color:var(--muted)}
+.scene-type-5 .s5-pnl-value{font-size:clamp(38px,9vw,64px);font-weight:950;line-height:.9}
+.scene-type-5 .s5-pnl-value.positive{color:var(--green)}
+.scene-type-5 .s5-pnl-value.negative{color:var(--red)}
+.scene-type-5 .s5-pnl-value.zero{color:var(--white)}
+.scene-type-5 .s5-meter{margin-top:8px;width:100%;height:5px;border-radius:99px;background:linear-gradient(90deg,#b9414f 0 49.7%,#37413d 49.7% 50.3%,#2cad6c 50.3% 100%);position:relative}
+.scene-type-5 .s5-meter-needle{position:absolute;left:50%;top:-7px;width:2px;height:19px;background:#fff}
+
+.scene-type-5.play .s5-kicker{animation:s5in .42s ease forwards .2s}
+.scene-type-5.play .s5-headline{animation:s5in .46s ease forwards .7s}
+.scene-type-5.play .s5-race[data-race="1"]{animation:s5in .45s ease forwards 1.6s}
+.scene-type-5.play .s5-race[data-race="1"] .s5-result{animation:s5right .38s ease forwards 2.5s}
+.scene-type-5.play .s5-race[data-race="1"] .s5-emotion{animation:s5burst .8s ease 2.6s}
+.scene-type-5.play .s5-race[data-race="2"]{animation:s5in .45s ease forwards 4.5s}
+.scene-type-5.play .s5-race[data-race="2"] .s5-result{animation:s5right .38s ease forwards 5.4s}
+.scene-type-5.play .s5-race[data-race="2"] .s5-emotion{animation:s5burst .8s ease 5.5s}
+.scene-type-5.play[data-race-count="2"] .s5-payoff{animation:s5in .45s ease forwards 7.4s}
+.scene-type-5.play[data-race-count="2"] .s5-context{animation:s5in .45s ease forwards 8.1s}
+.scene-type-5.play[data-race-count="2"] .s5-pnl{animation:s5in .45s ease forwards 8.8s}
+.scene-type-5.play[data-race-count="3"] .s5-race[data-race="3"]{animation:s5in .45s ease forwards 7.4s}
+.scene-type-5.play[data-race-count="3"] .s5-race[data-race="3"] .s5-result{animation:s5right .38s ease forwards 8.3s}
+.scene-type-5.play[data-race-count="3"] .s5-race[data-race="3"] .s5-emotion{animation:s5burst .8s ease 8.4s}
+.scene-type-5.play[data-race-count="3"] .s5-payoff{animation:s5in .45s ease forwards 10.3s}
+.scene-type-5.play[data-race-count="3"] .s5-context{animation:s5in .45s ease forwards 11s}
+.scene-type-5.play[data-race-count="3"] .s5-pnl{animation:s5in .45s ease forwards 11.7s}
+
+@keyframes s5in{to{opacity:1;transform:none}}
+@keyframes s5right{to{opacity:1;transform:none}}
+@keyframes s5burst{0%{opacity:0;transform:translateY(calc(-50% + 10px)) scale(.8)}25%{opacity:1;transform:translateY(-50%) scale(1.08)}70%{opacity:1}100%{opacity:0;transform:translateY(calc(-50% - 18px)) scale(1)}}
+
+@media(max-width:640px){
+.scene-type-5{padding-left:6vw;padding-right:6vw;padding-top:24px}
+.scene-type-5 .s5-wrap{width:88vw}
+.scene-type-5 .s5-headline{margin-top:8px}
+.scene-type-5 .s5-races{margin-top:16px;gap:8px}
+.scene-type-5 .s5-race{grid-template-columns:minmax(88px,1.1fr) minmax(0,2fr) auto;gap:9px;padding:11px 12px}
+.scene-type-5 .s5-details{font-size:11px}
+.scene-type-5 .s5-result{min-width:88px}
+.scene-type-5 .s5-payoff{margin-top:12px}
+.scene-type-5 .s5-context{margin-top:6px}
+.scene-type-5[data-race-count="3"] .s5-payoff{margin-top:6px}
+}
+
+/* 3-RACE VERTICAL COMPACTION */
+.scene-type-5[data-race-count="3"]{padding-top:22px}
+.scene-type-5[data-race-count="3"] .s5-races{margin-top:12px;gap:7px}
+.scene-type-5[data-race-count="3"] .s5-race{padding-top:9px;padding-bottom:9px}
+.scene-type-5[data-race-count="3"] .s5-payoff{margin-top:8px}
+.scene-type-5[data-race-count="3"] .s5-context{margin-top:5px}
+
+/* LAPTOP / SHORT LANDSCAPE COMPACTION */
+@media (orientation:landscape) and (max-height:900px){
+
+  .scene-type-5{
+    padding:16px 7vw 122px;
+  }
+
+  .scene-type-5 .s5-wrap{
+    width:min(800px,82vw);
+  }
+
+  .scene-type-5 .s5-kicker{
+    font-size:11px;
+  }
+
+  .scene-type-5 .s5-headline{
+    margin-top:5px;
+    font-size:clamp(27px,2.7vw,36px);
+    line-height:1;
+  }
+
+  .scene-type-5 .s5-races{
+    margin-top:10px;
+    gap:6px;
+  }
+
+  .scene-type-5 .s5-race{
+    padding:8px 11px;
+    border-radius:12px;
+    grid-template-columns:minmax(100px,1.15fr) minmax(0,2.7fr) auto;
+    gap:8px;
+  }
+
+  .scene-type-5 .s5-horse{
+    font-size:clamp(15px,1.4vw,20px);
+    line-height:1.05;
+  }
+
+  .scene-type-5 .s5-details{
+    font-size:clamp(10px,.9vw,12px);
+    line-height:1.25;
+  }
+
+  .scene-type-5 .s5-result{
+    min-width:88px;
+  }
+
+  .scene-type-5 .s5-finish{
+    font-size:10px;
+  }
+
+  .scene-type-5 .s5-verdict{
+    margin-top:2px;
+    font-size:11px;
+  }
+
+  .scene-type-5 .s5-outcome{
+    margin-top:1px;
+    font-size:clamp(16px,1.35vw,20px);
+  }
+
+  .scene-type-5 .s5-emotion{
+    font-size:20px;
+  }
+
+  .scene-type-5 .s5-payoff{
+    margin-top:8px;
+    font-size:clamp(20px,1.9vw,26px);
+    line-height:1.06;
+  }
+
+  .scene-type-5 .s5-context{
+    margin-top:4px;
+    font-size:clamp(12px,1.05vw,15px);
+    line-height:1.25;
+  }
+}
+
+/* EXTRA LAPTOP COMPACTION WHEN SCENE HAS 3 RACES */
+@media (orientation:landscape) and (max-height:900px){
+
+  .scene-type-5[data-race-count="3"]{
+    padding-top:12px;
+    padding-bottom:124px;
+  }
+
+  .scene-type-5[data-race-count="3"] .s5-headline{
+    margin-top:4px;
+    font-size:clamp(25px,2.4vw,32px);
+  }
+
+  .scene-type-5[data-race-count="3"] .s5-races{
+    margin-top:8px;
+    gap:5px;
+  }
+
+  .scene-type-5[data-race-count="3"] .s5-race{
+    padding:6px 10px;
+    gap:7px;
+  }
+
+  .scene-type-5[data-race-count="3"] .s5-horse{
+    font-size:clamp(14px,1.3vw,18px);
+  }
+
+  .scene-type-5[data-race-count="3"] .s5-details{
+    font-size:10px;
+  }
+
+  .scene-type-5[data-race-count="3"] .s5-finish{
+    font-size:9px;
+  }
+
+  .scene-type-5[data-race-count="3"] .s5-verdict{
+    font-size:10px;
+  }
+
+  .scene-type-5[data-race-count="3"] .s5-outcome{
+    font-size:clamp(15px,1.25vw,18px);
+  }
+
+  .scene-type-5[data-race-count="3"] .s5-payoff{
+    margin-top:6px;
+    font-size:clamp(18px,1.7vw,23px);
+  }
+
+  .scene-type-5[data-race-count="3"] .s5-context{
+    margin-top:3px;
+    font-size:clamp(11px,.95vw,14px);
+  }
+}
+
+/* MOBILE 3-RACE COMPACTION */
+@media (orientation:portrait){
+
+  .scene-type-5[data-race-count="3"]{
+    padding-top:14px;
+    padding-bottom:104px;
+  }
+
+  .scene-type-5[data-race-count="3"] .s5-kicker{
+    font-size:11px;
+  }
+
+  .scene-type-5[data-race-count="3"] .s5-headline{
+    font-size:clamp(27px,7.2vw,38px);
+    line-height:1;
+    margin-top:5px;
+  }
+
+  .scene-type-5[data-race-count="3"] .s5-races{
+    margin-top:8px;
+    gap:5px;
+  }
+
+  .scene-type-5[data-race-count="3"] .s5-race{
+    padding:6px 8px;
+    gap:6px;
+    border-radius:12px;
+  }
+
+  .scene-type-5[data-race-count="3"] .s5-horse{
+    font-size:clamp(14px,3.6vw,19px);
+    line-height:1.05;
+  }
+
+  .scene-type-5[data-race-count="3"] .s5-details{
+    font-size:9px;
+    line-height:1.2;
+  }
+
+  .scene-type-5[data-race-count="3"] .s5-result{
+    min-width:76px;
+  }
+
+  .scene-type-5[data-race-count="3"] .s5-finish{
+    font-size:9px;
+  }
+
+  .scene-type-5[data-race-count="3"] .s5-verdict{
+    font-size:10px;
+  }
+
+  .scene-type-5[data-race-count="3"] .s5-outcome{
+    font-size:clamp(15px,3.8vw,20px);
+  }
+
+  .scene-type-5[data-race-count="3"] .s5-emotion{
+    font-size:20px;
+  }
+
+  .scene-type-5[data-race-count="3"] .s5-payoff{
+    margin-top:5px;
+    font-size:clamp(18px,4.8vw,24px);
+    line-height:1.05;
+  }
+
+  .scene-type-5[data-race-count="3"] .s5-context{
+    margin-top:3px;
+    font-size:clamp(11px,2.8vw,14px);
+    line-height:1.2;
+  }
+}
+
+/* SCENE_PRODUCTION_CSS_END */
+</style></head><body>
+
+<!-- SCENE_PRODUCTION_MARKUP_START -->
+<section class="scene-type-5" data-scene-type="5" data-scene-instance-id="{{sceneInstanceId}}" data-race-count="{{raceCount}}">
+<div class="s5-wrap">
+<div class="s5-kicker">{{setupKicker}}</div>
+<div class="s5-headline">{{setupHeadline}}</div>
+<div class="s5-races">{{#races}}
+<div class="s5-race {{outcomeClass}}" data-race="{{raceIndex}}" data-fx-package="{{fxPackage}}" data-running-pnl="{{runningPnl}}" data-race-time="{{raceTimeDisplay}}">
+<div class="s5-horse">{{horseName}}</div>
+<div class="s5-details">{{meetingName}} R{{raceNumber}} • {{betType}} • {{stakeDisplay}} @ {{oddsDisplay}}{{returnText}}</div>
+<div class="s5-result">
+<div class="s5-finish">FINISHED {{finishingPositionText}}</div>
+<div class="s5-verdict">BET {{betResult}}</div>
+<div class="s5-outcome">{{betProfitLossDisplay}}</div>
+</div>
+<div class="s5-emotion" data-role="race-emotion" aria-hidden="true"></div>
+</div>
+{{/races}}</div>
+
+<div class="s5-payoff">{{payoffHeadline}}</div>
+<div class="s5-context">{{contextLine}}</div>
+
+<div class="s5-pnl" data-role="group-pnl-meter" data-pnl-from="{{previousRunningPnlBeforeGroup}}" data-pnl-to="{{runningPnlAfterGroup}}">
+<div style="flex:1">
+<div class="s5-pnl-label">CURRENT P&amp;L</div>
+<div class="s5-meter"><div class="s5-meter-needle" data-role="pnl-needle"></div></div>
+</div>
+<div class="s5-pnl-value {{pnlSignClass}}">{{runningPnlDisplay}}</div>
+</div>
+
+</div>
+</section>
+<!-- SCENE_PRODUCTION_MARKUP_END -->
+
+</body></html>

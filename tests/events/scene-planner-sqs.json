@@ -1,0 +1,8 @@
+{
+  "Records": [
+    {
+      "messageId": "console-test-message",
+      "body": "{\"schemaVersion\":\"1.0\",\"jobId\":\"test-step10-001\",\"bettingsS3Key\":\"working/test-step10-001/bettings.json\",\"testMode\":true}"
+    }
+  ]
+}

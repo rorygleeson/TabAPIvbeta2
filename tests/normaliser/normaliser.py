@@ -1,0 +1,1763 @@
+#!/usr/bin/env python3
+"""TAB CSV normaliser v0.9 local-only test harness.
+
+LOCAL-ONLY standalone Normaliser with:
+- Pass 1: frozen v1.7 parsing behaviour + post-parse horse-only classification
+- Pass 2: horse-only historical enrichment + persistent local meeting resolution
+- Pass 3: best-effort daily bettings.json construction
+
+Persistent learned meeting aliases are stored in a local JSON file beside the
+test root. No DynamoDB, boto3, AWS CLI, IAM, or AWS credentials are required.
+"""
+from __future__ import annotations
+
+import argparse, csv, hashlib, json, re, shutil, sys
+from collections import Counter, defaultdict
+from datetime import datetime, timezone
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
+from pathlib import Path
+from typing import Any, Dict, Iterable, List, Optional, Tuple
+
+HEADER = ["Date & Time","Transaction Type","Transaction Category","Bet Type","Channel","Description","Amount","Fixed Price Odds","Results","Running Balance","Net Result"]
+SUPPORTED = {
+    ("Fixed Odds","Win"),("Fixed Odds","Place"),("Fixed Odds","Win and Place"),("Fixed Odds","Multi"),
+    ("Parimutuel","Win"),("Parimutuel","Place"),("Parimutuel","Win and Place"),("Parimutuel","Trifecta"),("Parimutuel","First 4"),
+}
+MONEY_RE = re.compile(r"[-+]?\$?([0-9][0-9,]*(?:\.[0-9]+)?)")
+TX_RE = re.compile(r"Transaction Number:\s*(\d+)", re.I)
+DATE_RE = re.compile(r"Event Date:\s*(\d{8})", re.I)
+RACE_RE = re.compile(r"Event/Race Number:\s*(\d+)", re.I)
+EVENT_RE = re.compile(r"Event/Race Number:\s*(.+)$", re.I|re.M)
+VENUE_RE = re.compile(r"Meeting Venue:\s*(.+?)(?:\s+(?:Gallops|Greyhounds|Harness))?$", re.I|re.M)
+VENUE_DOMAIN_RE = re.compile(r"Meeting Venue:\s*.+?\s+(Gallops|Greyhounds|Harness)\s*$", re.I|re.M)
+MEETING_TYPE_RE = re.compile(r"Meeting Type:\s*(\S+)", re.I)
+STAKE_RE = re.compile(r"Stake:\s*\$([0-9,]+(?:\.[0-9]+)?)", re.I)
+PRICE_RE = re.compile(r"@Price:\$?([0-9]+(?:\.[0-9]+)?)", re.I)
+RETURN_RE = re.compile(r"(?:=Return:|Combined Return:)\$?([0-9,]+(?:\.[0-9]+)?)", re.I)
+COMBINED_RE = re.compile(r"Combined Price:\s*\$?([0-9]+(?:\.[0-9]+)?)", re.I)
+MULTI_RE = re.compile(r"Multibet\s+(\d+)\s+legs", re.I)
+FLEXI_RE = re.compile(r"FLEXI\s+([0-9]+(?:\.[0-9]+)?)%", re.I)
+FIXED_WP_RE = re.compile(r"^(WIN|PLA)\s+(.+)$", re.I)
+TOTE_WP_RE = re.compile(r"^(WIN|PLA)\s+(\d+)\s*$", re.I)
+
+FOOTER_KEYS = {
+    "Opening Balance",
+    "Closing Balance",
+    "Total Deposits",
+    "Total Withdrawals",
+    "Total Adjustments",
+    "Total Payouts",
+    "Total Free Bets",
+    "Total Net Results",
+    "You Spent Total (incl bonus bets)",
+}
+
+
+def dec(v):
+    if v is None or not str(v).strip(): return None
+    try: return Decimal(str(v).strip().replace(",",""))
+    except InvalidOperation: return None
+
+def q2(v): return None if v is None else v.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+def extract(rx, text):
+    m = rx.search(text or ""); return m.group(1).strip() if m else None
+
+def money(v):
+    if v is None or not str(v).strip(): return None
+    s=str(v).strip(); m=MONEY_RE.search(s.replace(",",""))
+    if not m: return None
+    try: x=Decimal(m.group(1))
+    except InvalidOperation: return None
+    return -x if s.startswith("-") else x
+
+def event_date(desc):
+    raw=extract(DATE_RE,desc)
+    if not raw: return None
+    try: return datetime.strptime(raw,"%Y%m%d").date().isoformat()
+    except ValueError: return raw
+
+def valid_date(v):
+    try: datetime.strptime(v or "","%Y-%m-%d"); return True
+    except ValueError: return False
+
+def source_result(v):
+    s=(v or "").strip().lower()
+    return "WIN" if s=="pay/won" else "LOSS" if s=="lost" else None
+
+def positive(v): return v is not None and v>0
+
+def payload(desc):
+    out=[]
+    for line in (desc or "").splitlines():
+        s=line.strip()
+        if s and not re.match(r"^(Transaction Number|Event/Race Number|Event Date|Meeting Type|Meeting Venue|Stake):",s,re.I): out.append(s)
+    return out
+
+def raw_view(row): return {k:row.get(k) for k in HEADER}|{"sourceRow":row.get("_sourceRow")}
+def exc(kind,reason,tx,group,**extra):
+    out={"type":kind,"reason":reason,"transactionNumber":tx,**extra}
+    if group is not None: out["rawRecords"]=[raw_view(r) for r in group]
+    return out
+
+def json_default(value):
+    if isinstance(value, Decimal):
+        return float(value)
+    raise TypeError(f"Not JSON serializable: {type(value)}")
+
+def write_json(path,obj):
+    path.parent.mkdir(parents=True,exist_ok=True)
+    path.write_text(json.dumps(obj,indent=2,ensure_ascii=False,default=json_default)+"\n",encoding="utf-8")
+
+
+def parse_csv(path):
+    with path.open("r",encoding="utf-8-sig",newline="") as f: rows=list(csv.reader(f))
+    period=rows[0][1].strip() if rows and len(rows[0])>=2 and rows[0][0].strip()=="Statement Period" else None
+    hi=next((i for i,r in enumerate(rows) if r==HEADER),-1)
+    if hi<0: raise ValueError("Expected TAB 11-column transaction header not found")
+    tx=[]; footer={}; inside=True
+    for i,row in enumerate(rows[hi+1:],hi+2):
+        if inside and len(row)==11:
+            d=dict(zip(HEADER,row)); d["_sourceRow"]=i; tx.append(d); continue
+        if inside and (not row or (len(row)==1 and not row[0].strip())):
+            inside=False
+            continue
+        if inside and len(row)>=2 and row[0].strip() in FOOTER_KEYS:
+            inside=False
+            footer[row[0].strip()]=row[1].strip()
+            continue
+        if inside and any(str(x).strip() for x in row):
+            raise ValueError(f"Unexpected non-empty row shape at CSV row {i}: expected 11 transaction columns or recognised footer; got {len(row)} columns")
+        if not inside and len(row)>=2 and row[0].strip():
+            footer[row[0].strip()]=row[1].strip()
+    return period,tx,footer
+
+
+def common(row,pricing,bet_type):
+    d=row.get("Description","")
+    return {"transactionNumber":extract(TX_RE,d),"pricingType":pricing,"betType":bet_type,"betTime":row.get("Date & Time") or None,"eventDate":event_date(d),"betResult":source_result(row.get("Results","")),"enrichmentRequired":False}
+
+def fixed_selection(desc):
+    lines=payload(desc); raw=lines[-1] if lines else None
+    if not raw: return {"meeting":None,"raceNumber":None,"selectionText":None,"runnerName":None}
+    m=FIXED_WP_RE.match(raw); clean=m.group(2).strip() if m else raw
+    clean=re.split(r"\s+@Price:",clean,maxsplit=1,flags=re.I)[0]
+    clean=re.split(r"\s+Deductions Apply",clean,maxsplit=1,flags=re.I)[0]
+    m=re.search(r"^(.+?)\s+R(\d{1,2})\s+\d{1,2}/\d{1,2}\s+(.+)$",clean,re.I)
+    if not m: return {"meeting":None,"raceNumber":None,"selectionText":clean.strip(),"runnerName":None}
+    sel=m.group(3).strip(); runner=re.sub(r"^PLC\s+\d+\s*-\s*\d+\s+","",sel,flags=re.I).strip() or None
+    return {"meeting":m.group(1).strip(),"raceNumber":int(m.group(2)),"selectionText":sel,"runnerName":runner}
+
+def tote_common(desc):
+    rr=extract(RACE_RE,desc); lines=payload(desc)
+    domain=extract(VENUE_DOMAIN_RE,desc)
+    return {
+        "meeting":extract(VENUE_RE,desc),
+        "meetingType":extract(MEETING_TYPE_RE,desc),
+        "meetingRacingType":domain.upper() if domain else None,
+        "raceNumber":int(rr) if rr and rr.isdigit() else None,
+        "selectionText":lines[-1] if lines else None,
+    }
+
+
+def domain_classification(bet):
+    """Current product scope is horse/thoroughbred racing only.
+
+    This runs after the frozen v1.7 parser has produced a valid canonical record.
+    It does not change source parsing/grouping/settlement rules.
+    """
+    pricing=bet.get("pricingType")
+    bet_type=bet.get("betType")
+    explicit=(bet.get("meetingRacingType") or "").upper()
+
+    if explicit == "GALLOPS":
+        return "HORSE_CONFIRMED_CSV"
+    if explicit in {"GREYHOUNDS", "HARNESS"}:
+        return "NON_HORSE_RACING"
+
+    if pricing == "TOTE":
+        return "HORSE_CANDIDATE"
+
+    if pricing == "FIXED":
+        if bet_type == "MULTI":
+            return "NON_RACING"
+        if isinstance(bet.get("raceNumber"), int) and bet.get("meeting") and bet.get("runnerName"):
+            return "HORSE_CANDIDATE"
+        if bet.get("fixedRacingSignal"):
+            return "HORSE_CANDIDATE"
+        return "NON_RACING"
+
+    return "NON_RACING"
+
+def payout_total(group):
+    vals=[]
+    for r in group:
+        if r.get("Transaction Category")=="Payout":
+            x=money(r.get("Amount"))
+            if x is not None: vals.append(x)
+    return None if not vals else q2(sum(vals,Decimal("0")))
+
+def validate_payout_rows(group,tx):
+    for r in group:
+        if r.get("Transaction Category") != "Payout":
+            continue
+        amount = money(r.get("Amount"))
+        if amount is None or amount <= 0:
+            return exc(
+                "INVALID_NUMERIC_VALUE",
+                f"Payout row has missing, invalid or non-positive Amount: {r.get('Amount')!r}",
+                tx,
+                group,
+            )
+    return None
+
+def abs_amount(row):
+    value = money(row.get("Amount"))
+    return None if value is None else q2(abs(value))
+
+def validate_stake_reconciliation(pricing,bet_type,group,recs,tx):
+    primary = next((r for r in group if r.get("Transaction Category") == "Stake"), None)
+    if primary is None:
+        return None
+
+    primary_amount = abs_amount(primary)
+
+    if bet_type == "Win and Place":
+        if primary_amount is None:
+            return exc("SOURCE_RECONCILIATION_ERROR","Win & Place primary Stake Amount is missing or invalid",tx,group)
+        if pricing == "Fixed Odds":
+            expected = q2(sum((r.get("stake") for r in recs), Decimal("0"))) if recs else None
+        else:
+            expected = recs[0].get("totalStake") if recs else None
+        if expected is not None and primary_amount != expected:
+            return exc(
+                "SOURCE_RECONCILIATION_ERROR",
+                f"Primary Amount {primary_amount} does not equal Win & Place component stake total {expected}",
+                tx,
+                group,
+            )
+        return None
+
+    if bet_type == "Multi":
+        if not recs:
+            return None
+        canonical_stake = recs[0].get("stake")
+        summary = next((r for r in group if MULTI_RE.search(r.get("Description", ""))), None)
+        summary_amount = abs_amount(summary) if summary else None
+        if summary_amount is None:
+            return exc("SOURCE_RECONCILIATION_ERROR","Multi summary Amount is missing or invalid",tx,group)
+        if canonical_stake is not None and summary_amount != canonical_stake:
+            return exc(
+                "SOURCE_RECONCILIATION_ERROR",
+                f"Multi summary Amount {summary_amount} does not equal parsed stake {canonical_stake}",
+                tx,
+                group,
+            )
+        return None
+
+    if recs:
+        canonical_stake = recs[0].get("stake")
+        if primary_amount is None:
+            return exc("SOURCE_RECONCILIATION_ERROR","Primary Stake Amount is missing or invalid",tx,group)
+        if canonical_stake is not None and primary_amount != canonical_stake:
+            return exc(
+                "SOURCE_RECONCILIATION_ERROR",
+                f"Primary Amount {primary_amount} does not equal parsed stake {canonical_stake}",
+                tx,
+                group,
+            )
+    return None
+
+
+def parse_fixed(row,kind):
+    d=row.get("Description",""); b=common(row,"FIXED",kind); b.update(fixed_selection(d))
+    b.update({
+        "stake":q2(dec(extract(STAKE_RE,d))),
+        "odds":dec(row.get("Fixed Price Odds")) or dec(extract(PRICE_RE,d)),
+        "potentialReturn":q2(dec(extract(RETURN_RE,d))),
+        "payout":None,
+        # Domain signal only; does not change the frozen selection parser. This
+        # preserves horse-only candidates such as named Melbourne Cup markets that
+        # omit the usual <meeting> Rxx dd/mm identity pattern.
+        "fixedRacingSignal": bool(re.search(r"\bDeductions Apply\b", d, re.I)),
+    })
+    return b
+
+def parse_fixed_wp(group):
+    tx=extract(TX_RE,group[0].get("Description","")); cand={"WIN":[],"PLACE":[]}
+    for r in group:
+        if r.get("Transaction Category")!="Stake" and not (not r.get("Transaction Type") and r.get("Description")): continue
+        lines=payload(r.get("Description","")); m=FIXED_WP_RE.match(lines[-1] if lines else "")
+        if m: cand["WIN" if m.group(1).upper()=="WIN" else "PLACE"].append(r)
+    if len(cand["WIN"])!=1 or len(cand["PLACE"])!=1:
+        return [],exc("UNSUPPORTED_BET_STRUCTURE",f"Fixed Win and Place requires exactly one WIN and one PLACE leg; found WIN={len(cand['WIN'])}, PLACE={len(cand['PLACE'])}",tx,group)
+    bets=[parse_fixed(cand["WIN"][0],"WIN"),parse_fixed(cand["PLACE"][0],"PLACE")]
+    win_bet, place_bet = bets
+
+    # Preserve the authoritative settled payout for the composite. TAB can mark
+    # both W&P source rows Pay/Won even when only one component actually returned
+    # money. Reconcile against source potential returns without guessing: enumerate
+    # every non-empty component subset and accept a split only when exactly one
+    # subset sums to the authoritative composite payout. Unmatched components then
+    # have an actual return of zero. If no subset or more than one subset matches,
+    # leave both component payouts unknown.
+    composite_payout = payout_total(group)
+    for b in bets:
+        b["sourceCompositePayout"] = composite_payout
+    if composite_payout is not None:
+        matching_subsets = []
+        for mask in range(1, 1 << len(bets)):
+            subset = [i for i in range(len(bets)) if mask & (1 << i)]
+            returns = [bets[i].get("potentialReturn") for i in subset]
+            if any(value is None for value in returns):
+                continue
+            if q2(sum(returns, Decimal("0"))) == composite_payout:
+                matching_subsets.append(set(subset))
+
+        if len(matching_subsets) == 1:
+            matched = matching_subsets[0]
+            for i, b in enumerate(bets):
+                is_returning_component = i in matched
+                b["payout"] = b.get("potentialReturn") if is_returning_component else Decimal("0.00")
+                # The statement repeats Pay/Won on both source rows for some composite
+                # W&P transactions. Once the payout uniquely proves which component(s)
+                # returned money, use that deterministic component settlement in the
+                # canonical split so recap win/loss counts and replay flags stay correct.
+                b["betResult"] = "WIN" if is_returning_component else "LOSS"
+    identity_fields = ("eventDate", "meeting", "raceNumber", "selectionText", "runnerName")
+    mismatches = [f for f in identity_fields if win_bet.get(f) != place_bet.get(f)]
+    if mismatches:
+        return [],exc(
+            "UNSUPPORTED_BET_STRUCTURE",
+            f"Fixed Win and Place components disagree on identity fields: {', '.join(mismatches)}",
+            tx,
+            group,
+        )
+    if not bets[1].get("betTime"): bets[1]["betTime"]=bets[0].get("betTime")
+    for b,c in zip(bets,("WIN","PLACE")): b.update({"sourceCompositeBetType":"WIN_AND_PLACE","component":c})
+    return bets,None
+
+
+def parse_multi(group):
+    tx=extract(TX_RE,group[0].get("Description","")); summaries=[r for r in group if MULTI_RE.search(r.get("Description",""))]
+    if len(summaries)!=1: return None,exc("UNSUPPORTED_BET_STRUCTURE","Fixed Multi must contain exactly one observed Multibet summary record",tx,group)
+    s=summaries[0]; legs_src=[r for r in group if r is not s and r.get("Transaction Category")!="Payout"]
+    declared=int(extract(MULTI_RE,s.get("Description","")) or 0)
+    if len(legs_src)!=declared: return None,exc("UNSUPPORTED_BET_STRUCTURE",f"Fixed Multi declared {declared} legs but {len(legs_src)} leg records were found",tx,group)
+    legs=[]
+    for i,r in enumerate(legs_src,1):
+        d=r.get("Description",""); lines=payload(d); raw=lines[-1] if lines else None; market=extract(EVENT_RE,d)
+        sel=re.split(r"\s+@Price:",raw,maxsplit=1,flags=re.I)[0].strip() if raw else None
+        if sel and market and sel.lower().startswith(market.lower()+" "): sel=sel[len(market):].strip()
+        legs.append({"legNumber":i,"eventDate":event_date(d),"eventOrMarket":market,"selectionText":sel,"odds":dec(r.get("Fixed Price Odds")) or dec(extract(PRICE_RE,d)),"result":None})
+    d=s.get("Description",""); b=common(s,"FIXED","MULTI")
+    if not b.get("betTime"): b["betTime"]=next((r.get("Date & Time") for r in group if r.get("Date & Time")),None)
+    b.update({"stake":q2(dec(extract(STAKE_RE,d))),"odds":dec(s.get("Fixed Price Odds")) or dec(extract(COMBINED_RE,d)),"potentialReturn":q2(dec(extract(RETURN_RE,d))),"payout":None,"declaredLegCount":declared,"legs":legs,"enrichmentRequired":True})
+    return b,None
+
+
+def parse_tote_single(row,group,kind):
+    d=row.get("Description",""); b=common(row,"TOTE",kind); t=tote_common(d); b.update(t)
+    sel=t.get("selectionText"); stake=dec(extract(STAKE_RE,d)); payout=payout_total(group); result=source_result(row.get("Results",""))
+    b.update({"runnerNumber":int(sel) if sel and sel.isdigit() else None,"stake":q2(stake),"payout":q2(payout),"odds":q2(payout/stake) if result=="WIN" and payout is not None and stake and stake>0 else None,"potentialReturn":None})
+    return b
+
+def parse_tote_wp(group):
+    tx=extract(TX_RE,group[0].get("Description","")); cand={"WIN":[],"PLACE":[]}
+    for r in group:
+        if r.get("Transaction Category")=="Payout": continue
+        lines=payload(r.get("Description","")); m=TOTE_WP_RE.match(lines[-1] if lines else "")
+        if m: cand["WIN" if m.group(1).upper()=="WIN" else "PLACE"].append(r)
+    if len(cand["WIN"])!=1 or len(cand["PLACE"])!=1:
+        return None,exc("UNSUPPORTED_BET_STRUCTURE",f"Tote Win and Place requires exactly one WIN and one PLACE leg; found WIN={len(cand['WIN'])}, PLACE={len(cand['PLACE'])}",tx,group)
+    wr,pr=cand["WIN"][0],cand["PLACE"][0]; wd,pd=wr.get("Description",""),pr.get("Description","")
+    ws,ps=dec(extract(STAKE_RE,wd)),dec(extract(STAKE_RE,pd))
+    if ws is None or ps is None: return None,exc("INVALID_NUMERIC_VALUE","Could not determine both Tote Win and Place component stakes from Description",tx,group)
+    wm=TOTE_WP_RE.match(payload(wd)[-1] if payload(wd) else ""); pm=TOTE_WP_RE.match(payload(pd)[-1] if payload(pd) else "")
+    wn=int(wm.group(2)) if wm else None; pn=int(pm.group(2)) if pm else None
+    if wn!=pn: return None,exc("UNSUPPORTED_BET_STRUCTURE","Tote Win and Place WIN/PLACE legs reference different runners",tx,group)
+    win_identity = {**common(wr,"TOTE","TOTE_WIN_PLACE"), **tote_common(wd)}
+    place_identity = {**common(pr,"TOTE","TOTE_WIN_PLACE"), **tote_common(pd)}
+    identity_fields = ("eventDate", "meeting", "meetingType", "raceNumber")
+    mismatches = [
+        f for f in identity_fields
+        if win_identity.get(f) is not None
+        and place_identity.get(f) is not None
+        and win_identity.get(f) != place_identity.get(f)
+    ]
+    if mismatches:
+        return None,exc(
+            "UNSUPPORTED_BET_STRUCTURE",
+            f"Tote Win and Place components disagree on identity fields: {', '.join(mismatches)}",
+            tx,
+            group,
+        )
+    payout=payout_total(group); total=ws+ps; b=common(wr,"TOTE","TOTE_WIN_PLACE"); b.update(tote_common(wd))
+    b.update({"runnerNumber":wn,"winStake":q2(ws),"placeStake":q2(ps),"totalStake":q2(total),"combinedPayout":q2(payout),"combinedEffectiveOdds":q2(payout/total) if payout is not None and total>0 else None,"enrichmentRequired":True})
+    return b,None
+
+
+def exotic_selections(text):
+    if not text: return None
+    core=re.split(r"\s*\(",text,maxsplit=1)[0].strip(); parts=[x.strip() for x in re.split(r"[,\-]",core)]
+    return [int(x) for x in parts] if parts and all(x.isdigit() for x in parts) else None
+
+def parse_exotic(row,group,kind):
+    d=row.get("Description",""); tx=extract(TX_RE,d); payout=payout_total(group); outcome=source_result(row.get("Results",""))
+    if payout is not None or outcome=="WIN": return None,exc("UNSUPPORTED_BET_STRUCTURE",f"Winning {kind} settlement has not yet been source-validated",tx,group)
+    b=common(row,"TOTE",kind); b.update(tote_common(d)); sel=b.get("selectionText")
+    b.update({"selections":exotic_selections(sel),"stake":q2(dec(extract(STAKE_RE,d))),"payout":None,"odds":None,"flexiPercentage":dec(extract(FLEXI_RE,sel or "")),"enrichmentRequired":True})
+    return b,None
+
+
+def validate_results(group,tx):
+    for r in group:
+        raw=(r.get("Results") or "").strip()
+        if raw and source_result(raw) is None: return exc("UNSUPPORTED_RESULT_VALUE",f"Unsupported non-empty Results value: {raw!r}",tx,group,sourceResult=raw)
+    return None
+
+def validate(b,kind,group):
+    tx=b.get("transactionNumber")
+    def bad(msg): return exc("INVALID_REQUIRED_FIELD",msg,tx,group)
+    if not tx: return bad("Canonical bet is missing transactionNumber")
+    if not valid_date(b.get("eventDate")): return bad(f"Canonical bet has missing or invalid eventDate: {b.get('eventDate')!r}")
+    if kind in ("FIXED_SINGLE","FIXED_WP"):
+        if not b.get("selectionText"): return bad("Fixed bet is missing selectionText")
+        if not positive(b.get("stake")): return bad(f"Fixed bet has missing or non-positive stake: {b.get('stake')!r}")
+        if not positive(b.get("odds")): return bad(f"Fixed bet has missing or non-positive odds: {b.get('odds')!r}")
+    elif kind=="TOTE_SINGLE":
+        if not isinstance(b.get("raceNumber"),int) or b["raceNumber"]<=0: return bad(f"Tote bet has missing or invalid raceNumber: {b.get('raceNumber')!r}")
+        if not isinstance(b.get("runnerNumber"),int) or b["runnerNumber"]<=0: return bad(f"Tote bet has missing or invalid runnerNumber: {b.get('runnerNumber')!r}")
+        if not positive(b.get("stake")): return bad(f"Tote bet has missing or non-positive stake: {b.get('stake')!r}")
+        if b.get("betResult")=="WIN" and not positive(b.get("payout")): return bad("Winning Tote WIN/PLACE has no positive payout in its transaction group")
+        if b.get("betResult")=="LOSS" and b.get("payout") is not None: return bad(f"Losing Tote WIN/PLACE unexpectedly has payout {b.get('payout')!r}")
+        if b.get("betResult") is None and b.get("payout") is not None: return bad("Tote WIN/PLACE has payout data but no recognised source result")
+    elif kind=="TOTE_WP":
+        if not isinstance(b.get("raceNumber"),int) or b["raceNumber"]<=0: return bad(f"Tote Win & Place has missing or invalid raceNumber: {b.get('raceNumber')!r}")
+        if not isinstance(b.get("runnerNumber"),int) or b["runnerNumber"]<=0: return bad(f"Tote Win & Place has missing or invalid runnerNumber: {b.get('runnerNumber')!r}")
+        if not positive(b.get("winStake")) or not positive(b.get("placeStake")): return bad("Tote Win & Place requires positive winStake and placeStake")
+        if b.get("totalStake")!=q2(b["winStake"]+b["placeStake"]): return bad("Tote Win & Place totalStake does not equal component stakes")
+        if b.get("betResult")=="WIN" and not positive(b.get("combinedPayout")): return bad("Winning Tote Win & Place has no positive combined payout")
+        if b.get("betResult")=="LOSS" and b.get("combinedPayout") is not None: return bad(f"Losing Tote Win & Place unexpectedly has combined payout {b.get('combinedPayout')!r}")
+        if b.get("betResult") is None and b.get("combinedPayout") is not None: return bad("Tote Win & Place has payout data but no recognised source result")
+    elif kind=="MULTI":
+        if not positive(b.get("stake")) or not positive(b.get("odds")): return bad("Fixed Multi requires positive stake and combined odds")
+        legs=b.get("legs") or []; declared=b.get("declaredLegCount")
+        if not isinstance(declared,int) or declared<=0 or len(legs)!=declared: return bad(f"Fixed Multi leg count is invalid: declared={declared!r}, actual={len(legs)}")
+        for l in legs:
+            if not valid_date(l.get("eventDate")) or not l.get("eventOrMarket") or not l.get("selectionText") or not positive(l.get("odds")): return bad(f"Fixed Multi leg {l.get('legNumber')} is missing required data")
+    elif kind in ("TRIFECTA","FIRST_4"):
+        if not isinstance(b.get("raceNumber"),int) or b["raceNumber"]<=0 or not positive(b.get("stake")): return bad(f"{kind} is missing required race/stake data")
+        need=3 if kind=="TRIFECTA" else 4
+        selections=b.get("selections")
+        if not isinstance(selections,list) or len(selections)!=need: return bad(f"{kind} requires exactly {need} numeric selections; got {selections!r}")
+        if any(not isinstance(x,int) or x<=0 for x in selections): return bad(f"{kind} selections must be positive runner numbers; got {selections!r}")
+        if len(set(selections))!=need: return bad(f"{kind} selections must be unique; got {selections!r}")
+    return None
+
+
+def normalise_csv(path,job_id,source_name=None):
+    period,rows,footer=parse_csv(path); source_name=source_name or path.name; groups=defaultdict(list); ignored=Counter(); exceptions=[]
+    for r in rows:
+        tx=extract(TX_RE,r.get("Description",""))
+        if tx: groups[tx].append(r)
+        elif r.get("Transaction Category") in {"Deposit","Withdrawal","Credit Card Fee"} or r.get("Transaction Type")=="Account": ignored["ACCOUNT_NON_BET"]+=1
+        else: exceptions.append(exc("UNRECOGNISED_RECORD_STRUCTURE","11-column transaction record has no Transaction Number",None,[r]))
+    bets=[]; recognised=unsupported=0
+    for tx,g in groups.items():
+        stakes=[r for r in g if r.get("Transaction Category")=="Stake"]
+        if not stakes:
+            ignored["PAYOUT_SUPPORT_ONLY" if any(r.get("Transaction Category")=="Payout" for r in g) else "NON_STAKE_TRANSACTION"]+=len(g); continue
+        primary=stakes[0]; pricing=primary.get("Transaction Type",""); bt=primary.get("Bet Type","")
+        if len(stakes)!=1: exceptions.append(exc("UNSUPPORTED_BET_STRUCTURE",f"Expected exactly one primary Stake record for a logical transaction; found {len(stakes)}",tx,g)); unsupported+=1; continue
+        e=validate_results(g,tx)
+        if e: exceptions.append(e); unsupported+=1; continue
+        e=validate_payout_rows(g,tx)
+        if e: exceptions.append(e); unsupported+=1; continue
+        if (pricing,bt) not in SUPPORTED: exceptions.append(exc("UNSUPPORTED_BET_TYPE",f"Unsupported observed stake type: {pricing!r} / {bt!r}",tx,g,transactionType=pricing or None,betType=bt or None)); unsupported+=1; continue
+        recognised+=1; recs=[]; pe=None; vk=None
+        if pricing=="Fixed Odds" and bt in ("Win","Place"):
+            recs=[parse_fixed(primary,bt.upper())]; vk="FIXED_SINGLE"
+            settled_payout = payout_total(g)
+            if recs:
+                recs[0]["payout"] = settled_payout
+        elif pricing=="Fixed Odds" and bt=="Win and Place": recs,pe=parse_fixed_wp(g); vk="FIXED_WP"
+        elif pricing=="Fixed Odds" and bt=="Multi": x,pe=parse_multi(g); recs=[x] if x else []; vk="MULTI"
+        elif pricing=="Parimutuel" and bt in ("Win","Place"): recs=[parse_tote_single(primary,g,bt.upper())]; vk="TOTE_SINGLE"
+        elif pricing=="Parimutuel" and bt=="Win and Place": x,pe=parse_tote_wp(g); recs=[x] if x else []; vk="TOTE_WP"
+        elif pricing=="Parimutuel" and bt in ("Trifecta","First 4"):
+            kind="TRIFECTA" if bt=="Trifecta" else "FIRST_4"; x,pe=parse_exotic(primary,g,kind); recs=[x] if x else []; vk=kind
+        if pe: exceptions.append(pe); recognised-=1; unsupported+=1; continue
+        ve=None
+        if vk:
+            for r in recs:
+                ve=validate(r,vk,g)
+                if ve:
+                    break
+        if ve: exceptions.append(ve); recognised-=1; unsupported+=1; continue
+        re=validate_stake_reconciliation(pricing,bt,g,recs,tx)
+        if re: exceptions.append(re); recognised-=1; unsupported+=1; continue
+        bets.extend(recs)
+    # v0.9 domain filter is deliberately post-parse so v1.7 parsing behaviour remains frozen.
+    domain_counts=Counter()
+    included=[]
+    for b in bets:
+        classification=domain_classification(b)
+        b["domainClassification"]=classification
+        domain_counts[classification]+=1
+        if classification in ("HORSE_CONFIRMED_CSV", "HORSE_CANDIDATE"):
+            included.append(b)
+        else:
+            ignored[f"DOMAIN_{classification}"]+=1
+
+    for i,b in enumerate(included,1):
+        suffix=f":{b['component']}" if b.get("component") else ""; b["canonicalId"]=f"{b.get('transactionNumber')}{suffix}"; b["sequence"]=i
+    counts=Counter(f"{b.get('pricingType')}:{b.get('betType')}" for b in included)
+    normalised={
+        "normaliserSchemaVersion":"1.7+horse-filter-v0.9",
+        "jobId":job_id,
+        "source":{"fileName":source_name,"statementPeriod":period},
+        "domainSummary":{
+            "parsedCanonicalBetsBeforeDomainFilter":len(bets),
+            "horseBetsIncluded":len(included),
+            "nonHorseBetsExcluded":len(bets)-len(included),
+            "classificationCounts":dict(sorted(domain_counts.items())),
+        },
+        "bets":included,
+    }
+    summary={"jobId":job_id,"sourceFile":source_name,"statementPeriod":period,"sourceTransactionRecords":len(rows),"sourceTransactionGroups":len(groups),"recognisedLogicalBetTransactions":recognised,"unsupportedLogicalBetTransactions":unsupported,"parsedCanonicalBetRecordsBeforeDomainFilter":len(bets),"canonicalBetRecords":len(included),"horseBetsIncluded":len(included),"nonHorseBetsExcluded":len(bets)-len(included),"domainClassificationCounts":dict(sorted(domain_counts.items())),"exceptionCount":len(exceptions),"ignoredRecordCounts":dict(sorted(ignored.items())),"canonicalBetTypeCounts":dict(sorted(counts.items())),"footer":footer}
+    return normalised,exceptions,summary
+
+
+def period_label(path):
+    try:
+        p,_,_=parse_csv(path)
+        if p: return datetime.strptime(p.split("-")[0].strip(),"%d/%m/%Y").strftime("%Y-%m")
+    except Exception: pass
+    return re.sub(r"[^A-Za-z0-9]+","-",path.stem).strip("-").lower()[:24] or "job"
+def job_id(path): return f"{period_label(path)}__{datetime.now():%Y%m%d-%H%M%S}-{hashlib.sha1((path.name+'|'+datetime.now().isoformat()).encode()).hexdigest()[:4]}"
+
+# =============================================================================
+# PASS 2 — HORSE-ONLY TAB HISTORICAL ENRICHMENT + PERSISTENT MEETING RESOLUTION
+# =============================================================================
+import time
+import urllib.parse
+import urllib.request
+
+ENRICH_BASE_URL = "https://api.beta.tab.com.au/v1/historical-results-service"
+ENRICH_JURISDICTION = "VIC"
+ENRICH_TIMEOUT = 25
+ENRICH_RETRIES = 2
+ENRICH_URL_RE = re.compile(r"https?://[^\s\"'<>]+", re.I)
+
+
+def enrich_norm_text(value):
+    if value is None:
+        return ""
+    return re.sub(r"[^A-Z0-9]+", "", str(value).upper().strip())
+
+
+def enrich_to_int(value):
+    try:
+        if value is None or value == "":
+            return None
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def enrich_to_decimal(value):
+    try:
+        if value is None or value == "":
+            return None
+        return Decimal(str(value))
+    except (InvalidOperation, TypeError, ValueError):
+        return None
+
+
+def enrich_money2(value):
+    d = enrich_to_decimal(value)
+    return None if d is None else d.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+
+def enrich_as_list(value):
+    return value if isinstance(value, list) else []
+
+
+class TabHistoricalApi:
+    """Small client with warm-runtime caches only. Persistent meeting learning is local JSON."""
+
+    def __init__(self, base_url, jurisdiction, timeout, retries):
+        self.base_url = base_url.rstrip("/")
+        self.jurisdiction = jurisdiction.upper()
+        self.timeout = timeout
+        self.retries = retries
+        self.date_cache = {}
+        self.race_cache = {}
+        self.date_calls = 0
+        self.race_calls = 0
+        self.cache_hits = 0
+
+    def _get(self, url, kind):
+        headers = {"Accept": "application/json", "User-Agent": "Mozilla/5.0"}
+        last_error = None
+        for attempt in range(self.retries + 1):
+            try:
+                if kind == "date":
+                    self.date_calls += 1
+                else:
+                    self.race_calls += 1
+                print(f"      [API] GET {url}")
+                request = urllib.request.Request(url, headers=headers, method="GET")
+                with urllib.request.urlopen(request, timeout=self.timeout) as response:
+                    return json.loads(response.read().decode("utf-8"))
+            except Exception as ex:
+                last_error = ex
+                if attempt < self.retries:
+                    time.sleep(attempt + 1)
+        raise RuntimeError(f"TAB API request failed: {last_error}")
+
+    def date(self, event_date):
+        if event_date in self.date_cache:
+            self.cache_hits += 1
+            return self.date_cache[event_date]
+        url = (
+            f"{self.base_url}/{urllib.parse.quote(self.jurisdiction)}/racing/"
+            f"{urllib.parse.quote(event_date)}"
+        )
+        data = self._get(url, "date")
+        self.date_cache[event_date] = data
+        return data
+
+    def race(self, event_date, venue_mnemonic, race_type, race_number):
+        key = (event_date, venue_mnemonic, race_type, race_number)
+        if key in self.race_cache:
+            self.cache_hits += 1
+            return self.race_cache[key]
+        url = (
+            f"{self.base_url}/{urllib.parse.quote(self.jurisdiction)}/racing/"
+            f"{urllib.parse.quote(event_date)}/{urllib.parse.quote(str(venue_mnemonic))}/"
+            f"{urllib.parse.quote(str(race_type))}/races/{race_number}"
+        )
+        data = self._get(url, "race")
+        self.race_cache[key] = data
+        return data
+
+
+class MeetingResolutionStore:
+    """Persistent learned meeting mappings stored in one local JSON file.
+
+    The file maps one sourceKey to a list of proven target meetings. Multiple
+    targets are retained deliberately; the requested date/race must reduce them
+    to exactly one valid horse target before a learned mapping is reused.
+    """
+
+    def __init__(self, file_path):
+        self.file_path = Path(file_path).resolve()
+        self.hits = 0
+        self.misses = 0
+        self.ambiguous = 0
+        self.writes = 0
+        self.errors = 0
+        self.data = {}
+        self._load()
+
+    def _load(self):
+        if not self.file_path.exists():
+            self.data = {}
+            return
+        try:
+            raw = json.loads(self.file_path.read_text(encoding="utf-8"))
+            if not isinstance(raw, dict):
+                raise ValueError("top-level JSON must be an object")
+            cleaned = {}
+            for source_key, targets in raw.items():
+                if not isinstance(source_key, str) or not isinstance(targets, list):
+                    continue
+                cleaned[source_key] = [t for t in targets if isinstance(t, dict)]
+            self.data = cleaned
+        except Exception as ex:
+            self.errors += 1
+            raise RuntimeError(f"Could not load local meeting lookup file {self.file_path}: {ex}") from ex
+
+    def _save_atomic(self):
+        self.file_path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = self.file_path.with_name(self.file_path.name + ".tmp")
+        try:
+            tmp.write_text(
+                json.dumps(self.data, indent=2, ensure_ascii=False) + "\n",
+                encoding="utf-8",
+            )
+            tmp.replace(self.file_path)
+        except Exception as ex:
+            self.errors += 1
+            try:
+                if tmp.exists():
+                    tmp.unlink()
+            except Exception:
+                pass
+            raise RuntimeError(f"Could not save local meeting lookup file {self.file_path}: {ex}") from ex
+
+    @staticmethod
+    def source_key(source_meeting, source_meeting_type=None):
+        meeting = enrich_norm_text(source_meeting)
+        mtype = enrich_norm_text(source_meeting_type) or "UNKNOWN"
+        return f"{meeting}#{mtype}" if meeting else None
+
+    @staticmethod
+    def target_key(mapping):
+        return "#".join([
+            enrich_norm_text(mapping.get("canonicalMeeting")) or "UNKNOWN",
+            enrich_norm_text(mapping.get("location")) or "UNKNOWN",
+            enrich_norm_text(mapping.get("venueMnemonic")) or "UNKNOWN",
+            enrich_norm_text(mapping.get("raceType")) or "UNKNOWN",
+        ])
+
+    def lookup(self, source_meeting, source_meeting_type=None):
+        source_key = self.source_key(source_meeting, source_meeting_type)
+        if not source_key:
+            return [], "NO_SOURCE_MEETING"
+        items = list(self.data.get(source_key, []))
+        if items:
+            self.hits += 1
+            return items, "LOCAL_LOOKUP_HIT" if len(items) == 1 else "LOCAL_LOOKUP_MULTI_TARGET"
+        self.misses += 1
+        return [], "LOCAL_LOOKUP_MISS"
+
+    def put_proven(self, source_meeting, source_meeting_type, meeting):
+        if not source_meeting or enrich_norm_text(meeting.get("raceType")) != "R":
+            return False
+
+        mapping = {
+            "canonicalMeeting": meeting.get("meetingName"),
+            "location": meeting.get("location"),
+            "venueMnemonic": meeting.get("venueMnemonic"),
+            "raceType": meeting.get("raceType"),
+        }
+        source_key = self.source_key(source_meeting, source_meeting_type)
+        if (
+            not source_key
+            or not mapping["canonicalMeeting"]
+            or not mapping["venueMnemonic"]
+            or not mapping["raceType"]
+        ):
+            return False
+
+        now = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+        target_key = self.target_key(mapping)
+        targets = self.data.setdefault(source_key, [])
+
+        existing = next((item for item in targets if item.get("targetKey") == target_key), None)
+        if existing is None:
+            targets.append({
+                "targetKey": target_key,
+                "sourceMeeting": source_meeting,
+                "sourceMeetingType": source_meeting_type or "",
+                "canonicalMeeting": mapping["canonicalMeeting"],
+                "location": mapping.get("location") or "",
+                "venueMnemonic": mapping["venueMnemonic"],
+                "raceType": mapping["raceType"],
+                "resolutionMethod": "TAB_DEEP_API_UNIQUE_MATCH",
+                "confidence": "PROVEN_UNIQUE_MATCH",
+                "firstSeen": now,
+                "lastSeen": now,
+                "seenCount": 1,
+            })
+        else:
+            existing["sourceMeeting"] = source_meeting
+            existing["sourceMeetingType"] = source_meeting_type or ""
+            existing["canonicalMeeting"] = mapping["canonicalMeeting"]
+            existing["location"] = mapping.get("location") or ""
+            existing["venueMnemonic"] = mapping["venueMnemonic"]
+            existing["raceType"] = mapping["raceType"]
+            existing["resolutionMethod"] = "TAB_DEEP_API_UNIQUE_MATCH"
+            existing["confidence"] = "PROVEN_UNIQUE_MATCH"
+            existing.setdefault("firstSeen", now)
+            existing["lastSeen"] = now
+            existing["seenCount"] = int(existing.get("seenCount") or 0) + 1
+
+        self._save_atomic()
+        self.writes += 1
+        return True
+
+def meeting_race_numbers(meeting):
+    numbers = set()
+    for race in enrich_as_list(meeting.get("races")):
+        if isinstance(race, dict):
+            number = enrich_to_int(race.get("raceNumber"))
+            if number is not None:
+                numbers.add(number)
+    return numbers
+
+
+def match_meeting_exact(date_payload, csv_meeting_name, race_number):
+    """Resolve an exact source meeting only when the requested race exists there.
+
+    This race-number check is important before the non-horse hard stop: an exact
+    same-name G/H meeting must not exclude a horse candidate for a race that the
+    G/H meeting does not actually contain.
+    """
+    if not isinstance(date_payload, dict):
+        return None, "date endpoint did not return an object"
+    wanted = enrich_norm_text(csv_meeting_name)
+    if not wanted:
+        return None, "CSV meeting is blank"
+    meetings = [m for m in enrich_as_list(date_payload.get("meetings")) if isinstance(m, dict)]
+    matches = [m for m in meetings if enrich_norm_text(m.get("meetingName")) == wanted]
+    with_race = [m for m in matches if race_number in meeting_race_numbers(m)]
+    if len(with_race) == 1:
+        reason = "DIRECT_EXACT_MEETING" if len(matches) == 1 else "DIRECT_EXACT_MEETING_PLUS_RACE"
+        return with_race[0], reason
+    if len(with_race) > 1:
+        return None, "ambiguous exact meetingName for requested race"
+    if matches:
+        return None, f"exact meetingName found but raceNumber={race_number} is not listed there"
+    return None, f"no exact meetingName match for {csv_meeting_name!r}"
+
+
+def find_meeting_from_mapping(date_payload, mapping, race_number):
+    if not isinstance(date_payload, dict) or not mapping:
+        return None
+    meetings = [m for m in enrich_as_list(date_payload.get("meetings")) if isinstance(m, dict)]
+    wanted_name = enrich_norm_text(mapping.get("canonicalMeeting"))
+    wanted_location = enrich_norm_text(mapping.get("location"))
+    wanted_venue = enrich_norm_text(mapping.get("venueMnemonic"))
+    wanted_type = enrich_norm_text(mapping.get("raceType"))
+    if wanted_type != "R":
+        return None
+    matches = []
+    for m in meetings:
+        if wanted_name and enrich_norm_text(m.get("meetingName")) != wanted_name:
+            continue
+        if wanted_location and enrich_norm_text(m.get("location")) != wanted_location:
+            continue
+        if wanted_venue and enrich_norm_text(m.get("venueMnemonic")) != wanted_venue:
+            continue
+        if wanted_type and enrich_norm_text(m.get("raceType")) != wanted_type:
+            continue
+        if race_number not in meeting_race_numbers(m):
+            continue
+        matches.append(m)
+    return matches[0] if len(matches) == 1 else None
+
+
+def match_runner(race_payload, bet):
+    if not isinstance(race_payload, dict):
+        return None, "race endpoint did not return an object"
+    runners = [r for r in enrich_as_list(race_payload.get("runners")) if isinstance(r, dict)]
+    runner_number = enrich_to_int(bet.get("runnerNumber"))
+    if runner_number is not None:
+        matches = [r for r in runners if enrich_to_int(r.get("runnerNumber")) == runner_number]
+        if len(matches) == 1:
+            return matches[0], "RUNNER_NUMBER"
+        if len(matches) > 1:
+            return None, f"multiple API runners have runnerNumber={runner_number}"
+    runner_name = bet.get("runnerName")
+    wanted_name = enrich_norm_text(runner_name)
+    if wanted_name:
+        matches = [r for r in runners if enrich_norm_text(r.get("runnerName")) == wanted_name]
+        if len(matches) == 1:
+            return matches[0], "RUNNER_NAME"
+        if len(matches) > 1:
+            return None, f"multiple API runners match runnerName={runner_name!r}"
+    if runner_number is not None:
+        return None, f"no runner matched runnerNumber={runner_number}"
+    if wanted_name:
+        return None, f"no runner matched exact runnerName={runner_name!r}"
+    return None, "no runner identity in Pass 1"
+
+
+def tote_candidate_financial_match(bet, runner):
+    """Extra deterministic evidence for winning Tote bets when available."""
+    if bet.get("pricingType") != "TOTE" or bet.get("betResult") != "WIN":
+        return None
+    stake = enrich_money2(bet.get("stake"))
+    payout = enrich_money2(bet.get("payout"))
+    if stake is None or payout is None:
+        return None
+    tote = runner.get("parimutuel") if isinstance(runner.get("parimutuel"), dict) else {}
+    key = "returnPlace" if bet.get("betType") == "PLACE" else "returnWin"
+    dividend = enrich_to_decimal(tote.get(key))
+    if dividend is None:
+        return None
+    return enrich_money2(stake * dividend) == payout
+
+
+def tote_wp_candidate_financial_match(bet, runner):
+    if bet.get("betType") != "TOTE_WIN_PLACE":
+        return None
+    csv_combined = enrich_money2(bet.get("combinedPayout"))
+    win_stake = enrich_money2(bet.get("winStake"))
+    place_stake = enrich_money2(bet.get("placeStake"))
+    if csv_combined is None or win_stake is None or place_stake is None:
+        return None
+    tote = runner.get("parimutuel") if isinstance(runner.get("parimutuel"), dict) else {}
+    win_dividend = enrich_to_decimal(tote.get("returnWin"))
+    place_dividend = enrich_to_decimal(tote.get("returnPlace"))
+    # Missing dividend is unknown, never zero. Deep resolution must not use a
+    # partially known W&P dividend set as positive financial identity evidence.
+    if win_dividend is None or place_dividend is None:
+        return None
+    win_return = enrich_money2(win_stake * win_dividend)
+    place_return = enrich_money2(place_stake * place_dividend)
+    return enrich_money2(win_return + place_return) == csv_combined
+
+
+def deep_resolve_meeting(date_payload, bet, api):
+    """Fallback only. Accepts exactly one API-proven candidate; never fuzzy-guesses.
+
+    Candidate race-call failures are retained for diagnostics so a TAB/API outage
+    is not misreported as simply "zero candidate races".
+    """
+    race_number = enrich_to_int(bet.get("raceNumber"))
+    if not isinstance(date_payload, dict) or race_number is None:
+        return None, None, "deep resolver lacks date payload or race number"
+
+    meetings = [
+        m for m in enrich_as_list(date_payload.get("meetings"))
+        if isinstance(m, dict)
+        and enrich_norm_text(m.get("raceType")) == "R"
+        and race_number in meeting_race_numbers(m)
+    ]
+    candidates = []
+    race_errors = []
+    for meeting in meetings:
+        venue = meeting.get("venueMnemonic")
+        race_type = meeting.get("raceType")
+        if not venue or not race_type:
+            continue
+        try:
+            race = api.race(str(bet.get("eventDate")), str(venue), str(race_type), race_number)
+        except Exception as ex:
+            race_errors.append(f"{meeting.get('meetingName') or venue}: {str(ex)[:240]}")
+            continue
+        if not isinstance(race, dict):
+            continue
+
+        # Exotics have only runner-number selections; those are usually not unique
+        # enough worldwide, so do not pretend they identify a meeting.
+        if bet.get("betType") in ("TRIFECTA", "FIRST_4"):
+            continue
+
+        runner, method = match_runner(race, bet)
+        if runner is None:
+            continue
+
+        # Runner-name matches are strong. Runner-number-only matches need extra
+        # evidence when possible. If no extra financial evidence exists, several
+        # candidates will normally survive and the resolver returns unresolved.
+        financial = tote_wp_candidate_financial_match(bet, runner)
+        if financial is None:
+            financial = tote_candidate_financial_match(bet, runner)
+        candidates.append({
+            "meeting": meeting,
+            "race": race,
+            "runner": runner,
+            "runnerMatch": method,
+            "financialMatch": financial,
+        })
+
+    # Prefer candidates explicitly reconciled to CSV payout/dividends.
+    financial_true = [c for c in candidates if c["financialMatch"] is True]
+    if len(financial_true) == 1:
+        c = financial_true[0]
+        return c["meeting"], c["race"], "DEEP_API_UNIQUE_FINANCIAL_MATCH"
+
+    # Exact runner-name match can uniquely identify a worldwide race.
+    name_matches = [c for c in candidates if c["runnerMatch"] == "RUNNER_NAME"]
+    if len(name_matches) == 1:
+        c = name_matches[0]
+        return c["meeting"], c["race"], "DEEP_API_UNIQUE_RUNNER_NAME"
+
+    # Runner number alone is accepted only if it leaves exactly one candidate.
+    if len(candidates) == 1:
+        c = candidates[0]
+        return c["meeting"], c["race"], "DEEP_API_UNIQUE_RUNNER"
+
+    if not candidates and race_errors:
+        return None, None, (
+            f"deep API could not evaluate candidates because {len(race_errors)} race lookup(s) failed; "
+            f"first error: {race_errors[0]}"
+        )
+    suffix = f"; raceLookupFailures={len(race_errors)}" if race_errors else ""
+    return None, None, f"deep API resolution not unique: {len(candidates)} candidate race(s){suffix}"
+
+
+def extract_api_id(obj, keys):
+    for key in keys:
+        value = obj.get(key)
+        if value not in (None, ""):
+            return str(value)
+    return None
+
+
+def get_runner_id(runner):
+    # Do not substitute propositionNumber as runnerId. Use only an explicit API ID.
+    return extract_api_id(runner, ("runnerId", "runnerID", "id"))
+
+
+def get_race_id(race, jurisdiction, event_date, venue_mnemonic, race_type, race_number):
+    # Do not synthesize a contract ID from route coordinates.
+    return extract_api_id(race, ("raceId", "raceID", "id"))
+
+
+def find_replay_urls(value, key_path=""):
+    found = []
+    if isinstance(value, dict):
+        for key, child in value.items():
+            path = f"{key_path}.{key}" if key_path else str(key)
+            found.extend(find_replay_urls(child, path))
+        return found
+    if isinstance(value, list):
+        for index, child in enumerate(value):
+            found.extend(find_replay_urls(child, f"{key_path}[{index}]"))
+        return found
+    if not isinstance(value, str):
+        return found
+    lower_path = key_path.lower()
+    for url in ENRICH_URL_RE.findall(value):
+        clean = url.rstrip(".,);]")
+        if ".mp4" in clean.lower() or "replay" in lower_path or "video" in lower_path or "media" in lower_path:
+            found.append(clean)
+    return found
+
+
+def choose_replay_url(race):
+    urls = find_replay_urls(race)
+    for url in urls:
+        if ".mp4" in url.lower():
+            return url
+    return urls[0] if urls else None
+
+
+def selected_runner_details(race, runner_numbers):
+    runners = [r for r in enrich_as_list(race.get("runners")) if isinstance(r, dict)]
+    found, missing = [], []
+    for number in runner_numbers:
+        matches = [r for r in runners if enrich_to_int(r.get("runnerNumber")) == number]
+        if len(matches) != 1:
+            missing.append(number)
+            continue
+        runner = matches[0]
+        raw_position = enrich_to_int(runner.get("finishingPosition"))
+        found.append({
+            "runnerId": get_runner_id(runner),
+            "runnerNumber": number,
+            "runnerName": runner.get("runnerName"),
+            "finishingPosition": raw_position if raw_position and raw_position > 0 else None,
+        })
+    return found, missing
+
+
+def official_result_order(race):
+    result = []
+    for runner in enrich_as_list(race.get("runners")):
+        if not isinstance(runner, dict):
+            continue
+        position = enrich_to_int(runner.get("finishingPosition"))
+        if position is None or position <= 0:
+            continue
+        result.append({
+            "finishingPosition": position,
+            "runnerId": get_runner_id(runner),
+            "runnerNumber": enrich_to_int(runner.get("runnerNumber")),
+            "runnerName": runner.get("runnerName"),
+        })
+    return sorted(result, key=lambda item: (item["finishingPosition"], item.get("runnerNumber") or 9999))
+
+
+def classify_for_enrichment(bet):
+    # Pass 1 already removed non-horse records. All surviving records are horse
+    # records/candidates and should attempt race enrichment.
+    return "RACING" if bet.get("domainClassification") in ("HORSE_CONFIRMED_CSV", "HORSE_CANDIDATE") else "NOT_APPLICABLE"
+
+
+def enrichment_required_for_finalisation(bet):
+    """True only when enrichment is needed to finalise financial/result facts.
+
+    Race metadata/replay may still be useful content enrichment while this is False.
+    """
+    if classify_for_enrichment(bet) != "RACING":
+        return False
+
+    if bet.get("betType") == "TOTE_WIN_PLACE":
+        # Current final bettings.json needs total return, not a component split.
+        # CSV combined payout (or a source-confirmed loss) is sufficient financially.
+        if bet.get("combinedPayout") is not None:
+            return False
+        return bet.get("betResult") != "LOSS"
+
+    if bet.get("betType") in ("TRIFECTA", "FIRST_4"):
+        # Current validated exotic fixtures are source-confirmed losses and are
+        # financially final from CSV. Future non-loss/unknown exotics require result
+        # enrichment before we can safely finalise.
+        return bet.get("betResult") not in ("WIN", "LOSS")
+
+    # Fixed and simple Tote WIN/PLACE settlement is source-authoritative.
+    return False
+
+
+def enrichment_impact(bet):
+    return "REQUIRED_FOR_FINALISATION" if enrichment_required_for_finalisation(bet) else "OPTIONAL"
+
+
+def expected_enrichment_fields(bet):
+    """Expected race facts by bet shape; excludes genuinely optional IDs/replay."""
+    base = ["raceTime", "raceName", "meeting", "state", "raceNumber"]
+    if bet.get("betType") in ("TRIFECTA", "FIRST_4"):
+        return base
+    return base + ["runnerNumber", "runnerName"]
+
+
+def enrichment_missing_fields(bet, enrichment):
+    missing = []
+    for field in expected_enrichment_fields(bet):
+        value = enrichment.get(field)
+        if field in ("meeting", "raceNumber", "runnerNumber", "runnerName"):
+            value = value if value not in (None, "") else bet.get(field)
+        if value in (None, ""):
+            missing.append(field)
+    return missing
+
+
+def race_enrichment(meeting, race, api, event_date, race_number):
+    venue = meeting.get("venueMnemonic")
+    race_type = meeting.get("raceType")
+    return {
+        "raceTime": race.get("raceStartTime"),
+        "raceId": get_race_id(race, api.jurisdiction, event_date, venue, race_type, race_number),
+        "raceName": race.get("raceName"),
+        "meeting": meeting.get("meetingName"),
+        "state": meeting.get("location"),
+        "raceNumber": enrich_to_int(race.get("raceNumber")) or race_number,
+        "replayUrl": choose_replay_url(race),
+    }
+
+
+def resolve_meeting_and_race(bet, api, store):
+    event_date = bet.get("eventDate")
+    race_number = enrich_to_int(bet.get("raceNumber"))
+    source_meeting = bet.get("meeting")
+    source_meeting_type = bet.get("meetingType")
+    if not event_date or race_number is None:
+        return None, None, "INPUT", "missing eventDate or raceNumber"
+
+    date_payload = api.date(str(event_date))
+
+    # 1. Fast path: exact CSV meeting text. If this exact identity proves G/H,
+    # stop immediately; do not reinterpret the same source bet as another horse race.
+    meeting, direct_reason = match_meeting_exact(date_payload, source_meeting, race_number)
+    if meeting is not None:
+        venue, race_type = meeting.get("venueMnemonic"), meeting.get("raceType")
+        if enrich_norm_text(race_type) != "R":
+            return meeting, None, "NON_HORSE_API", (
+                f"{direct_reason}; exact resolved raceType={race_type!r} is not horse raceType R"
+            )
+        if venue and race_type:
+            try:
+                race = api.race(str(event_date), str(venue), str(race_type), race_number)
+                if isinstance(race, dict):
+                    return meeting, race, "DIRECT", direct_reason
+            except Exception as ex:
+                direct_reason = f"{direct_reason}; race lookup failed: {ex}"
+
+    # 2. Persistent local learned mappings. Multiple worldwide targets may be stored.
+    mappings, lookup_reason = store.lookup(source_meeting, source_meeting_type)
+    if mappings:
+        valid = []
+        for mapping in mappings:
+            mapped_meeting = find_meeting_from_mapping(date_payload, mapping, race_number)
+            if mapped_meeting is not None:
+                valid.append(mapped_meeting)
+
+        unique = {}
+        for m in valid:
+            key = (
+                enrich_norm_text(m.get("meetingName")),
+                enrich_norm_text(m.get("location")),
+                enrich_norm_text(m.get("venueMnemonic")),
+                enrich_norm_text(m.get("raceType")),
+            )
+            unique[key] = m
+        valid = list(unique.values())
+
+        if len(valid) == 1:
+            meeting = valid[0]
+            venue, race_type = meeting.get("venueMnemonic"), meeting.get("raceType")
+            try:
+                race = api.race(str(event_date), str(venue), str(race_type), race_number)
+                if isinstance(race, dict):
+                    return meeting, race, "LOCAL_LOOKUP", lookup_reason
+            except Exception as ex:
+                lookup_reason = f"{lookup_reason}; mapped race lookup failed: {ex}"
+        elif len(valid) > 1:
+            store.ambiguous += 1
+            lookup_reason = f"LOCAL_LOOKUP_AMBIGUOUS_FOR_DATE_RACE:{len(valid)}"
+        else:
+            lookup_reason = f"{lookup_reason}; no stored target valid for requested date/race"
+
+    # 3. Expensive fallback: horse candidates only.
+    meeting, race, deep_reason = deep_resolve_meeting(date_payload, bet, api)
+    if meeting is not None and race is not None:
+        if enrich_norm_text(meeting.get("raceType")) != "R":
+            return None, None, "UNRESOLVED", f"deep resolver returned non-horse raceType={meeting.get('raceType')!r}"
+        # Learned lookup persistence is an optimisation, not a prerequisite for
+        # enriching the current bet. A disk/permission error must not discard a
+        # race that DEEP_API has already proven.
+        try:
+            store.put_proven(source_meeting, source_meeting_type, meeting)
+        except Exception as ex:
+            print(f"      [LOOKUP WARNING] proven meeting was not persisted: {ex}")
+            deep_reason = f"{deep_reason}; local lookup persist failed: {ex}"
+        return meeting, race, "DEEP_API", deep_reason
+
+    return None, None, "UNRESOLVED", f"direct={direct_reason}; localLookup={lookup_reason}; deep={deep_reason}"
+
+
+def enrich_one_bet(bet, api, store):
+    enriched_bet = json.loads(json.dumps(bet, default=json_default))
+    classification = classify_for_enrichment(bet)
+    required = enrichment_required_for_finalisation(bet)
+    impact = enrichment_impact(bet)
+
+    if classification != "RACING":
+        enriched_bet["enrichment"] = {
+            "status": "NOT_APPLICABLE",
+            "impact": impact,
+            "reason": classification,
+        }
+        return enriched_bet, None
+
+    try:
+        meeting, race, resolution_method, resolution_reason = resolve_meeting_and_race(bet, api, store)
+        if resolution_method == "NON_HORSE_API":
+            enriched_bet["enrichment"] = {
+                "status": "EXCLUDED_NON_HORSE",
+                "required": False,
+                "impact": "OPTIONAL",
+                "stage": "DOMAIN_VERIFICATION",
+                "reason": resolution_reason,
+                "resolutionMethod": resolution_method,
+            }
+            enriched_bet["excludeFromRecap"] = True
+            return enriched_bet, None
+
+        if meeting is None or race is None:
+            reason = resolution_reason
+            enriched_bet["enrichment"] = {
+                "status": "UNRESOLVED",
+                "required": required,
+                "impact": impact,
+                "stage": "MEETING_RESOLUTION",
+                "reason": reason,
+            }
+            return enriched_bet, {
+                "canonicalId": bet.get("canonicalId"),
+                "stage": "MEETING_RESOLUTION",
+                "impact": impact,
+                "reason": reason,
+            }
+
+        event_date = str(bet.get("eventDate"))
+        race_number = enrich_to_int(bet.get("raceNumber"))
+        enrichment = race_enrichment(meeting, race, api, event_date, race_number)
+        enrichment.update({
+            "status": "ENRICHED",
+            "required": required,
+            "impact": impact,
+            "resolutionMethod": resolution_method,
+            "resolutionReason": resolution_reason,
+        })
+
+        if bet.get("betType") in ("TRIFECTA", "FIRST_4"):
+            selections = [int(v) for v in bet.get("selections", [])]
+            selected, missing_numbers = selected_runner_details(race, selections)
+            enrichment["selectedRunners"] = selected
+            enrichment["officialResultOrder"] = official_result_order(race)
+            if missing_numbers:
+                enrichment.update({
+                    "status": "PARTIAL",
+                    "reason": f"selected runner(s) not found: {missing_numbers}",
+                })
+            missing_fields = enrichment_missing_fields(bet, enrichment)
+            enrichment["missingFields"] = missing_fields
+            if enrichment.get("status") == "ENRICHED" and missing_fields:
+                enrichment["status"] = "PARTIAL"
+                enrichment["reason"] = "expected enrichment field(s) unavailable: " + ", ".join(missing_fields)
+            enriched_bet["enrichment"] = enrichment
+            return enriched_bet, None
+
+        runner, runner_reason = match_runner(race, bet)
+        if runner is None:
+            # Race identity is proven, so retain race-level enrichment and mark only
+            # the runner portion partial rather than calling the whole record unresolved.
+            enrichment.update({
+                "status": "PARTIAL",
+                "stage": "RUNNER_MATCH",
+                "reason": runner_reason,
+            })
+            enrichment["missingFields"] = enrichment_missing_fields(bet, enrichment)
+            enriched_bet["enrichment"] = enrichment
+            return enriched_bet, {
+                "canonicalId": bet.get("canonicalId"),
+                "stage": "RUNNER_MATCH",
+                "impact": impact,
+                "reason": runner_reason,
+            }
+
+        raw_position = enrich_to_int(runner.get("finishingPosition"))
+        enrichment.update({
+            "runnerId": get_runner_id(runner),
+            "runnerNumber": enrich_to_int(runner.get("runnerNumber")),
+            "runnerName": runner.get("runnerName"),
+            "finishingPosition": raw_position if raw_position and raw_position > 0 else None,
+        })
+
+        if bet.get("betType") == "TOTE_WIN_PLACE":
+            win_stake = enrich_money2(bet.get("winStake"))
+            place_stake = enrich_money2(bet.get("placeStake"))
+            csv_combined = enrich_money2(bet.get("combinedPayout"))
+            tote = runner.get("parimutuel") if isinstance(runner.get("parimutuel"), dict) else {}
+            win_dividend = enrich_to_decimal(tote.get("returnWin"))
+            place_dividend = enrich_to_decimal(tote.get("returnPlace"))
+            resolution = {
+                "reconciled": False,
+                "winReturn": None,
+                "placeReturn": None,
+                "calculatedCombinedReturn": None,
+                "csvCombinedPayout": float(csv_combined) if csv_combined is not None else None,
+            }
+            if csv_combined is None and bet.get("betResult") == "LOSS":
+                resolution.update({
+                    "reconciled": True,
+                    "outcome": "LOST_BOTH",
+                    "winReturn": 0.0,
+                    "placeReturn": 0.0,
+                    "calculatedCombinedReturn": 0.0,
+                })
+            elif win_stake is not None and place_stake is not None and win_dividend is not None and place_dividend is not None:
+                win_return = enrich_money2(win_stake * win_dividend)
+                place_return = enrich_money2(place_stake * place_dividend)
+                total = enrich_money2(win_return + place_return)
+                resolution.update({
+                    "winReturn": float(win_return),
+                    "placeReturn": float(place_return),
+                    "calculatedCombinedReturn": float(total),
+                })
+                if csv_combined is not None and total == csv_combined:
+                    resolution["reconciled"] = True
+                    resolution["outcome"] = "WIN_AND_PLACE" if win_return > 0 and place_return > 0 else "PLACE_ONLY" if place_return > 0 else "UNRESOLVED_ZERO_COMPONENTS"
+            elif csv_combined is not None:
+                resolution["reason"] = "required Tote W&P dividend missing; missing dividend is not assumed to be zero"
+            enrichment["toteWinPlaceResolution"] = resolution
+            if required and not resolution["reconciled"]:
+                enrichment["status"] = "PARTIAL"
+                enrichment["reason"] = "Tote W&P API dividends did not reconcile to CSV combined payout"
+
+        missing_fields = enrichment_missing_fields(bet, enrichment)
+        enrichment["missingFields"] = missing_fields
+        if enrichment.get("status") == "ENRICHED" and missing_fields:
+            enrichment["status"] = "PARTIAL"
+            enrichment["reason"] = "expected enrichment field(s) unavailable: " + ", ".join(missing_fields)
+
+        enriched_bet["enrichment"] = enrichment
+        return enriched_bet, None
+
+    except Exception as ex:
+        reason = str(ex)
+        enriched_bet["enrichment"] = {
+            "status": "UNRESOLVED",
+            "required": required,
+            "impact": impact,
+            "stage": "API_LOOKUP",
+            "reason": reason,
+        }
+        return enriched_bet, {
+            "canonicalId": bet.get("canonicalId"),
+            "stage": "API_LOOKUP",
+            "impact": impact,
+            "reason": reason,
+        }
+
+
+def enrich_normalised_payload(normalised, api, store):
+    enriched_bets, exceptions, counts = [], [], Counter()
+    api_non_horse_excluded = 0
+    for bet in normalised.get("bets", []):
+        enriched_bet, enrichment_exception = enrich_one_bet(bet, api, store)
+        status = enriched_bet.get("enrichment", {}).get("status", "UNRESOLVED")
+        counts[status] += 1
+
+        if enriched_bet.get("excludeFromRecap") or status == "EXCLUDED_NON_HORSE":
+            api_non_horse_excluded += 1
+            continue
+
+        enriched_bets.append(enriched_bet)
+        if enrichment_exception:
+            exceptions.append(enrichment_exception)
+
+    payload = {
+        "enrichmentSchemaVersion": "0.9-local-test",
+        "normaliserSchemaVersion": normalised.get("normaliserSchemaVersion"),
+        "jobId": normalised.get("jobId"),
+        "source": normalised.get("source"),
+        "domainSummary": {
+            **normalised.get("domainSummary", {}),
+            "apiNonHorseExcluded": api_non_horse_excluded,
+        },
+        "bets": enriched_bets,
+    }
+    summary = {
+        "jobId": normalised.get("jobId"),
+        "inputCanonicalBets": len(normalised.get("bets", [])),
+        "outputCanonicalBets": len(enriched_bets),
+        "horseBetsIncluded": len(enriched_bets),
+        "nonHorseBetsExcluded": normalised.get("domainSummary", {}).get("nonHorseBetsExcluded", 0) + api_non_horse_excluded,
+        "apiNonHorseExcluded": api_non_horse_excluded,
+        "enriched": counts["ENRICHED"],
+        "partial": counts["PARTIAL"],
+        "unresolved": counts["UNRESOLVED"],
+        "notApplicable": counts["NOT_APPLICABLE"],
+        "directResolutions": sum(1 for b in enriched_bets if b.get("enrichment", {}).get("resolutionMethod") == "DIRECT"),
+        "localLookupResolutions": sum(1 for b in enriched_bets if b.get("enrichment", {}).get("resolutionMethod") == "LOCAL_LOOKUP"),
+        "deepApiResolutions": sum(1 for b in enriched_bets if b.get("enrichment", {}).get("resolutionMethod") == "DEEP_API"),
+        "requiredFinalisationUnresolved": sum(
+            1 for b in enriched_bets
+            if b.get("enrichment", {}).get("required") is True
+            and b.get("enrichment", {}).get("status") not in ("ENRICHED",)
+        ),
+        "optionalEnrichmentUnresolved": sum(
+            1 for b in enriched_bets
+            if b.get("enrichment", {}).get("required") is not True
+            and b.get("enrichment", {}).get("status") in ("PARTIAL", "UNRESOLVED")
+        ),
+        "exceptionCount": len(exceptions),
+        "pass2Status": "COMPLETE",
+    }
+    return payload, exceptions, summary
+
+
+# =============================================================================
+# PASS 3 — HORSE-ONLY BEST-EFFORT DAILY bettings.json
+# This intentionally approximates the current v1.0 contract. It does not fabricate
+# unavailable API facts and it does not yet fully model MULTI/exotic structures.
+# =============================================================================
+
+def best_effort_return(bet):
+    """Return only a value justified by source settlement data.
+
+    Fixed Win & Place is special: when its one composite payout cannot be split
+    exactly between WIN/PLACE components, a winning component stays unknown. We
+    must not fall back to its advertised potentialReturn because deductions can
+    make that value differ from the actual settled component return.
+    """
+    if bet.get("betType") == "TOTE_WIN_PLACE":
+        return bet.get("combinedPayout") if bet.get("combinedPayout") is not None else (0.0 if bet.get("betResult") == "LOSS" else None)
+    if bet.get("payout") is not None:
+        return bet.get("payout")
+    if bet.get("betResult") == "LOSS":
+        return 0.0
+    if bet.get("pricingType") == "FIXED" and bet.get("sourceCompositeBetType") == "WIN_AND_PLACE":
+        return None
+    # A settled Fixed single with no payout row has only this source value available.
+    if bet.get("pricingType") == "FIXED" and bet.get("betResult") == "WIN":
+        return bet.get("potentialReturn")
+    return None
+
+
+def best_effort_stake(bet):
+    if bet.get("betType") == "TOTE_WIN_PLACE":
+        return bet.get("totalStake")
+    return bet.get("stake")
+
+
+def missing_enrichment_fields(bet):
+    e = bet.get("enrichment", {})
+    return enrichment_missing_fields(bet, e)
+
+
+def map_to_final_bet(bet, sequence, running_pnl, running_complete):
+    e = bet.get("enrichment", {})
+    stake = best_effort_stake(bet)
+    returned = best_effort_return(bet)
+    pnl = None
+    if stake is not None and returned is not None:
+        pnl = round(float(returned) - float(stake), 2)
+    if pnl is None:
+        running_complete = False
+        final_running = None
+    elif running_complete:
+        running_pnl = round(running_pnl + pnl, 2)
+        final_running = running_pnl
+    else:
+        final_running = None
+    result = bet.get("betResult")
+    replay = e.get("replayUrl")
+    show_replay = bool(
+        result == "WIN"
+        and bet.get("betType") == "WIN"
+        and replay
+    )
+    required=e.get("required") is True
+    missing=missing_enrichment_fields(bet)
+    record = {
+        "sequence": sequence,
+        "betTime": bet.get("betTime"),
+        "raceTime": e.get("raceTime"),
+        "raceId": e.get("raceId"),
+        "raceName": e.get("raceName"),
+        "meeting": e.get("meeting") or bet.get("meeting"),
+        "state": e.get("state"),
+        "raceNumber": e.get("raceNumber") or bet.get("raceNumber"),
+        "runnerId": e.get("runnerId"),
+        "runnerNumber": e.get("runnerNumber") or bet.get("runnerNumber"),
+        "runnerName": e.get("runnerName") or bet.get("runnerName"),
+        "betType": bet.get("betType"),
+        "stake": float(stake) if stake is not None else None,
+        "odds": float(bet.get("odds")) if bet.get("odds") is not None else None,
+        "result": result,
+        "finishingPosition": e.get("finishingPosition"),
+        "return": float(returned) if returned is not None else None,
+        "profitLoss": pnl,
+        "runningPnl": final_running,
+        "sceneType": None,
+        "showReplay": show_replay,
+        "replayUrl": replay,
+        "domainClassification": bet.get("domainClassification"),
+        "enrichmentStatus": e.get("status"),
+        "enrichmentRequired": required,
+        "enrichmentImpact": e.get("impact") or ("REQUIRED_FOR_FINALISATION" if required else "OPTIONAL"),
+        "enrichmentResolutionMethod": e.get("resolutionMethod"),
+        "enrichmentResolutionReason": e.get("resolutionReason"),
+        "enrichmentReason": e.get("reason"),
+        "missingEnrichmentFields": missing,
+    }
+    return record, running_pnl, running_complete
+
+def build_daily_bettings(enriched_payload, first_name="Customer", timezone="Australia/Melbourne"):
+    """Build daily output without making incomplete financial totals look complete."""
+    grouped = defaultdict(list)
+    unassigned = []
+    for bet in enriched_payload.get("bets", []):
+        date_value = bet.get("eventDate")
+        if date_value:
+            grouped[str(date_value)].append(bet)
+        else:
+            unassigned.append(bet)
+
+    outputs = {}
+    for day, bets in grouped.items():
+        bets = sorted(bets, key=lambda b: b.get("sequence") or 999999)
+        final_bets = []
+        running_pnl = 0.0
+        running_complete = True
+        for i, bet in enumerate(bets, 1):
+            record, running_pnl, running_complete = map_to_final_bet(bet, i, running_pnl, running_complete)
+            final_bets.append(record)
+
+        stakes = [b["stake"] for b in final_bets if b["stake"] is not None]
+        returns = [b["return"] for b in final_bets if b["return"] is not None]
+        wins = [b for b in final_bets if b["result"] == "WIN"]
+        losses = [b for b in final_bets if b["result"] == "LOSS"]
+        known_pnl = [b for b in final_bets if b["profitLoss"] is not None]
+        meetings = {b["meeting"] for b in final_bets if b.get("meeting")}
+
+        def seq_of(items, key, reverse=False):
+            items = [x for x in items if x.get(key) is not None]
+            if not items:
+                return None
+            return sorted(items, key=lambda x: x[key], reverse=reverse)[0]["sequence"]
+
+        biggest_win = seq_of([b for b in wins if b.get("profitLoss") is not None and b.get("profitLoss") > 0], "profitLoss", True)
+        biggest_loss = seq_of([b for b in losses if b.get("profitLoss") is not None and b.get("profitLoss") < 0], "profitLoss", False)
+        highest_odds = seq_of([b for b in wins if b.get("odds") is not None], "odds", True)
+
+        outputs[day] = {
+            "schemaVersion": "1.0-best-effort-v0.9",
+            "user": {"firstName": first_name},
+            "day": {"date": day, "timezone": timezone},
+            "bets": final_bets,
+            "summary": {
+                "totalBets": len(final_bets),
+                "totalStaked": round(sum(stakes), 2) if len(stakes) == len(final_bets) else None,
+                "totalReturned": round(sum(returns), 2) if len(returns) == len(final_bets) else None,
+                "wins": len(wins),
+                "losses": len(losses),
+                "finalPnl": round(sum(b["profitLoss"] for b in known_pnl), 2) if len(known_pnl) == len(final_bets) else None,
+                "meetings": len(meetings),
+                "biggestStake": max(stakes) if len(stakes) == len(final_bets) and stakes else None,
+                "biggestWinSequence": biggest_win,
+                "biggestLossSequence": biggest_loss,
+                "highestOddsWinnerSequence": highest_odds,
+                "unresolvedEnrichment": sum(1 for b in final_bets if b.get("enrichmentStatus") == "UNRESOLVED"),
+                "horseBetsIncluded": len(final_bets),
+                "nonHorseBetsExcluded": (
+                    enriched_payload.get("domainSummary", {}).get("nonHorseBetsExcluded", 0)
+                    + enriched_payload.get("domainSummary", {}).get("apiNonHorseExcluded", 0)
+                ),
+                "enriched": sum(1 for b in final_bets if b.get("enrichmentStatus") == "ENRICHED"),
+                "enrichmentOptionalUnresolved": sum(
+                    1 for b in final_bets
+                    if not b.get("enrichmentRequired")
+                    and b.get("enrichmentStatus") in ("PARTIAL", "UNRESOLVED")
+                ),
+                "requiredFinalisationUnresolved": sum(
+                    1 for b in final_bets
+                    if b.get("enrichmentRequired")
+                    and b.get("enrichmentStatus") != "ENRICHED"
+                ),
+            },
+        }
+    return outputs, unassigned
+
+
+# =============================================================================
+# COMBINED LOCAL HARNESS — one process, one future Lambda
+# =============================================================================
+
+def process(path, root, index, total, api, store, first_name, timezone):
+    """Process one source CSV while preserving completed-stage evidence on failure."""
+    jid = job_id(path)
+    job_dir = root / "working" / jid
+    source_dir = job_dir / "source"
+    normaliser_dir = job_dir / "normaliser"
+    enrichment_dir = job_dir / "enrichment"
+    final_dir = job_dir / "final"
+    source_dir.mkdir(parents=True)
+    normaliser_dir.mkdir()
+    enrichment_dir.mkdir()
+    final_dir.mkdir()
+    source_copy = source_dir / "original.csv"
+    shutil.copy2(path, source_copy)
+    print(f"\n[{index}/{total}] {path.name}\n      Job ID : {jid}")
+
+    stage = "PASS_1_NORMALISE"
+    try:
+        normalised, pass1_exceptions, pass1_summary = normalise_csv(source_copy, jid, path.name)
+        write_json(normaliser_dir / "normalised-bets.json", normalised)
+        write_json(normaliser_dir / "exceptions.json", {"jobId": jid, "exceptions": pass1_exceptions})
+        pass1_summary["pass1Status"] = "COMPLETE"
+        write_json(normaliser_dir / "summary.json", pass1_summary)
+        print(f"      PASS 1 : {pass1_summary['recognisedLogicalBetTransactions']} recognised transactions -> {pass1_summary['canonicalBetRecords']} canonical records; {pass1_summary['exceptionCount']} exceptions")
+
+        stage = "PASS_2_ENRICH"
+        enriched, pass2_exceptions, pass2_summary = enrich_normalised_payload(normalised, api, store)
+        write_json(enrichment_dir / "enriched-bets.json", enriched)
+        write_json(enrichment_dir / "exceptions.json", {"jobId": jid, "exceptions": pass2_exceptions})
+        pass2_summary.update({
+            "dateApiCallsCumulative": api.date_calls,
+            "raceApiCallsCumulative": api.race_calls,
+            "apiCacheHitsCumulative": api.cache_hits,
+            "localLookupHitsCumulative": store.hits,
+            "localLookupMissesCumulative": store.misses,
+            "localLookupAmbiguousCumulative": store.ambiguous,
+            "localLookupWritesCumulative": store.writes,
+            "localLookupErrorsCumulative": store.errors,
+        })
+        write_json(enrichment_dir / "summary.json", pass2_summary)
+        print(f"      PASS 2 : ENRICHED={pass2_summary['enriched']} PARTIAL={pass2_summary['partial']} UNRESOLVED={pass2_summary['unresolved']} NOT_APPLICABLE={pass2_summary['notApplicable']}")
+
+        stage = "PASS_3_BUILD"
+        daily_outputs, unassigned = build_daily_bettings(enriched, first_name, timezone)
+        for day, payload in daily_outputs.items():
+            day_dir = final_dir / day
+            day_dir.mkdir(parents=True, exist_ok=True)
+            write_json(day_dir / "bettings.json", payload)
+        write_json(final_dir / "summary.json", {
+            "jobId": jid,
+            "dailyFiles": sorted(daily_outputs.keys()),
+            "dailyFileCount": len(daily_outputs),
+            "unassignedBetCount": len(unassigned),
+            "pass3Status": "BEST_EFFORT_COMPLETE",
+        })
+        if unassigned:
+            write_json(final_dir / "unassigned-bets.json", {"bets": unassigned})
+        print(f"      PASS 3 : {len(daily_outputs)} daily bettings.json file(s); unassigned={len(unassigned)}")
+        print(f"      Output : {job_dir}")
+        return True, pass2_summary
+
+    except Exception as ex:
+        fail = {
+            "jobId": jid,
+            "sourceFile": path.name,
+            "status": "SOURCE_PROCESSING_EXCEPTION",
+            "stage": stage,
+            "error": str(ex),
+        }
+        # Never overwrite evidence from an earlier stage that already completed.
+        write_json(job_dir / "job-error.json", fail)
+        print(f"      ERROR  : stage={stage}: {ex}\n      Output : {job_dir}")
+        return False, None
+
+
+def main():
+    parser = argparse.ArgumentParser(description="TAB Normaliser v0.9 local-only horse filter + local meeting lookup + best-effort bettings.json")
+    parser.add_argument("--root", type=Path, default=Path(__file__).resolve().parent)
+    parser.add_argument("--file")
+    parser.add_argument("--base-url", default=ENRICH_BASE_URL)
+    parser.add_argument("--jurisdiction", default=ENRICH_JURISDICTION)
+    parser.add_argument("--timeout", type=int, default=ENRICH_TIMEOUT)
+    parser.add_argument("--retries", type=int, default=ENRICH_RETRIES)
+    parser.add_argument("--lookup-file", default="meeting-resolution.json", help="Persistent local learned meeting lookup JSON (default: <root>/meeting-resolution.json)")
+    parser.add_argument("--first-name", default="Customer")
+    parser.add_argument("--timezone", default="Australia/Melbourne")
+    args = parser.parse_args()
+
+    root = args.root.resolve()
+    input_dir = root / "input"
+    working_dir = root / "working"
+    input_dir.mkdir(parents=True, exist_ok=True)
+    working_dir.mkdir(parents=True, exist_ok=True)
+    files = [input_dir / args.file] if args.file else sorted(input_dir.glob("*.csv"), key=lambda p: p.name.lower())
+    files = [p for p in files if p.exists() and p.is_file()]
+
+    api = TabHistoricalApi(args.base_url, args.jurisdiction, args.timeout, args.retries)
+    lookup_path = Path(args.lookup_file)
+    if not lookup_path.is_absolute():
+        lookup_path = root / lookup_path
+    store = MeetingResolutionStore(lookup_path)
+
+    print("=== TAB NORMALISER v0.9 — LOCAL ONLY + HORSE ONLY + LOCAL LOOKUP ===")
+    print(f"Root         : {root}")
+    print(f"Input        : {input_dir}")
+    print(f"Working      : {working_dir}")
+    print(f"CSV files    : {len(files)}")
+    print(f"TAB API      : {args.base_url}")
+    print(f"Jurisdiction : {args.jurisdiction}")
+    print(f"Lookup file  : {store.file_path}")
+
+    if not files:
+        print("\nNo CSV files found in input\\")
+        return 1
+
+    succeeded = 0
+    pass2_totals = Counter()
+    for index, path in enumerate(files, 1):
+        ok, summary = process(path, root, index, len(files), api, store, args.first_name, args.timezone)
+        if ok:
+            succeeded += 1
+            if summary:
+                for key in ("enriched", "partial", "unresolved", "notApplicable", "requiredFinalisationUnresolved"):
+                    pass2_totals[key] += summary.get(key, 0)
+
+    print("\n=== RUN COMPLETE ===")
+    print(f"Jobs            : {len(files)}")
+    print(f"Succeeded       : {succeeded}")
+    print(f"Source failures : {len(files) - succeeded}")
+    print(f"Enriched        : {pass2_totals['enriched']}")
+    print(f"Partial         : {pass2_totals['partial']}")
+    print(f"Unresolved      : {pass2_totals['unresolved']}")
+    print(f"Not applicable  : {pass2_totals['notApplicable']}")
+    print(f"Required pending: {pass2_totals['requiredFinalisationUnresolved']}")
+    print(f"Date API calls  : {api.date_calls}")
+    print(f"Race API calls  : {api.race_calls}")
+    print(f"API cache hits  : {api.cache_hits}")
+    print(f"Lookup hits     : {store.hits}")
+    print(f"Lookup misses   : {store.misses}")
+    print(f"Lookup ambiguous: {store.ambiguous}")
+    print(f"Lookup writes   : {store.writes}")
+    print(f"Lookup errors   : {store.errors}")
+    return 0 if succeeded == len(files) else 2
+
+
+if __name__ == "__main__":
+    sys.exit(main())

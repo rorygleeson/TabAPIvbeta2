@@ -1,0 +1,53 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Rendering SQS queue and DLQ for the TAB Daily Recap vbeta1 pilot.
+
+Resources:
+  RenderingDeadLetterQueue:
+    Type: AWS::SQS::Queue
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      QueueName: tab-recap-vbeta1-rendering-dlq
+      MessageRetentionPeriod: 1209600
+      SqsManagedSseEnabled: true
+      Tags:
+        - Key: Project
+          Value: TabAPIvbeta1
+        - Key: Environment
+          Value: pilot
+
+  RenderingQueue:
+    Type: AWS::SQS::Queue
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      QueueName: tab-recap-vbeta1-rendering
+      MessageRetentionPeriod: 345600
+      ReceiveMessageWaitTimeSeconds: 20
+      VisibilityTimeout: 1440
+      SqsManagedSseEnabled: true
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt RenderingDeadLetterQueue.Arn
+        maxReceiveCount: 3
+      Tags:
+        - Key: Project
+          Value: TabAPIvbeta1
+        - Key: Environment
+          Value: pilot
+
+Outputs:
+  RenderingQueueName:
+    Description: Rendering queue name.
+    Value: !GetAtt RenderingQueue.QueueName
+  RenderingQueueArn:
+    Description: Rendering queue ARN.
+    Value: !GetAtt RenderingQueue.Arn
+  RenderingQueueUrl:
+    Description: Rendering queue URL.
+    Value: !Ref RenderingQueue
+  RenderingDeadLetterQueueName:
+    Description: Rendering DLQ name.
+    Value: !GetAtt RenderingDeadLetterQueue.QueueName
+  RenderingDeadLetterQueueArn:
+    Description: Rendering DLQ ARN.
+    Value: !GetAtt RenderingDeadLetterQueue.Arn

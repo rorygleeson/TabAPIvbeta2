@@ -1,0 +1,53 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Planning SQS queue and DLQ for the TAB Daily Recap vbeta1 pilot.
+
+Resources:
+  PlanningDeadLetterQueue:
+    Type: AWS::SQS::Queue
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      QueueName: tab-recap-vbeta1-planning-dlq
+      MessageRetentionPeriod: 1209600
+      SqsManagedSseEnabled: true
+      Tags:
+        - Key: Project
+          Value: TabAPIvbeta1
+        - Key: Environment
+          Value: pilot
+
+  PlanningQueue:
+    Type: AWS::SQS::Queue
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      QueueName: tab-recap-vbeta1-planning
+      MessageRetentionPeriod: 345600
+      ReceiveMessageWaitTimeSeconds: 20
+      VisibilityTimeout: 1440
+      SqsManagedSseEnabled: true
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt PlanningDeadLetterQueue.Arn
+        maxReceiveCount: 3
+      Tags:
+        - Key: Project
+          Value: TabAPIvbeta1
+        - Key: Environment
+          Value: pilot
+
+Outputs:
+  PlanningQueueName:
+    Description: Planning queue name.
+    Value: !GetAtt PlanningQueue.QueueName
+  PlanningQueueArn:
+    Description: Planning queue ARN.
+    Value: !GetAtt PlanningQueue.Arn
+  PlanningQueueUrl:
+    Description: Planning queue URL.
+    Value: !Ref PlanningQueue
+  PlanningDeadLetterQueueName:
+    Description: Planning DLQ name.
+    Value: !GetAtt PlanningDeadLetterQueue.QueueName
+  PlanningDeadLetterQueueArn:
+    Description: Planning DLQ ARN.
+    Value: !GetAtt PlanningDeadLetterQueue.Arn

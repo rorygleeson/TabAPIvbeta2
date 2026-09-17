@@ -1,0 +1,32 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: DynamoDB jobs table for the TAB Daily Recap vbeta1 pilot.
+
+Resources:
+  JobsTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      TableName: tab-recap-vbeta1-jobs
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: jobId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: jobId
+          KeyType: HASH
+      SSESpecification:
+        SSEEnabled: true
+      Tags:
+        - Key: Project
+          Value: TabAPIvbeta1
+        - Key: Environment
+          Value: pilot
+
+Outputs:
+  JobsTableName:
+    Description: DynamoDB jobs table name.
+    Value: !Ref JobsTable
+  JobsTableArn:
+    Description: DynamoDB jobs table ARN.
+    Value: !GetAtt JobsTable.Arn

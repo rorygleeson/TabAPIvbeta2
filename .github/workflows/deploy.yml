@@ -1,0 +1,231 @@
+name: Deploy vbeta1
+
+on:
+  push:
+    branches: [deploy]
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  ci:
+    uses: ./.github/workflows/ci.yml
+
+  deploy:
+    needs: ci
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout deploy commit
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: lambda/scene-planner/package-lock.json
+
+      - name: Confirm deploy commit
+        run: |
+          echo "Deploy commit: $GITHUB_SHA"
+
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::134387458447:role/TabAPIvbeta1-GitHubDeployRole
+          aws-region: ap-southeast-2
+
+      - name: Prove AWS role assumption
+        run: |
+          aws sts get-caller-identity
+
+      - name: Deploy private S3 storage
+        run: |
+          aws cloudformation deploy \
+            --region ap-southeast-2 \
+            --stack-name tabapivbeta1-storage \
+            --template-file infra/storage.yml \
+            --no-fail-on-empty-changeset
+
+      - name: Show storage outputs
+        run: |
+          aws cloudformation describe-stacks \
+            --region ap-southeast-2 \
+            --stack-name tabapivbeta1-storage \
+            --query "Stacks[0].Outputs" \
+            --output table
+
+      - name: Deploy DynamoDB jobs table
+        run: |
+          aws cloudformation deploy \
+            --region ap-southeast-2 \
+            --stack-name tabapivbeta1-jobs \
+            --template-file infra/jobs.yml \
+            --no-fail-on-empty-changeset
+
+      - name: Show jobs outputs
+        run: |
+          aws cloudformation describe-stacks \
+            --region ap-southeast-2 \
+            --stack-name tabapivbeta1-jobs \
+            --query "Stacks[0].Outputs" \
+            --output table
+
+      - name: Deploy planning SQS queue
+        run: |
+          aws cloudformation deploy \
+            --region ap-southeast-2 \
+            --stack-name tabapivbeta1-planning-queue \
+            --template-file infra/planning-queue.yml \
+            --no-fail-on-empty-changeset
+
+      - name: Show planning queue outputs
+        run: |
+          aws cloudformation describe-stacks \
+            --region ap-southeast-2 \
+            --stack-name tabapivbeta1-planning-queue \
+            --query "Stacks[0].Outputs" \
+            --output table
+
+      - name: Deploy rendering SQS queue
+        run: |
+          aws cloudformation deploy \
+            --region ap-southeast-2 \
+            --stack-name tabapivbeta1-rendering-queue \
+            --template-file infra/rendering-queue.yml \
+            --no-fail-on-empty-changeset
+
+      - name: Show rendering queue outputs
+        run: |
+          aws cloudformation describe-stacks \
+            --region ap-southeast-2 \
+            --stack-name tabapivbeta1-rendering-queue \
+            --query "Stacks[0].Outputs" \
+            --output table
+
+      - name: Package recap builder Lambda
+        run: |
+          rm -rf dist/builder-recap-package dist/builder-recap.zip
+          mkdir -p dist/builder-recap-package
+          cd lambda/builder-recap
+          npm ci --omit=dev --ignore-scripts
+          cd ../..
+          cp lambda/builder-recap/index.js dist/builder-recap-package/index.js
+          cp lambda/builder-recap/recap-builder.js dist/builder-recap-package/recap-builder.js
+          cp lambda/builder-recap/builder-plan-guard.js dist/builder-recap-package/builder-plan-guard.js
+          cp lambda/builder-recap/package.json dist/builder-recap-package/package.json
+          cp -R lambda/builder-recap/node_modules dist/builder-recap-package/node_modules
+          cp -R lambda/builder-recap/contracts dist/builder-recap-package/contracts
+          cp -R lambda/builder-recap/runtime dist/builder-recap-package/runtime
+          cp -R lambda/builder-recap/templates dist/builder-recap-package/templates
+          test -f dist/builder-recap-package/index.js
+          test -f dist/builder-recap-package/recap-builder.js
+          test -f dist/builder-recap-package/builder-plan-guard.js
+          test -f dist/builder-recap-package/runtime/recap-runtime.js
+          test -d dist/builder-recap-package/templates
+          test -d dist/builder-recap-package/contracts
+          test -d dist/builder-recap-package/node_modules/@aws-sdk/client-s3
+          cd dist/builder-recap-package
+          zip -qr ../builder-recap.zip .
+          cd ../..
+          unzip -l dist/builder-recap.zip | grep 'index.js'
+          unzip -l dist/builder-recap.zip | grep 'recap-builder.js'
+          unzip -l dist/builder-recap.zip | grep 'builder-plan-guard.js'
+          unzip -l dist/builder-recap.zip | grep 'runtime/recap-runtime.js'
+          aws s3 cp \
+            dist/builder-recap.zip \
+            s3://tab-recap-vbeta1/deploy-artifacts/builder-recap/$GITHUB_SHA.zip \
+            --region ap-southeast-2
+
+      - name: Deploy recap builder Lambda
+        run: |
+          aws cloudformation deploy \
+            --region ap-southeast-2 \
+            --stack-name tabapivbeta1-builder-recap \
+            --template-file infra/builder-recap.yml \
+            --parameter-overrides \
+              ArtifactBucket=tab-recap-vbeta1 \
+              ArtifactKey=deploy-artifacts/builder-recap/$GITHUB_SHA.zip \
+            --capabilities CAPABILITY_NAMED_IAM \
+            --no-fail-on-empty-changeset
+
+      - name: Show recap builder outputs
+        run: |
+          aws cloudformation describe-stacks \
+            --region ap-southeast-2 \
+            --stack-name tabapivbeta1-builder-recap \
+            --query "Stacks[0].Outputs" \
+            --output table
+
+      - name: Package scene planner Lambda
+        run: |
+          rm -rf dist/scene-planner-package dist/scene-planner.zip
+          mkdir -p dist/scene-planner-package/contracts
+          cd lambda/scene-planner
+          npm ci --omit=dev --ignore-scripts
+          cd ../..
+          cp lambda/scene-planner/bootstrap.js dist/scene-planner-package/bootstrap.js
+          cp lambda/scene-planner/optional-bedrock-guard.js dist/scene-planner-package/optional-bedrock-guard.js
+          cp lambda/scene-planner/index.js dist/scene-planner-package/index.js
+          cp lambda/scene-planner/headline-diversity.js dist/scene-planner-package/headline-diversity.js
+          cp lambda/scene-planner/headline-meaning.js dist/scene-planner-package/headline-meaning.js
+          cp lambda/scene-planner/package.json dist/scene-planner-package/package.json
+          cp -R lambda/scene-planner/node_modules dist/scene-planner-package/node_modules
+          cp contracts/planner-prompt.md dist/scene-planner-package/contracts/planner-prompt.md
+          cp contracts/bettings.schema.json dist/scene-planner-package/contracts/bettings.schema.json
+          cp contracts/scene-contracts.json dist/scene-planner-package/contracts/scene-contracts.json
+          cp contracts/scene-plan.schema.json dist/scene-planner-package/contracts/scene-plan.schema.json
+          cp contracts/runtime-contract.json dist/scene-planner-package/contracts/runtime-contract.json
+          test -f dist/scene-planner-package/bootstrap.js
+          test -f dist/scene-planner-package/optional-bedrock-guard.js
+          test -f dist/scene-planner-package/index.js
+          test -f dist/scene-planner-package/headline-diversity.js
+          test -f dist/scene-planner-package/headline-meaning.js
+          test -f dist/scene-planner-package/contracts/planner-prompt.md
+          test -f dist/scene-planner-package/contracts/bettings.schema.json
+          test -f dist/scene-planner-package/contracts/scene-contracts.json
+          test -f dist/scene-planner-package/contracts/scene-plan.schema.json
+          test -f dist/scene-planner-package/contracts/runtime-contract.json
+          test -d dist/scene-planner-package/node_modules/@aws-sdk/client-bedrock-runtime
+          test -d dist/scene-planner-package/node_modules/@aws-sdk/client-dynamodb
+          test -d dist/scene-planner-package/node_modules/@aws-sdk/client-s3
+          test -d dist/scene-planner-package/node_modules/ajv
+          cd dist/scene-planner-package
+          zip -qr ../scene-planner.zip .
+          cd ../..
+          unzip -l dist/scene-planner.zip | grep 'bootstrap.js'
+          unzip -l dist/scene-planner.zip | grep 'optional-bedrock-guard.js'
+          unzip -l dist/scene-planner.zip | grep 'headline-diversity.js'
+          unzip -l dist/scene-planner.zip | grep 'headline-meaning.js'
+          unzip -l dist/scene-planner.zip | grep 'contracts/planner-prompt.md'
+          unzip -l dist/scene-planner.zip | grep 'contracts/bettings.schema.json'
+          unzip -l dist/scene-planner.zip | grep 'contracts/scene-contracts.json'
+          unzip -l dist/scene-planner.zip | grep 'contracts/scene-plan.schema.json'
+          unzip -l dist/scene-planner.zip | grep 'contracts/runtime-contract.json'
+          aws s3 cp \
+            dist/scene-planner.zip \
+            s3://tab-recap-vbeta1/deploy-artifacts/scene-planner/$GITHUB_SHA.zip \
+            --region ap-southeast-2
+
+      - name: Deploy scene planner Lambda
+        run: |
+          aws cloudformation deploy \
+            --region ap-southeast-2 \
+            --stack-name tabapivbeta1-scene-planner \
+            --template-file infra/scene-planner.yml \
+            --parameter-overrides \
+              ArtifactBucket=tab-recap-vbeta1 \
+              ArtifactKey=deploy-artifacts/scene-planner/$GITHUB_SHA.zip \
+              PlannerModelId=au.anthropic.claude-sonnet-4-5-20250929-v1:0 \
+            --capabilities CAPABILITY_NAMED_IAM \
+            --no-fail-on-empty-changeset
+
+      - name: Show scene planner outputs
+        run: |
+          aws cloudformation describe-stacks \
+            --region ap-southeast-2 \
+            --stack-name tabapivbeta1-scene-planner \
+            --query "Stacks[0].Outputs" \
+            --output table

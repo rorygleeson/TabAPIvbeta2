@@ -1,0 +1,230 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no"><meta name="theme-color" content="#020609"><title>Your Racing Day Recap</title><style>
+:root{--shell-top:58px;--shell-bottom:56px;--replay-video-fade:.55s}*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#020609;color:#f8fbff;font-family:Inter,Segoe UI,Arial,sans-serif}.tab-header{position:fixed;z-index:100;inset:0 0 auto;height:58px;display:flex;align-items:center;padding:0 22px;background:rgba(2,6,9,.94);border-bottom:1px solid rgba(255,255,255,.10);font-weight:950;letter-spacing:.12em;font-size:12px}.hud{position:fixed;z-index:100;inset:auto 0 0;height:56px;display:flex;align-items:center;gap:16px;padding:0 22px;background:rgba(2,6,9,.94);border-top:1px solid rgba(255,255,255,.10)}.hud button{border:1px solid rgba(255,255,255,.18);border-radius:999px;background:rgba(255,255,255,.08);color:#fff;padding:8px 14px;font-weight:900}.hud-progress{flex:1;height:4px;border-radius:999px;background:rgba(255,255,255,.13);overflow:visible;position:relative;cursor:pointer;touch-action:none}.hud-progress::before{content:"";position:absolute;left:0;right:0;top:-18px;bottom:-18px}.hud-progress>i{display:block;width:0;height:100%;background:#27e082;transition:width .25s linear}.recap-scenes>[data-scene-type]{visibility:hidden;pointer-events:none;opacity:0;transition:opacity .3s ease}.recap-scenes>[data-scene-type].is-active,.recap-scenes>[data-scene-type].is-entering,.recap-scenes>[data-scene-type].is-exiting{visibility:visible}.recap-scenes>[data-scene-type].is-active,.recap-scenes>[data-scene-type].is-entering{pointer-events:auto;opacity:1}.recap-scenes>[data-scene-type].is-exiting{pointer-events:none;opacity:0}body.runtime-paused .recap-scenes .is-active,body.runtime-paused .recap-scenes .is-active *,body.runtime-paused .recap-scenes .is-entering,body.runtime-paused .recap-scenes .is-entering *,body.runtime-paused .recap-scenes .is-exiting,body.runtime-paused .recap-scenes .is-exiting *{animation-play-state:paused!important}.fx-greenSweep::after{content:"";position:absolute;inset:0;pointer-events:none;background:linear-gradient(100deg,transparent 25%,rgba(39,224,130,.16) 50%,transparent 75%);transform:translateX(-120%);animation:fxSweep .75s ease-out forwards}.fx-lossTreatment{animation:fxLoss .42s ease-out}.fx-winEmotion{animation:fxWin .55s ease-out}.fx-lossEmotion{animation:fxLoss .55s ease-out}.fx-bigWinEmphasis{animation:fxBigWin .7s ease-out}.fx-comebackEmphasis{animation:fxComeback .75s ease-out}.scene-type-5 .s5-race.fx-lossTreatment .s5-result{animation:fxLoss .42s ease-out}.scene-type-5 .s5-race.fx-winEmotion .s5-horse{animation:fxWin .55s ease-out}.scene-type-5 .s5-race.fx-lossEmotion .s5-horse{animation:fxLoss .55s ease-out}.scene-type-5 .s5-race.fx-bigWinEmphasis .s5-horse{animation:fxBigWin .7s ease-out}.scene-type-5 .s5-race.fx-comebackEmphasis .s5-horse{animation:fxComeback .75s ease-out}.fx-replayEnter{animation:fxReplayEnter .4s ease-out}.fx-videoFade [data-role="race-video"]{opacity:0!important;transition:opacity var(--replay-video-fade) ease!important}.fx-positiveFinale{animation:fxFinalPositive .9s ease-out}.fx-negativeFinale{animation:fxFinalNegative .9s ease-out}.fx-breakEvenFinale{animation:fxFinalEven .9s ease-out}@keyframes fxSweep{to{transform:translateX(120%)}}@keyframes fxWin{50%{filter:drop-shadow(0 0 26px rgba(39,224,130,.62));transform:scale(1.022)}}@keyframes fxLoss{50%{filter:drop-shadow(0 0 24px rgba(255,77,97,.52));transform:scale(.982)}}@keyframes fxBigWin{40%{filter:drop-shadow(0 0 32px rgba(138,255,184,.68));transform:scale(1.03)}}@keyframes fxComeback{35%{filter:brightness(1.22) drop-shadow(0 0 24px rgba(39,224,130,.45));transform:translateY(-3px) scale(1.012)}}@keyframes fxReplayEnter{from{opacity:.35;filter:blur(5px)}to{opacity:1;filter:none}}@keyframes fxFinalPositive{45%{filter:drop-shadow(0 0 28px rgba(39,224,130,.5));transform:scale(1.02)}}@keyframes fxFinalNegative{45%{filter:drop-shadow(0 0 24px rgba(255,77,97,.38))}}@keyframes fxFinalEven{45%{filter:brightness(1.18)}}@media(orientation:portrait){:root{--shell-top:92px;--shell-bottom:76px}.tab-header{height:92px}.hud{height:76px}}
+
+/* Global HUD now owns visible running P&L presentation */
+.scene-type-2 .s2-pnl,
+.scene-type-5 .s5-pnl{
+  display:none !important;
+}
+
+/* GLOBAL RUNNING P&L HUD */
+.global-pnl{
+  position:fixed;
+  z-index:95;
+  left:50%;
+  bottom:68px;
+  transform:translate(-50%,12px);
+  width:min(520px,calc(100vw - 44px));
+  padding:9px 14px 10px;
+  border:1px solid rgba(255,255,255,.14);
+  border-radius:14px;
+  background:rgba(2,6,9,.88);
+  box-shadow:0 8px 28px rgba(0,0,0,.32);
+  backdrop-filter:blur(8px);
+  opacity:0;
+  visibility:hidden;
+  pointer-events:none;
+  transition:opacity .25s ease,transform .25s ease,visibility .25s;
+}
+
+.global-pnl.is-visible{
+  opacity:1;
+  visibility:visible;
+  transform:translate(-50%,0);
+}
+
+.global-pnl-head{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:14px;
+  margin-bottom:7px;
+}
+
+.global-pnl-label{
+  font-size:11px;
+  font-weight:950;
+  letter-spacing:.12em;
+  color:rgba(255,255,255,.68);
+}
+
+.global-pnl-time{
+  margin-left:8px;
+  letter-spacing:0;
+  font-weight:800;
+  color:rgba(255,255,255,.82);
+  white-space:nowrap;
+}
+
+.global-pnl-value{
+  font-size:18px;
+  line-height:1;
+  font-weight:950;
+  font-variant-numeric:tabular-nums;
+  color:#fff;
+}
+
+.global-pnl-value.positive{color:#8affb8}
+.global-pnl-value.negative{color:#ff6b7b}
+
+.global-pnl-track{
+  position:relative;
+  height:5px;
+  border-radius:999px;
+  background:linear-gradient(90deg,rgba(255,77,97,.55),rgba(255,255,255,.16) 50%,rgba(39,224,130,.55));
+}
+
+.global-pnl-track::after{
+  content:"";
+  position:absolute;
+  left:50%;
+  top:-3px;
+  width:1px;
+  height:11px;
+  background:rgba(255,255,255,.48);
+}
+
+.global-pnl-needle{
+  position:absolute;
+  left:50%;
+  top:50%;
+  width:14px;
+  height:14px;
+  border:3px solid #fff;
+  border-radius:50%;
+  background:#020609;
+  box-shadow:0 0 12px rgba(255,255,255,.28);
+  transform:translate(-50%,-50%);
+  transition:left .65s cubic-bezier(.16,1,.3,1);
+}
+
+@media(orientation:portrait){
+  .global-pnl{
+    bottom:88px;
+    width:calc(100vw - 28px);
+  }
+}
+
+/* GLOBAL RICH FX */
+.global-fx-flash{position:absolute;inset:0;opacity:0;background:rgba(255,255,255,.38)}
+.global-fx-flash.win{background:rgba(39,224,130,.46)}
+.global-fx-flash.loss{background:rgba(255,77,97,.43)}
+.global-fx-flash.big{background:rgba(72,255,151,.58)}
+.global-fx-flash.go{animation:globalFxFlash .5s ease-out both}
+.global-fx-flash.loss.go{animation-duration:.44s}
+.global-fx-flash.big.go{animation-duration:.56s}
+
+.global-fx-ring{position:absolute;left:50%;top:50%;width:70px;height:70px;border:8px solid #8affb8;border-radius:50%;opacity:0;box-shadow:0 0 50px rgba(35,230,123,.3)}
+.global-fx-ring.go{animation:globalFxRing .9s cubic-bezier(.1,.8,.2,1) both}
+
+.global-fx-reaction{position:absolute;inset:0;display:grid;place-items:center;opacity:0;overflow:hidden}
+.global-fx-reaction-face{font-size:clamp(133px,26.6vw,364px);line-height:1;filter:drop-shadow(0 24px 34px rgba(0,0,0,.6));transform:scale(.2) rotate(-14deg)}
+.global-fx-reaction-copy{position:absolute;left:50%;top:76%;transform:translate(-50%,-50%);font-size:clamp(24px,4.5vw,70px);font-weight:950;letter-spacing:.03em;text-transform:uppercase;text-align:center;text-shadow:0 7px 26px #000;width:92%;color:#fff}
+.global-fx-reaction.go{animation:globalFxReactionLayer 1.75s ease both}
+.global-fx-reaction.go .global-fx-reaction-face{animation:globalFxReactionFace 1.75s cubic-bezier(.16,1,.3,1) both}
+.global-fx-reaction.go .global-fx-reaction-copy{animation:globalFxReactionCopy 1.75s cubic-bezier(.16,1,.3,1) both}
+
+.global-fx-loss-stamp{position:absolute;left:50%;top:51%;transform:translate(-50%,-50%) rotate(-9deg) scale(.25);opacity:0;border:4px solid #ff4d61;color:#ff4d61;border-radius:14px;padding:10px 16px;font-size:clamp(26px,5vw,72px);font-weight:950;letter-spacing:.06em;text-transform:uppercase;text-shadow:0 8px 30px #000;background:rgba(2,6,9,.74);box-shadow:0 0 40px rgba(255,77,97,.18)}
+.global-fx-loss-stamp.go{animation:globalFxLossStamp 1.55s cubic-bezier(.16,1,.3,1) both}
+
+.global-fx-particles,.global-fx-coins,.global-fx-emojis{position:absolute;inset:0;overflow:hidden}
+.global-fx-particle{position:absolute;left:50%;top:50%;width:6px;height:6px;border-radius:50%;background:#fff;opacity:0;animation:globalFxParticle .95s ease-out both}
+.global-fx-coin{position:absolute;top:-10%;width:16px;height:16px;border-radius:50%;background:#ffbf47;border:3px solid rgba(255,255,255,.45);opacity:0;animation:globalFxCoin 1.9s ease-in both}
+.global-fx-emoji{position:absolute;top:-12%;font-size:clamp(26px,4vw,54px);opacity:0;filter:drop-shadow(0 8px 14px rgba(0,0,0,.42));will-change:transform,opacity}
+.global-fx-emojis.fall .global-fx-emoji{animation:globalFxEmojiFall var(--d,2.25s) cubic-bezier(.18,.72,.35,1) both}
+.global-fx-emojis.burst .global-fx-emoji{top:50%;left:50%;animation:globalFxEmojiBurst var(--d,1.35s) cubic-bezier(.16,1,.3,1) both}
+
+/* Replay-only gold racing symbols. Runtime inserts this inside the existing .s3-shell. */
+.replay-gold-fx{position:absolute;z-index:10;inset:0;overflow:hidden;pointer-events:none}
+.replay-gold-symbol{position:absolute;left:var(--left,50%);top:var(--top,50%);color:#ffd76a;font:950 clamp(22px,3.2vw,46px)/1 Georgia,serif;opacity:0;text-shadow:0 0 8px rgba(255,191,71,.9),0 0 20px rgba(255,191,71,.48),0 5px 12px rgba(0,0,0,.7);animation:replayGoldSymbol var(--d,1.35s) cubic-bezier(.16,1,.3,1) both}
+.replay-gold-symbol.coin{width:clamp(20px,2.7vw,38px);height:clamp(20px,2.7vw,38px);border:3px solid #ffe39a;border-radius:50%;background:radial-gradient(circle at 35% 30%,#fff0ad 0 10%,#ffc44d 28%,#b97808 100%);box-shadow:0 0 15px rgba(255,191,71,.72);font-size:0}
+@keyframes replayGoldSymbol{0%{opacity:0;transform:translate(-50%,-20%) scale(.45) rotate(-14deg)}18%{opacity:.95;transform:translate(-50%,-50%) scale(1.08) rotate(4deg)}72%{opacity:.88}100%{opacity:0;transform:translate(calc(-50% + var(--drift,40px)),calc(-50% - 70px)) scale(.9) rotate(var(--rot,18deg))}}
+
+@keyframes globalFxFlash{
+  0%{opacity:0}
+  18%{opacity:.82}
+  100%{opacity:0}
+}
+@keyframes globalFxRing{0%{opacity:.95;transform:translate(-50%,-50%) scale(.1)}100%{opacity:0;transform:translate(-50%,-50%) scale(17)}}
+@keyframes globalFxReactionLayer{0%{opacity:0;background:rgba(70,0,8,0)}10%{opacity:1;background:rgba(70,0,8,.16)}70%{opacity:1;background:rgba(40,0,6,.23)}100%{opacity:0;background:rgba(40,0,6,0)}}
+@keyframes globalFxReactionFace{0%{transform:scale(.15) rotate(-18deg) translateY(-20px);filter:blur(8px) drop-shadow(0 24px 34px rgba(0,0,0,.6))}18%{transform:scale(1.16) rotate(6deg) translateY(0);filter:blur(0) drop-shadow(0 24px 34px rgba(0,0,0,.6))}35%{transform:scale(.96) rotate(-5deg)}52%{transform:scale(1.04) rotate(3deg)}74%{transform:scale(1) rotate(-2deg);opacity:1}100%{transform:scale(.88) rotate(0) translateY(35px);opacity:0}}
+@keyframes globalFxReactionCopy{0%,22%{opacity:0;transform:translate(-50%,-30%) scale(.7)}35%{opacity:1;transform:translate(-50%,-50%) scale(1.08)}75%{opacity:1;transform:translate(-50%,-50%) scale(1)}100%{opacity:0;transform:translate(-50%,-65%) scale(.95)}}
+@keyframes globalFxLossStamp{0%{opacity:0;transform:translate(-50%,-50%) rotate(-14deg) scale(.18)}16%{opacity:1;transform:translate(-50%,-50%) rotate(-7deg) scale(1.08)}63%{opacity:.98;transform:translate(-50%,-50%) rotate(-7deg) scale(1)}100%{opacity:0;transform:translate(-50%,-58%) rotate(-4deg) scale(.92)}}
+@keyframes globalFxParticle{0%{opacity:1;transform:translate(-50%,-50%) scale(.5)}100%{opacity:0;transform:translate(calc(-50% + var(--x)),calc(-50% + var(--y))) scale(1.2)}}
+@keyframes globalFxCoin{0%{opacity:0;transform:translateY(-20px) rotate(0)}12%{opacity:1}100%{opacity:0;transform:translateY(115vh) rotate(var(--r,720deg))}}
+@keyframes globalFxEmojiFall{0%{opacity:0;transform:translate3d(0,-30px,0) rotate(-18deg) scale(.65)}13%{opacity:.95}72%{opacity:.95}100%{opacity:0;transform:translate3d(var(--drift,0),112vh,0) rotate(var(--rot,420deg)) scale(1.12)}}
+@keyframes globalFxEmojiBurst{0%{opacity:0;transform:translate(-50%,-50%) scale(.1) rotate(-15deg)}14%{opacity:1}75%{opacity:1}100%{opacity:0;transform:translate(calc(-50% + var(--x)),calc(-50% + var(--y))) scale(1.15) rotate(var(--rot,220deg))}}
+
+
+/* GLOBAL FX RESPONSIVE SIZING
+   Portrait: ~60% of original reaction/emoji scale.
+   Short landscape/laptop: max ~50% of original scale. */
+@media (orientation:portrait){
+  .global-fx-reaction-face{
+    font-size:clamp(80px,16vw,218px);
+  }
+
+  .global-fx-reaction-copy{
+    font-size:clamp(16px,2.7vw,42px);
+  }
+
+  .global-fx-loss-stamp{
+    font-size:clamp(18px,3vw,43px);
+    padding:8px 12px;
+  }
+
+  .global-fx-emoji{
+    font-size:clamp(16px,2.4vw,32px);
+  }
+}
+
+@media (orientation:landscape) and (max-height:900px){
+  .global-fx-reaction-face{
+    font-size:clamp(66px,13.3vw,182px);
+  }
+
+  .global-fx-reaction-copy{
+    font-size:clamp(14px,2.25vw,35px);
+  }
+
+  .global-fx-loss-stamp{
+    font-size:clamp(13px,2.5vw,36px);
+    padding:6px 10px;
+  }
+
+  .global-fx-emoji{
+    font-size:clamp(13px,2vw,27px);
+  }
+}
+
+/* {{SCENE_CSS}} */
+</style></head><body><div data-role="start-gate" style="position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:rgba(2,6,9,.94);backdrop-filter:blur(8px)"><button data-role="start-recap" type="button" style="border:1px solid rgba(255,255,255,.22);border-radius:999px;padding:18px 28px;background:#fff;color:#080b12;font:900 16px/1 system-ui,-apple-system,Segoe UI,sans-serif;letter-spacing:.04em;box-shadow:0 12px 45px rgba(0,0,0,.35);cursor:pointer">▶ PLAY NOW</button></div><header class="tab-header">{{USER_NAME}} • YOUR RACING DAY</header><div class="recap-scenes">{{SCENE_MARKUP}}</div><footer class="hud"><button type="button" data-role="play-pause">PAUSE</button><div class="hud-progress" data-role="progress-track" aria-hidden="true"><i data-role="progress-bar"></i></div><span data-role="progress-text">1 / 1</span></footer>
+  <div data-role="global-pnl" class="global-pnl" aria-live="polite">
+  <div class="global-pnl-head">
+  <span class="global-pnl-label">
+    P &amp; L
+    <span class="global-pnl-time" data-role="global-pnl-time"></span>
+  </span>
+  <strong class="global-pnl-value" data-role="global-pnl-value">$0</strong>
+ </div>
+  <div class="global-pnl-track" aria-hidden="true">
+    <i data-role="global-pnl-needle" class="global-pnl-needle"></i>
+  </div>
+</div>
+
+<div data-role="global-fx" aria-hidden="true" style="position:fixed;inset:0;z-index:80;pointer-events:none;overflow:hidden">
+  <div data-role="fx-flash" class="global-fx-flash"></div>
+  <div data-role="fx-ring" class="global-fx-ring"></div>
+  <div data-role="fx-reaction" class="global-fx-reaction">
+    <div data-role="fx-reaction-face" class="global-fx-reaction-face"></div>
+    <div data-role="fx-reaction-copy" class="global-fx-reaction-copy"></div>
+  </div>
+  <div data-role="fx-loss-stamp" class="global-fx-loss-stamp"></div>
+  <div data-role="fx-particles" class="global-fx-particles"></div>
+  <div data-role="fx-coins" class="global-fx-coins"></div>
+  <div data-role="fx-emojis" class="global-fx-emojis"></div>
+</div>
+
+<audio data-role="soundtrack" preload="auto" loop></audio><script type="application/json" id="recap-runtime-data">{{RUNTIME_MANIFEST}}</script><script>
+/* {{RUNTIME_JS}} */
+</script></body></html>

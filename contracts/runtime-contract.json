@@ -1,0 +1,298 @@
+{
+  "runtimeContractVersion": "2.0.2",
+  "owner": "runtime/main-shell-template.html + runtime/recap-runtime.js",
+  "purpose": "Complete production runtime contract for eight scene types. Builder assembles; runtime plays; planner/builder enforce bounded planned duration.",
+  "canonicalArtifacts": {
+    "shell": "runtime/main-shell-template.html",
+    "runtime": "runtime/recap-runtime.js"
+  },
+  "baseline": {
+    "boxSizing": "border-box globally",
+    "page": "margin:0;width:100%;height:100%;overflow:hidden;background:#020609;color:#f8fbff;font-family:Inter,Segoe UI,Arial,sans-serif",
+    "inactiveScene": "visibility:hidden;pointer-events:none;opacity:0",
+    "activeScene": "visibility:visible;pointer-events:auto;opacity:1"
+  },
+  "shell": {
+    "singleGlobalHeader": true,
+    "singleGlobalHud": true,
+    "landscape": {
+      "shellTopPx": 58,
+      "shellBottomPx": 56
+    },
+    "portrait": {
+      "shellTopPx": 92,
+      "shellBottomPx": 76
+    },
+    "cssVariables": {
+      "top": "--shell-top",
+      "bottom": "--shell-bottom"
+    },
+    "headerText": "TAB \u2022 YOUR RACING DAY",
+    "hud": "play/pause button + scene progress",
+    "sceneTransition": {
+      "type": "crossfade",
+      "durationMs": 300
+    }
+  },
+  "sceneIdentity": {
+    "attribute": "data-scene-type",
+    "allowedValues": [
+      "1",
+      "2",
+      "3",
+      "4",
+      "5",
+      "6",
+      "7",
+      "8"
+    ],
+    "instanceAttribute": "data-scene-instance-id",
+    "instanceFormat": "scene-<1-based-render-order>-type-<sceneType>"
+  },
+  "activation": {
+    "activeClass": "is-active",
+    "playClass": "play",
+    "rule": "Only current scene is active. Runtime adds play on start. Remove both on exit. Scene7 remains active permanently."
+  },
+  "builderRuntimeManifest": {
+    "element": "<script type=\"application/json\" id=\"recap-runtime-data\">",
+    "shape": {
+      "manifestVersion": "1.0",
+      "sceneRuntimeData": "object keyed by instance ID"
+    },
+    "scenePayloads": {
+      "3": {
+        "required": [
+          "replayUrl",
+          "replayComments"
+        ]
+      },
+      "7": {
+        "required": [
+          "shareCaption"
+        ]
+      }
+    },
+    "security": "Serialize JSON and escape '<' as \\u003c to prevent script-element termination. No executable planner/data code."
+  },
+  "timeline": {
+    "scene1": {
+      "durationMs": 14000,
+      "actionsMs": {
+        "intro": 0,
+        "hero": 1300,
+        "stats": 4200,
+        "meetings": 6200,
+        "teaser": 8800,
+        "close": 11600
+      }
+    },
+    "scene2": {
+      "durationMs": 9000,
+      "actionsRatio": {
+        "race": 0,
+        "bet": 0.09,
+        "tension": 0.22,
+        "dot1": 0.31,
+        "dot2": 0.35,
+        "dot3": 0.39,
+        "dot4": 0.43,
+        "dot5": 0.47,
+        "finish": 0.49,
+        "verdict": 0.53,
+        "fxStart": 0.57,
+        "reaction": 0.74,
+        "pnl": 0.84
+      }
+    },
+    "scene3": {
+      "replayClipSeconds": 17,
+      "replayStartMode": "END_OFFSET",
+      "replayStartRatio": 0.5,
+      "replayStartSecondsBeforeEnd": 48,
+      "replayEndSecondsBeforeEnd": 31,
+      "videoFadeSeconds": 0.55,
+      "metadataTimeoutMs": 5000,
+      "playTimeoutMs": 3000,
+      "commentRatiosByCount": {
+        "2": [
+          0.16,
+          0.55
+        ],
+        "3": [
+          0.12,
+          0.39,
+          0.68
+        ],
+        "4": [
+          0.1,
+          0.31,
+          0.54,
+          0.72
+        ]
+      },
+      "plannedPlaybackMs": 17000,
+      "exitFadeMs": 550,
+      "commentBaseClipSeconds": 11,
+      "commentLeadInMs": 3000
+    },
+    "scene4": {
+      "durationMs": 8000
+    },
+    "scene5": {
+      "durationMsByRaceCount": {
+        "2": 10400,
+        "3": 13300
+      }
+    },
+    "scene6": {
+      "durationMs": 9500
+    },
+    "scene7": {
+      "permanent": true
+    },
+    "scene8": {
+      "durationMsByBetCount": {
+        "2": 5000,
+        "3": 6500,
+        "4": 8000,
+        "5": 9500
+      },
+      "resultRevealMs": [
+        900,
+        2200,
+        3500,
+        4800,
+        6100
+      ],
+      "rule": "All compact rows are present immediately; each result/comment resolves sequentially at the configured fast stagger. Effects overlap and never extend duration."
+    }
+  },
+  "actionSemantics": {
+    "genericReveal": "For scene1/2, action name selects all [data-reveal='<name>'] and adds is-visible.",
+    "scene2Dots": "dotN adds is-on to Nth .s2-dot.",
+    "scene2Fx": "At fxStart execute each capability in root data-fx-package after verdict is visible.",
+    "pnlNeedle": "On P&L reveal, read data-pnl-to and set [data-role='pnl-needle'] left using clamp(50+(pnl/200)*48,2,98)%.",
+    "scene4to8": "Approved CSS choreography is driven by adding play; their CSS delays own individual reveals.",
+    "scene8": "Runtime adds is-resolved to each .s8-bet at resultRevealMs in order and updates global P&L from data-running-pnl/data-race-time at the same instant."
+  },
+  "audio": {
+    "soundtrackUrl": "https://d1dcueurs1xl4v.cloudfront.net/hitslab-sport-football-baseball-music-334834.mp3",
+    "normalVolume": 0.28,
+    "replayVolume": 0.055,
+    "fadeMs": 850,
+    "singleContinuous": true,
+    "neverRestartBetweenScenes": true,
+    "neverMuteReplay": true,
+    "autoplay": "Attempt after first user interaction/play action; browser autoplay rejection is non-fatal and recap continues silently until user interaction permits audio."
+  },
+  "pauseResume": {
+    "rule": "Pause freezes logical scene timer, CSS animations, soundtrack and active replay video. Resume continues from elapsed position without restarting scene or soundtrack.",
+    "css": "Runtime applies animation-play-state:paused under body.runtime-paused for active scene descendants."
+  },
+  "replay": {
+    "assignUrlViaDomProperty": true,
+    "crossoriginAnonymousForbidden": true,
+    "start": "After loadedmetadata, targetStart=max(0,duration-48). For normal long-form race replays this starts 48 seconds before the MP4 end.",
+    "failure": "Metadata timeout/error, play rejection/timeout or media error: restore music, show exit veil, wait 550ms then advance. Replay failure never stalls recap.",
+    "end": "Successful playback runs on the existing 17-second runtime timeline, then uses a 550ms exit veil before advancing; media ended/failure may finish earlier."
+  },
+  "sharing": {
+    "shareTitle": "Runtime derives '<user visible recap title>' as 'My TAB Racing Day Recap'.",
+    "shareUrl": "Runtime uses location.href with fragment removed.",
+    "shareCaption": "Read from Scene7 manifest payload.",
+    "behavior": "navigator.share({title,text,url}) when available; otherwise copy caption + URL to clipboard. Failure leaves Scene7 visible."
+  },
+  "fx": {
+    "packageAttribute": "data-fx-package",
+    "runtimeCapabilities": [
+      "greenSweep",
+      "lossTreatment",
+      "winEmotion",
+      "lossEmotion",
+      "bigWinEmphasis",
+      "comebackEmphasis",
+      "replayEnter",
+      "replayLiveComments",
+      "videoFade",
+      "musicDuck",
+      "musicRestore",
+      "positiveFinale",
+      "negativeFinale",
+      "breakEvenFinale"
+    ],
+    "delivery": {
+      "perBet": "Scene2 root and Scene5 race nodes use data-fx-package.",
+      "lifecycle": "Scene3 replay lifecycle capabilities implied by scene type; Scene7 finale capability derived from heroOutcomeClass.",
+      "fastResults": "Scene8 uses template-local lightweight effects only; no heavy global per-bet FX package and no effect may extend scene duration."
+    }
+  },
+  "formatting": {
+    "currency": "AUD $ prefix; no unnecessary .00; positive P&L +$; negative \u2212$; zero $0",
+    "odds": "no unnecessary trailing zero",
+    "pnlSignClasses": [
+      "positive",
+      "negative",
+      "zero"
+    ],
+    "htmlSafety": "Escape all factual/planner text; no text field contains presentation HTML; validate replay URLs as https URLs."
+  },
+  "derivedHighlightAlgorithms": {
+    "biggestWin": "max positive profitLoss WIN; earliest tie",
+    "highestOddsWinner": "max odds WIN; earliest tie",
+    "biggestRecovery": "max positive profitLoss; earliest tie",
+    "longestLosingStreak": "longest consecutive LOSS run; earliest starting run tie",
+    "strongestFinish": "suffix ending at final bet with greatest net gain; shortest suffix tie. If no positive suffix, final bet context is deterministic fallback.",
+    "totalReturned": "summary.totalReturned"
+  },
+  "productionTemplateExtraction": {
+    "requiredSections": [
+      "SCENE_PRODUCTION_CSS_START/END",
+      "SCENE_PRODUCTION_MARKUP_START/END"
+    ],
+    "cssScopingRule": "Selectors scoped to .scene-type-N except @keyframes. No html/body/:root/global shell selectors.",
+    "visualIntegrityRule": "Preserve approved scene-specific CSS, including scoped visual variables, effects, responsive rules and choreography.",
+    "rule": "Extract only explicit marked sections for all eight approved scene templates; heuristic stripping forbidden."
+  },
+  "durationPolicy": {
+    "definition": "Planned recap duration is time from Scene1 start until Scene7 activation; Scene7 is permanent and excluded from timed duration.",
+    "softMinimumSeconds": 45,
+    "hardMaxSeconds": 300,
+    "targetBands": [
+      {
+        "maxBets": 3,
+        "targetSeconds": 60
+      },
+      {
+        "maxBets": 15,
+        "targetSeconds": 120
+      },
+      {
+        "maxBets": 40,
+        "targetSeconds": 180
+      },
+      {
+        "maxBets": 70,
+        "targetSeconds": 225
+      },
+      {
+        "maxBets": 100,
+        "targetSeconds": 270
+      },
+      {
+        "maxBets": null,
+        "targetSeconds": 285
+      }
+    ],
+    "priority": "Exact chronological coverage and factual correctness always outrank duration targets. Never drop, duplicate, reorder or pad bets merely to hit a target.",
+    "hardMaxBasis": "Conservative deterministic upper-bound planning calculation includes scene durations, scene transitions, Scene3 plannedPlaybackMs + exitFadeMs, and Scene3 metadata/play timeout allowances. Network/browser behaviour outside declared runtime timeouts is not claimed.",
+    "feasibility": "Before LLM generation the planner computes the minimum legal duration using Scene2/5/8 group options. If even the minimum exceeds hardMaxSeconds, fail before generation."
+  },
+  "scene8": {
+    "layout": "Compact horizontal result strips with substantially less vertical weight than Scene5. Two to five rows must fit without scrolling or clipping, including mobile portrait. Runner name, result and per-bet P&L are critical and must not be ellipsized.",
+    "sequence": "Rows remain in betSequences order. Results/comments resolve one at a time, never simultaneously.",
+    "effects": "Lightweight flash, colour, emoji/pop and accelerated progress-dot treatment are allowed but add zero timeline delay.",
+    "pnl": "At each result reveal the global running P&L bar moves to that bet runningPnl. Values come from bettings.json via builder data attributes.",
+    "responsiveAcceptance": "2/3/4/5 rows must fit mobile portrait and short landscape; critical horse/result/P&L information must remain readable."
+  }
+}

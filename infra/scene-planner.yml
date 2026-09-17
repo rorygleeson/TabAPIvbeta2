@@ -1,0 +1,124 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Scene planner Lambda for the TAB Daily Recap vbeta1 pilot.
+
+Parameters:
+  ArtifactBucket:
+    Type: String
+    Description: S3 bucket containing the Lambda deployment package.
+  ArtifactKey:
+    Type: String
+    Description: S3 key of the Lambda deployment package.
+  PlannerModelId:
+    Type: String
+    Default: au.anthropic.claude-sonnet-4-5-20250929-v1:0
+    Description: Amazon Bedrock model or inference profile ID used by the planner.
+
+Resources:
+  ScenePlannerExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: tab-recap-vbeta1-scene-planner-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: ScenePlannerRuntime
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - sqs:ReceiveMessage
+                  - sqs:DeleteMessage
+                  - sqs:GetQueueAttributes
+                Resource: arn:aws:sqs:ap-southeast-2:134387458447:tab-recap-vbeta1-planning
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                Resource: arn:aws:s3:::tab-recap-vbeta1/working/*
+              - Effect: Allow
+                Action:
+                  - s3:ListBucket
+                Resource: arn:aws:s3:::tab-recap-vbeta1
+                Condition:
+                  StringLike:
+                    s3:prefix:
+                      - working/*
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:UpdateItem
+                Resource: arn:aws:dynamodb:ap-southeast-2:134387458447:table/tab-recap-vbeta1-jobs
+              - Effect: Allow
+                Action:
+                  - bedrock:InvokeModel
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - aws-marketplace:ViewSubscriptions
+                  - aws-marketplace:Subscribe
+                Resource: '*'
+                Condition:
+                  StringEquals:
+                    aws:CalledViaLast: bedrock.amazonaws.com
+      Tags:
+        - Key: Project
+          Value: TabAPIvbeta1
+        - Key: Environment
+          Value: pilot
+
+  ScenePlannerFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: tab-recap-vbeta1-scene-planner
+      Runtime: nodejs22.x
+      Handler: bootstrap.handler
+      Role: !GetAtt ScenePlannerExecutionRole.Arn
+      Timeout: 240
+      MemorySize: 512
+      Environment:
+        Variables:
+          STORAGE_BUCKET: tab-recap-vbeta1
+          JOBS_TABLE: tab-recap-vbeta1-jobs
+          PLANNER_MODEL_ID: !Ref PlannerModelId
+      Code:
+        S3Bucket: !Ref ArtifactBucket
+        S3Key: !Ref ArtifactKey
+      Tags:
+        - Key: Project
+          Value: TabAPIvbeta1
+        - Key: Environment
+          Value: pilot
+
+  PlanningQueueEventSource:
+    Type: AWS::Lambda::EventSourceMapping
+    Properties:
+      EventSourceArn: arn:aws:sqs:ap-southeast-2:134387458447:tab-recap-vbeta1-planning
+      FunctionName: !Ref ScenePlannerFunction
+      BatchSize: 1
+      Enabled: true
+
+Outputs:
+  ScenePlannerFunctionName:
+    Description: Scene planner Lambda function name.
+    Value: !Ref ScenePlannerFunction
+  ScenePlannerFunctionArn:
+    Description: Scene planner Lambda function ARN.
+    Value: !GetAtt ScenePlannerFunction.Arn
+  ScenePlannerExecutionRoleArn:
+    Description: Scene planner Lambda execution role ARN.
+    Value: !GetAtt ScenePlannerExecutionRole.Arn
+  PlannerModelId:
+    Description: Bedrock model or inference profile ID configured for the planner.
+    Value: !Ref PlannerModelId

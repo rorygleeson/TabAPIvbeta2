@@ -1,0 +1,225 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: lambda/builder-recap/package-lock.json
+
+      - name: Install renderer dependencies
+        working-directory: lambda/builder-recap
+        run: npm ci --ignore-scripts
+
+      - name: Set up Node.js 22 for scene planner
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: lambda/scene-planner/package-lock.json
+
+      - name: Install scene planner dependencies
+        working-directory: lambda/scene-planner
+        run: npm ci --ignore-scripts
+
+      - name: Syntax check Lambda JavaScript
+        run: |
+          node --check lambda/builder-recap/index.js
+          node --check lambda/builder-recap/recap-builder.js
+          node --check lambda/builder-recap/recap-builder.test.js
+          node --check lambda/builder-recap/builder-plan-guard.js
+          node --check lambda/builder-recap/builder-plan-guard.test.js
+          node --check lambda/builder-recap/runtime/recap-runtime.js
+          node --check lambda/scene-planner/bootstrap.js
+          node --check lambda/scene-planner/optional-bedrock-guard.js
+          node --check lambda/scene-planner/optional-bedrock-guard.test.js
+          node --check lambda/scene-planner/index.js
+          node --check lambda/scene-planner/index.test.js
+          node --check lambda/scene-planner/scene1-no-spoiler.test.js
+          node --check lambda/scene-planner/scene4-narration.test.js
+          node --check lambda/scene-planner/headline-diversity.js
+          node --check lambda/scene-planner/headline-diversity.test.js
+          node --check lambda/scene-planner/headline-meaning.js
+          node --check lambda/scene-planner/headline-meaning.test.js
+          node --check lambda/scene-planner/headline-money.test.js
+          node --check lambda/scene-planner/scene8-no-spoiler.test.js
+          node --check lambda/scene-planner/time-budget.test.js
+          node --check lambda/scene-planner/process-message-headline-repair.test.js
+
+      - name: Run scene planner contract regression tests
+        run: node lambda/scene-planner/index.test.js
+
+      - name: Run Scene 1 deterministic no-spoiler regression tests
+        run: node lambda/scene-planner/scene1-no-spoiler.test.js
+
+      - name: Run Scene 4 post-midpoint narration regression tests
+        run: node lambda/scene-planner/scene4-narration.test.js
+
+      - name: Run Scene 8 headline diversity regression tests
+        run: node lambda/scene-planner/headline-diversity.test.js
+
+      - name: Run Scene 8 headline meaning regression tests
+        run: node lambda/scene-planner/headline-meaning.test.js
+
+      - name: Run Scene 8 cents-safe headline money regression tests
+        run: node lambda/scene-planner/headline-money.test.js
+
+      - name: Run Scene 8 deterministic no-spoiler regression tests
+        run: node lambda/scene-planner/scene8-no-spoiler.test.js
+
+      - name: Run planner optional LLM time-budget regression tests
+        run: node lambda/scene-planner/time-budget.test.js
+
+      - name: Run optional Bedrock hard-timeout regression tests
+        run: node lambda/scene-planner/optional-bedrock-guard.test.js
+
+      - name: Run processMessage Scene 8 headline repair orchestration tests
+        run: node lambda/scene-planner/process-message-headline-repair.test.js
+
+      - name: Run builder Scene 8 regression tests
+        run: node lambda/builder-recap/recap-builder.test.js
+
+      - name: Run builder independent planner-invariant regression tests
+        run: node lambda/builder-recap/builder-plan-guard.test.js
+
+      - name: Validate JSON files
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const path = require('path');
+
+          function walk(dir) {
+            return fs.readdirSync(dir, { withFileTypes: true }).flatMap(entry => {
+              if (entry.name === 'node_modules' || entry.name === '.git') return [];
+              const p = path.join(dir, entry.name);
+              return entry.isDirectory() ? walk(p) : [p];
+            });
+          }
+
+          const jsonFiles = walk('.').filter(p => p.endsWith('.json'));
+          for (const file of jsonFiles) {
+            JSON.parse(fs.readFileSync(file, 'utf8'));
+            console.log(`OK ${file}`);
+          }
+          NODE
+
+      - name: Verify canonical contract copies cannot drift
+        run: |
+          cmp -s contracts/bettings.schema.json lambda/builder-recap/contracts/bettings.schema.json
+          cmp -s contracts/planner-prompt.md lambda/builder-recap/contracts/planner-prompt.md
+          cmp -s contracts/runtime-contract.json lambda/builder-recap/contracts/runtime-contract.json
+          cmp -s contracts/scene-contracts.json lambda/builder-recap/contracts/scene-contracts.json
+          cmp -s contracts/scene-plan.schema.json lambda/builder-recap/contracts/scene-plan.schema.json
+          cmp -s contracts/template-contract-audit.md lambda/builder-recap/contracts/template-contract-audit.md
+
+      - name: Verify Scene 8 taxonomy and schema enum parity
+        run: |
+          node <<'NODE'
+          const contracts = require('./contracts/scene-contracts.json');
+          const schema = require('./contracts/scene-plan.schema.json');
+          const taxonomy = Object.keys(contracts.scene8HeadlineTaxonomy || {}).sort();
+          const schemaEnum = [...(schema?.$defs?.s8?.properties?.headlineCategory?.enum || [])].sort();
+          if (!taxonomy.length) throw new Error('Scene 8 headline taxonomy is empty.');
+          if (JSON.stringify(taxonomy) !== JSON.stringify(schemaEnum)) {
+            throw new Error(`Scene 8 taxonomy/schema enum drift: taxonomy=${JSON.stringify(taxonomy)} schema=${JSON.stringify(schemaEnum)}`);
+          }
+          console.log(`Scene 8 taxonomy/schema parity OK (${taxonomy.length} categories)`);
+          NODE
+
+      - name: Smoke test deployable scene planner package
+        run: |
+          rm -rf dist/scene-planner-ci-package dist/scene-planner-ci.zip
+          mkdir -p dist/scene-planner-ci-package/contracts
+          cp lambda/scene-planner/bootstrap.js dist/scene-planner-ci-package/bootstrap.js
+          cp lambda/scene-planner/optional-bedrock-guard.js dist/scene-planner-ci-package/optional-bedrock-guard.js
+          cp lambda/scene-planner/index.js dist/scene-planner-ci-package/index.js
+          cp lambda/scene-planner/headline-diversity.js dist/scene-planner-ci-package/headline-diversity.js
+          cp lambda/scene-planner/headline-meaning.js dist/scene-planner-ci-package/headline-meaning.js
+          cp lambda/scene-planner/package.json dist/scene-planner-ci-package/package.json
+          cp -R lambda/scene-planner/node_modules dist/scene-planner-ci-package/node_modules
+          cp contracts/planner-prompt.md dist/scene-planner-ci-package/contracts/planner-prompt.md
+          cp contracts/bettings.schema.json dist/scene-planner-ci-package/contracts/bettings.schema.json
+          cp contracts/scene-contracts.json dist/scene-planner-ci-package/contracts/scene-contracts.json
+          cp contracts/scene-plan.schema.json dist/scene-planner-ci-package/contracts/scene-plan.schema.json
+          cp contracts/runtime-contract.json dist/scene-planner-ci-package/contracts/runtime-contract.json
+          node --check dist/scene-planner-ci-package/bootstrap.js
+          node --check dist/scene-planner-ci-package/optional-bedrock-guard.js
+          node --check dist/scene-planner-ci-package/index.js
+          node --check dist/scene-planner-ci-package/headline-diversity.js
+          node --check dist/scene-planner-ci-package/headline-meaning.js
+          node -e "require('./dist/scene-planner-ci-package/headline-diversity.js')"
+          STORAGE_BUCKET=ci-smoke JOBS_TABLE=ci-smoke-jobs PLANNER_MODEL_ID=ci-smoke-model AWS_REGION=ap-southeast-2 AWS_EC2_METADATA_DISABLED=true node -e "const m=require('./dist/scene-planner-ci-package/bootstrap.js'); if (typeof m.handler !== 'function') throw new Error('Packaged scene planner bootstrap did not export handler'); console.log('Packaged scene planner bootstrap.js loaded successfully')"
+          cd dist/scene-planner-ci-package
+          zip -qr ../scene-planner-ci.zip .
+          cd ../..
+          unzip -l dist/scene-planner-ci.zip | grep 'bootstrap.js'
+          unzip -l dist/scene-planner-ci.zip | grep 'optional-bedrock-guard.js'
+          unzip -l dist/scene-planner-ci.zip | grep 'index.js'
+          unzip -l dist/scene-planner-ci.zip | grep 'headline-diversity.js'
+          unzip -l dist/scene-planner-ci.zip | grep 'headline-meaning.js'
+          unzip -l dist/scene-planner-ci.zip | grep 'contracts/scene-contracts.json'
+          unzip -l dist/scene-planner-ci.zip | grep 'contracts/scene-plan.schema.json'
+
+      - name: Verify required renderer baseline
+        run: |
+          test -f tests/fixtures/bettings-baseline.json
+          test -f contracts/bettings.schema.json
+          test -f contracts/planner-prompt.md
+          test -f contracts/runtime-contract.json
+          test -f contracts/scene-contracts.json
+          test -f contracts/scene-plan.schema.json
+          test -f lambda/builder-recap/index.js
+          test -f lambda/builder-recap/recap-builder.js
+          test -f lambda/builder-recap/recap-builder.test.js
+          test -f lambda/builder-recap/builder-plan-guard.js
+          test -f lambda/builder-recap/builder-plan-guard.test.js
+          test -f lambda/builder-recap/package-lock.json
+          test -f lambda/builder-recap/runtime/main-shell-template.html
+          test -f lambda/builder-recap/runtime/recap-runtime.js
+          test -f lambda/scene-planner/bootstrap.js
+          test -f lambda/scene-planner/optional-bedrock-guard.js
+          test -f lambda/scene-planner/optional-bedrock-guard.test.js
+          test -f lambda/scene-planner/index.js
+          test -f lambda/scene-planner/index.test.js
+          test -f lambda/scene-planner/scene1-no-spoiler.test.js
+          test -f lambda/scene-planner/scene4-narration.test.js
+          test -f lambda/scene-planner/headline-diversity.js
+          test -f lambda/scene-planner/headline-diversity.test.js
+          test -f lambda/scene-planner/headline-meaning.js
+          test -f lambda/scene-planner/headline-meaning.test.js
+          test -f lambda/scene-planner/headline-money.test.js
+          test -f lambda/scene-planner/scene8-no-spoiler.test.js
+          test -f lambda/scene-planner/time-budget.test.js
+          test -f lambda/scene-planner/process-message-headline-repair.test.js
+          test -f lambda/scene-planner/package.json
+          test -f lambda/scene-planner/package-lock.json
+          for n in 1 2 3 4 5 6 7 8; do
+            test -n "$(find lambda/builder-recap/templates -maxdepth 1 -type f -name "scene-${n}-*-template.html" -print -quit)"
+          done
+
+      - name: Reject obvious backup/history files
+        run: |
+          bad_files="$(find . -type d -name node_modules -prune -o -type d -name .git -prune -o -type f \( -iname '*backup*' -o -iname '*before-*' -o -iname '*BU.*' -o -iname '*BU' \) -print)"
+          if [ -n "$bad_files" ]; then
+            echo "Unexpected backup/history files found:"
+            echo "$bad_files"
+            exit 1
+          fi

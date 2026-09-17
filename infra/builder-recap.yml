@@ -1,0 +1,99 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Recap builder Lambda for the TAB Daily Recap vbeta1 pilot.
+
+Parameters:
+  ArtifactBucket:
+    Type: String
+    Description: S3 bucket containing the Lambda deployment package.
+  ArtifactKey:
+    Type: String
+    Description: S3 key of the Lambda deployment package.
+
+Resources:
+  BuilderExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: tab-recap-vbeta1-builder-recap-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: BuilderRuntime
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - sqs:ReceiveMessage
+                  - sqs:DeleteMessage
+                  - sqs:GetQueueAttributes
+                Resource: arn:aws:sqs:ap-southeast-2:134387458447:tab-recap-vbeta1-rendering
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                Resource: arn:aws:s3:::tab-recap-vbeta1/working/*
+              - Effect: Allow
+                Action:
+                  - s3:PutObject
+                Resource: arn:aws:s3:::tab-recap-vbeta1/recaps/*
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:UpdateItem
+                Resource: arn:aws:dynamodb:ap-southeast-2:134387458447:table/tab-recap-vbeta1-jobs
+      Tags:
+        - Key: Project
+          Value: TabAPIvbeta1
+        - Key: Environment
+          Value: pilot
+
+  BuilderFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: tab-recap-vbeta1-builder-recap
+      Runtime: nodejs22.x
+      Handler: index.handler
+      Role: !GetAtt BuilderExecutionRole.Arn
+      Timeout: 60
+      MemorySize: 512
+      Environment:
+        Variables:
+          STORAGE_BUCKET: tab-recap-vbeta1
+          JOBS_TABLE: tab-recap-vbeta1-jobs
+      Code:
+        S3Bucket: !Ref ArtifactBucket
+        S3Key: !Ref ArtifactKey
+      Tags:
+        - Key: Project
+          Value: TabAPIvbeta1
+        - Key: Environment
+          Value: pilot
+
+  RenderingQueueEventSource:
+    Type: AWS::Lambda::EventSourceMapping
+    Properties:
+      EventSourceArn: arn:aws:sqs:ap-southeast-2:134387458447:tab-recap-vbeta1-rendering
+      FunctionName: !Ref BuilderFunction
+      BatchSize: 1
+      Enabled: true
+
+Outputs:
+  BuilderFunctionName:
+    Description: Recap builder Lambda function name.
+    Value: !Ref BuilderFunction
+  BuilderFunctionArn:
+    Description: Recap builder Lambda function ARN.
+    Value: !GetAtt BuilderFunction.Arn
+  BuilderExecutionRoleArn:
+    Description: Recap builder Lambda execution role ARN.
+    Value: !GetAtt BuilderExecutionRole.Arn

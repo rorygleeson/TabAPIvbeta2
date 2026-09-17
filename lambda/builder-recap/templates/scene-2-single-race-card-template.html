@@ -1,0 +1,77 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no"><title>TAB Template — Scene 2</title><style>
+/* PREVIEW_ONLY_CSS */:root{--text:#f8fbff;--muted:#90a4b3;--green2:#8affb8;--red:#ff4d61;--shell-top:58px;--shell-bottom:56px}*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;background:#020609;color:var(--text);font-family:Inter,Segoe UI,Arial,sans-serif;overflow:hidden}@media(orientation:portrait){:root{--shell-top:92px;--shell-bottom:76px}}
+/* SCENE_PRODUCTION_CSS_START */
+.scene-type-2{--s2-text:#f8fbff;--s2-muted:#90a4b3;--s2-green2:#8affb8;--s2-red:#ff4d61;position:absolute;left:0;right:0;top:var(--shell-top);bottom:var(--shell-bottom);padding:36px 6vw 28px;overflow:hidden;color:var(--s2-text)}.scene-type-2 .s2-card{position:relative;width:min(760px,88vw);height:100%;margin:auto}.scene-type-2 .s2-reveal{opacity:0;transform:translateY(10px);filter:blur(4px);transition:.34s}.scene-type-2 .s2-reveal.is-visible{opacity:1;transform:none;filter:none}.scene-type-2 .s2-meeting{color:var(--s2-green2);font-weight:950;letter-spacing:.16em;text-transform:uppercase;font-size:clamp(12px,1.1vw,17px);margin-bottom:14px}.scene-type-2 .s2-personal{color:var(--s2-muted);font-weight:900;letter-spacing:.15em;text-transform:uppercase;font-size:clamp(11px,1vw,15px);margin-bottom:6px}.scene-type-2 .s2-horse{font-weight:950;letter-spacing:-.055em;text-transform:uppercase;line-height:.9;font-size:clamp(48px,7.2vw,104px);overflow-wrap:anywhere}.scene-type-2 .s2-betline{display:inline-flex;margin-top:18px;padding:10px 14px;border:1px solid rgba(255,255,255,.16);border-radius:12px;background:rgba(0,0,0,.28);font-size:clamp(18px,1.75vw,25px);font-weight:950}.scene-type-2 .s2-tension{margin-top:20px;font-size:clamp(14px,1.35vw,20px);font-weight:900;letter-spacing:.055em;text-transform:uppercase}.scene-type-2 .s2-dots{display:flex;gap:9px;align-items:center;margin-top:13px;height:12px}.scene-type-2 .s2-dot{width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,.14);transition:.2s}.scene-type-2 .s2-dot.is-on{background:var(--s2-green2);box-shadow:0 0 16px rgba(138,255,184,.55);transform:scale(1.15)}.scene-type-2 .s2-result{margin-top:12px}.scene-type-2 .s2-finish{color:var(--s2-muted);font-size:clamp(15px,1.35vw,20px);font-weight:900;letter-spacing:.12em;text-transform:uppercase}.scene-type-2 .s2-verdict{margin-top:4px;font-size:clamp(34px,4.4vw,66px);font-weight:950}.scene-type-2[data-result-kind="WIN"] .s2-verdict{color:var(--s2-green2)}.scene-type-2[data-result-kind="LOSS"] .s2-verdict{color:var(--s2-red)}.scene-type-2 .s2-reaction{margin-top:12px;font-size:clamp(18px,2vw,30px);font-weight:950}.scene-type-2 .s2-pnl{position:absolute;left:0;bottom:8px;width:min(270px,68vw);opacity:0;transform:translateY(7px)}.scene-type-2 .s2-pnl.is-visible{opacity:.94;transform:none}.scene-type-2 .s2-pnl-head{display:flex;align-items:end;justify-content:space-between;gap:10px;font-size:10px;color:var(--s2-muted);font-weight:900}.scene-type-2 .s2-pnl-value{font-size:clamp(27px,3vw,40px);font-weight:950}.scene-type-2 .s2-pnl-value.positive{color:var(--s2-green2)}.scene-type-2 .s2-pnl-value.negative{color:var(--s2-red)}.scene-type-2 .s2-pnl-value.zero{color:var(--s2-text)}.scene-type-2 .s2-pnl-track{position:relative;height:5px;border-radius:999px;background:linear-gradient(90deg,rgba(255,77,97,.62) 0 49.7%,rgba(255,255,255,.22) 49.7% 50.3%,rgba(35,230,123,.62) 50.3% 100%);margin-top:6px}.scene-type-2 .s2-pnl-needle{position:absolute;top:-5px;left:50%;width:2px;height:15px;background:#fff}.scene-type-2 .s2-pnl-zero{display:grid;grid-template-columns:1fr auto 1fr;margin-top:4px;font-size:8px;color:var(--s2-muted)}.scene-type-2 .s2-pnl-zero span:last-child{text-align:right}@media(orientation:portrait){.scene-type-2{padding:34px 7vw 20px}.scene-type-2 .s2-card{width:86vw;margin:0}.scene-type-2 .s2-horse{font-size:clamp(48px,12vw,78px)}.scene-type-2 .s2-pnl{bottom:6px;width:min(66vw,250px)}}
+
+/* LAPTOP / SHORT LANDSCAPE COMPACTION — ALIGNED WITH SCENE 5 */
+@media (orientation:landscape) and (max-height:900px){
+  .scene-type-2{
+    padding:16px 6vw 122px;
+  }
+
+  .scene-type-2 .s2-card{
+    width:min(800px,82vw);
+  }
+
+  .scene-type-2 .s2-meeting{
+    font-size:11px;
+    margin-bottom:8px;
+  }
+
+  .scene-type-2 .s2-personal{
+    font-size:11px;
+    margin-bottom:5px;
+  }
+
+  .scene-type-2 .s2-horse{
+    font-size:clamp(30px,3.2vw,44px);
+    line-height:.95;
+  }
+
+  .scene-type-2 .s2-betline{
+    margin-top:10px;
+    padding:7px 10px;
+    border-radius:10px;
+    font-size:clamp(15px,1.35vw,19px);
+  }
+
+  .scene-type-2 .s2-tension{
+    margin-top:12px;
+    font-size:clamp(12px,1.05vw,15px);
+  }
+
+  .scene-type-2 .s2-dots{
+    gap:7px;
+    margin-top:9px;
+    height:10px;
+  }
+
+  .scene-type-2 .s2-dot{
+    width:7px;
+    height:7px;
+  }
+
+  .scene-type-2 .s2-result{
+    margin-top:9px;
+  }
+
+  .scene-type-2 .s2-finish{
+    font-size:clamp(11px,1vw,14px);
+  }
+
+  .scene-type-2 .s2-verdict{
+    margin-top:2px;
+    font-size:clamp(24px,2.25vw,31px);
+    line-height:1;
+  }
+
+  .scene-type-2 .s2-reaction{
+    margin-top:7px;
+    font-size:clamp(13px,1.2vw,17px);
+    line-height:1.2;
+  }
+}
+
+/* SCENE_PRODUCTION_CSS_END */</style></head><body>
+<!-- SCENE_PRODUCTION_MARKUP_START --><main class="scene-type-2" data-scene-type="2" data-scene-instance-id="{{sceneInstanceId}}" data-result-kind="{{resultKind}}" data-fx-package="{{fxPackage}}" data-duration-ms="{{sceneDurationMs}}"><div class="s2-card"><div class="s2-meeting s2-reveal" data-reveal="race">{{meetingRace}}</div><div class="s2-personal s2-reveal" data-reveal="race">{{userName}} BACKED</div><div class="s2-horse s2-reveal" data-reveal="race">{{horseName}}</div><div class="s2-betline s2-reveal" data-reveal="bet">{{stakeDisplay}} {{betType}} @ {{oddsDisplay}}</div><div class="s2-tension s2-reveal" data-reveal="tension">{{tensionLine}}</div><div class="s2-dots" data-reveal="suspense" aria-label="Result pending"><i class="s2-dot"></i><i class="s2-dot"></i><i class="s2-dot"></i><i class="s2-dot"></i><i class="s2-dot"></i></div><div class="s2-result"><div class="s2-finish s2-reveal" data-reveal="finish">FINISHED {{finishingPositionText}}</div><div class="s2-verdict s2-reveal" data-reveal="verdict">BET {{betResult}}</div></div><div class="s2-reaction s2-reveal" data-reveal="reaction">{{reactionLine}}</div><div class="s2-pnl s2-reveal" data-reveal="pnl" data-pnl-from="{{previousRunningPnl}}" data-pnl-to="{{runningPnl}}" data-race-time="{{raceTimeDisplay}}"><div class="s2-pnl-head"><span>CURRENT P&amp;L</span><strong class="s2-pnl-value {{pnlSignClass}}">{{runningPnlDisplay}}</strong></div><div class="s2-pnl-track"><div class="s2-pnl-needle" data-role="pnl-needle"></div></div><div class="s2-pnl-zero"><span>Loss</span><span>$0</span><span>Profit</span></div></div></div></main><!-- SCENE_PRODUCTION_MARKUP_END -->
+</body></html>
