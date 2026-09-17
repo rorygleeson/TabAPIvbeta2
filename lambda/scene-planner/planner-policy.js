@@ -50,7 +50,20 @@ module.exports = {
     ],
 
     // Absolute editorial ceiling for Scene 3 replay moments in one recap.
-    maxCount: 5
+    maxCount: 5,
+
+    // Minimum replay floor after eligibility is known. Large days should retain
+    // enough actual race footage to keep the recap feeling like racing content.
+    minimumRequiredByBets: [
+      { maxBets: 40, minCount: 0 },
+      { maxBets: null, minCount: 3 }
+    ]
+  },
+
+  scene8: {
+    // Scene 8 is a high-volume compression treatment. Smaller recaps remain
+    // richer by using Scene 2 and Scene 5 only.
+    minTotalBets: 17
   },
 
   feature: {
