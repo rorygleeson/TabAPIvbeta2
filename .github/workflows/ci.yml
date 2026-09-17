@@ -29,6 +29,10 @@ jobs:
         working-directory: lambda/builder-recap
         run: npm ci --ignore-scripts
 
+      - name: Install scene planner dependencies
+        working-directory: lambda/scene-planner
+        run: npm ci --ignore-scripts
+
       - name: Syntax check builder JavaScript
         run: |
           node --check lambda/builder-recap/index.js
@@ -112,19 +116,28 @@ jobs:
       - name: Verify Kubrick v2 planner scaffold
         run: |
           test -f contracts/deterministic-scene-plan.schema.json
+          test -f lambda/scene-planner/bootstrap.js
+          test -f lambda/scene-planner/index.js
+          test -f lambda/scene-planner/package.json
+          test -f lambda/scene-planner/package-lock.json
           test -f lambda/scene-planner/planner-policy.js
           test -f lambda/scene-planner/scene-planner.js
+          node --check lambda/scene-planner/bootstrap.js
+          node --check lambda/scene-planner/index.js
           node --check lambda/scene-planner/planner-policy.js
           node --check lambda/scene-planner/scene-planner.js
           node --check lambda/scene-planner/scene-planner.test.js
           node --check lambda/scene-planner/llm-copy-input.js
           node --check lambda/scene-planner/llm-copy-input.test.js
+          node --check lambda/scene-planner/llm-copy-response.js
+          node --check lambda/scene-planner/llm-copy-response.test.js
           node --check lambda/scene-planner/llm-copy-merge.js
           node --check lambda/scene-planner/llm-copy-merge.test.js
           node lambda/scene-planner/scene-planner.test.js
           node lambda/scene-planner/llm-copy-input.test.js
+          node lambda/scene-planner/llm-copy-response.test.js
           node lambda/scene-planner/llm-copy-merge.test.js
-          echo "OK: Kubrick v2 deterministic planner, LLM copy boundary and final Builder compatibility validated."
+          echo "OK: Kubrick v2 deterministic planner, one-call LLM copy boundary, response validation and final Builder compatibility validated."
 
       - name: Reject obvious backup/history files
         run: |
