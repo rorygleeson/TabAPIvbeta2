@@ -117,8 +117,11 @@ jobs:
           node --check lambda/scene-planner/planner-policy.js
           node --check lambda/scene-planner/scene-planner.js
           node --check lambda/scene-planner/scene-planner.test.js
+          node --check lambda/scene-planner/llm-copy-input.js
+          node --check lambda/scene-planner/llm-copy-input.test.js
           node lambda/scene-planner/scene-planner.test.js
-          echo "OK: Kubrick v2 planner scaffold and regression fixtures validated."
+          node lambda/scene-planner/llm-copy-input.test.js
+          echo "OK: Kubrick v2 planner scaffold, deterministic fixtures and LLM copy-input boundary validated."
 
       - name: Reject obvious backup/history files
         run: |
