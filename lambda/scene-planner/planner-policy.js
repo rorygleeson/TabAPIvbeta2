@@ -39,8 +39,18 @@ module.exports = {
   replay: {
     enabled: true,
 
-    // Maximum number of Scene 3 replay moments in one recap.
-    maxCount: 3
+    // Bet volume sets the desired replay count. Eligible winning bets with
+    // valid HTTPS footage cap what can actually be selected.
+    minimumByBets: [
+      { maxBets: 5, minCount: 1 },
+      { maxBets: 10, minCount: 2 },
+      { maxBets: 20, minCount: 3 },
+      { maxBets: 40, minCount: 4 },
+      { maxBets: null, minCount: 5 }
+    ],
+
+    // Absolute editorial ceiling for Scene 3 replay moments in one recap.
+    maxCount: 5
   },
 
   feature: {
