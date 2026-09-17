@@ -309,7 +309,7 @@
           "maxLength": 80
         },
         "headlineCategory": {
-          "description": "Fresh LLM generation is instructed to emit this for every Scene 8. It remains schema-optional for previously stored-plan recovery and for the explicit post-validation Scene 8 quality-fallback exception defined in scene-contracts.json. Category meaning, eligibility and diversity policy are owned by scene-contracts.json.",
+          "description": "Fresh Kubrick V2 LLM copy generation emits this for every Scene 8. It remains schema-optional only for compatibility with previously stored plans. Category meaning, eligibility and diversity policy are owned by scene-contracts.json and never affect deterministic Scene 8 grouping.",
           "enum": [
             "EXPOSURE",
             "DAY_POSITION",
@@ -337,19 +337,19 @@
     }
   },
   "semanticValidation": [
-    "Planner may apply context-safe deterministic canonicalization before semantic validation. It never reorders Scene 2/5/8 primary chronology or splits/merges/moves Scene 8. When exactly one Scene 4 exists and primary coverage is canonical, planner code owns its final midpoint placement and checkpointAfterBetSequence; any LLM-supplied checkpoint value is discarded/overwritten. Builder independently repeats deterministic midpoint validation before rendering.",
+    "Deterministic planner code is the sole authority for scene structure. LLM copy merge may add only approved LLM-owned fields to the matching deterministic scenes and may not add, remove, duplicate, reorder, regroup or alter structural fields.",
     "Scene 1 first exactly once; Scene 6 second-last exactly once; Scene 7 last exactly once.",
-    "Scene 4 at most once; if present planner code places it at the actual Scene2/5/8 primary boundary minimizing abs(completed/totalBets - 0.5), earlier tie, and sets checkpointAfterBetSequence to that completed-primary sequence. If the boundary ends in Scene2 with attached Scene3, Scene4 follows that replay. Never split Scene8 for midpoint.",
+    "Scene 4 at most once; when present deterministic planner code places it at the actual Scene 2/5/8 primary boundary minimizing abs(completed/totalBets - 0.5), earlier tie, and owns checkpointAfterBetSequence. If the boundary ends in Scene 2 with attached Scene 3, Scene 4 follows that replay. Never split Scene 8 for midpoint.",
     "Every input bet sequence appears exactly once as primary coverage in Scene 2, Scene 5 or Scene 8; Scene 3 never counts.",
     "Primary coverage is ascending with no gaps, duplicates or reordering.",
     "Scene 5 contains exactly 2 or 3 consecutive ascending sequences.",
-    "Scene 8 contains exactly 4 or 5 consecutive ascending sequences and comments.length must equal betSequences.length. Fresh LLM generation is instructed to emit headlineCategory; the field remains schema-optional for stored-plan recovery and the explicit post-validation quality-fallback exception. Category meaning, eligibility and diversity policy are owned by scene-contracts.json.",
-    "Scene 8 pre-result headlines are deterministically rejected when code can mechanically prove an obvious grouped-result leak, including explicit outcome language, outcome-derived money values that are not valid pre-result facts, and explicit grouped finishing-position disclosure. Subtle semantic spoilers that cannot be proved safely by deterministic checks remain planner-prompt and live-inspection responsibilities.",
-    "Scene 3 immediately follows Scene 2 for same sequence and requires WIN + valid non-empty HTTPS replayUrl; Scene3 may not attach to Scene5 or Scene8.",
-    "Planner fields only: FACT, builder-DERIVED, CONTROLLED and RUNTIME fields are forbidden. checkpointAfterBetSequence is the sole planner-code-owned structural field and is never authoritative from LLM output.",
+    "Scene 8 contains exactly 4 or 5 consecutive ascending sequences and comments.length must equal betSequences.length. Fresh LLM copy generation emits headlineCategory; the field remains schema-optional only for compatibility with previously stored plans. Category meaning, eligibility and diversity policy are owned by scene-contracts.json.",
+    "Scene 8 pre-result headlines are deterministically rejected when code can mechanically prove an obvious grouped-result leak, including explicit outcome language, outcome-derived money values that are not valid pre-result facts, and explicit grouped finishing-position disclosure. Subtle semantic spoilers remain prompt and live-inspection responsibilities.",
+    "Scene 3 immediately follows Scene 2 for the same sequence and requires WIN plus a valid non-empty HTTPS replayUrl in bettings.json; Scene 3 may not attach to Scene 5 or Scene 8.",
+    "Final scene-plan contains only structural planner fields plus contract-declared LLM-owned fields. FACT, builder-DERIVED, CONTROLLED and RUNTIME display fields remain outside scene-plan.json.",
     "Planner and builder enforce word/character limits and factual-grounding/markup prose policy from scene-contracts.json.",
-    "Planner and builder deterministically calculate planned duration from runtime-contract.json. Conservative planned duration must not exceed the hard maximum.",
-    "Scene 8 headlineCategory meaning, eligibility and diversity are a fresh-generation quality gate. After all hard plan validation has passed, runtime may use the scene-contracts.json quality-fallback exception when the optional headline-only repair is skipped for time budget or fails validation.",
-    "Natural-language quality and any no-spoiler meaning beyond the mechanically provable Scene 8 guard remain planner-prompt responsibilities."
+    "Planner and builder deterministically calculate user-visible planned duration from runtime-contract.json. Planned duration must not exceed the hard maximum; replay metadata/play timeout allowances are runtime failure-safety behaviour, not editorial duration.",
+    "Scene 8 headlineCategory meaning, eligibility and diversity are copy-stage quality rules and never authorize structural changes.",
+    "Natural-language quality and any no-spoiler meaning beyond the mechanically provable Scene 8 guard remain copy-prompt responsibilities."
   ]
 }
