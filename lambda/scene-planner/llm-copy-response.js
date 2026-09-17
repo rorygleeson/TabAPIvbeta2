@@ -1,7 +1,13 @@
 'use strict';
 
 const ATOM_PATTERN = /\{\{([A-Z][A-Z0-9_]*)\}\}/g;
-const SENSITIVE_RAW_PATTERN = /(?:[$%@]|\d|\b(?:win|wins|winner|winners|winning|won|loss|losses|lost|lose|losing|profit|profits|return|returns|returned|stake|staked|odds|finished|finishing|first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|eleventh|twelfth|thirteenth|fourteenth|fifteenth|sixteenth|seventeenth|eighteenth|nineteenth|twentieth)\b)/iu;
+const SENSITIVE_RAW_PATTERN = /(?:[$%@]|\d|\b(?:win|wins|winner|winners|winning|won|loss|losses|lost|lose|losing|profit|profits|return|returns|returned|stake|staked|odds)\b)/iu;
+const POSITION_WORD = '(?:first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|eleventh|twelfth|thirteenth|fourteenth|fifteenth|sixteenth|seventeenth|eighteenth|nineteenth|twentieth)';
+const POSITION_CLAIM_PATTERN = new RegExp(
+  '\\b(?:finished|finishing|ran|placed|came)\\s+' + POSITION_WORD + '\\b' +
+  '|\\b(?:both|all)\\s+(?:(?:the\\s+)?(?:runners?|horses?)\\s+)?(?:finished\\s+|ran\\s+|placed\\s+|came\\s+)?' + POSITION_WORD + '\\b',
+  'iu'
+);
 
 function parseJsonObject(text) {
   const source = String(text || '').trim();
@@ -143,7 +149,7 @@ function atomsForPhase(source, phase, itemIndex) {
 
 function validateUngroundedRawText(rawText, source, label) {
   const text = String(rawText || '');
-  if (SENSITIVE_RAW_PATTERN.test(text)) {
+  if (SENSITIVE_RAW_PATTERN.test(text) || POSITION_CLAIM_PATTERN.test(text)) {
     throw new Error(label + ' contains a concrete fact outside a fact atom.');
   }
 
