@@ -1,7 +1,8 @@
 'use strict';
 
 const defaultPolicy = require('./planner-policy');
-const runtimeContract = require('../../contracts/runtime-contract.json');
+const { loadContract } = require('./contract-loader');
+const runtimeContract = loadContract('runtime-contract.json');
 
 function buildDeterministicScenePlan(bettings, options = {}) {
   const policy = options.policy || defaultPolicy;
