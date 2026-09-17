@@ -28,8 +28,6 @@
       "return": 0,
       "profitLoss": -30,
       "runningPnl": -30,
-      "sceneType": "QUICK_RESULTS",
-      "showReplay": false,
       "replayUrl": null
     },
     {
@@ -52,8 +50,6 @@
       "return": 0,
       "profitLoss": -25,
       "runningPnl": -55,
-      "sceneType": "FEATURE_LOSS",
-      "showReplay": false,
       "replayUrl": null
     },
     {
@@ -76,8 +72,6 @@
       "return": 100,
       "profitLoss": 80,
       "runningPnl": 25,
-      "sceneType": "HERO_WIN",
-      "showReplay": true,
       "replayUrl": "https://mediatabs.skyracing.com.au/Race_Replay/2026/09/20260903TOHR04_V.mp4"
     },
     {
@@ -100,8 +94,6 @@
       "return": 0,
       "profitLoss": -40,
       "runningPnl": -15,
-      "sceneType": "FEATURE_LOSS",
-      "showReplay": false,
       "replayUrl": null
     },
     {
@@ -124,8 +116,6 @@
       "return": 75,
       "profitLoss": 50,
       "runningPnl": 35,
-      "sceneType": "FEATURE_WIN",
-      "showReplay": false,
       "replayUrl": null
     },
     {
@@ -148,8 +138,6 @@
       "return": 0,
       "profitLoss": -40,
       "runningPnl": -5,
-      "sceneType": "QUICK_RESULTS",
-      "showReplay": false,
       "replayUrl": null
     },
     {
@@ -172,8 +160,6 @@
       "return": 0,
       "profitLoss": -45,
       "runningPnl": -50,
-      "sceneType": "FEATURE_LOSS",
-      "showReplay": false,
       "replayUrl": null
     },
     {
@@ -196,8 +182,6 @@
       "return": 105,
       "profitLoss": 70,
       "runningPnl": 20,
-      "sceneType": "FEATURE_WIN",
-      "showReplay": true,
       "replayUrl": "https://mediatabs.skyracing.com.au/Race_Replay/2026/09/20260903WARR01_V.mp4"
     }
   ],
