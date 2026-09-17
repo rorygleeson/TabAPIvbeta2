@@ -6,7 +6,7 @@ const {buildRecap,BuildError,__test}=require('./recap-builder');
 
 function makeBettings(total){
   let running=0;
-  const bets=Array.from({length:total},(_,i)=>{const win=i%3===0,stake=10,ret=win?25:0,profitLoss=ret-stake;running+=profitLoss;return {sequence:i+1,betTime:`2026-09-12T00:${String(i%60).padStart(2,'0')}:00+00:00`,raceTime:`2026-09-12T01:${String(i%60).padStart(2,'0')}:00+00:00`,raceId:`R${i+1}`,raceName:`Race ${i+1}`,meeting:'TEST',state:'VIC',raceNumber:(i%12)+1,runnerId:`RUN${i+1}`,runnerNumber:(i%20)+1,runnerName:`RUNNER WITH A DELIBERATELY LONG NAME ${i+1}`,betType:'WIN',stake,odds:2.5,result:win?'WIN':'LOSS',finishingPosition:win?1:4,return:ret,profitLoss,runningPnl:running,showReplay:false,replayUrl:null};});
+  const bets=Array.from({length:total},(_,i)=>{const win=i%3===0,stake=10,ret=win?25:0,profitLoss=ret-stake;running+=profitLoss;return {sequence:i+1,betTime:`2026-09-12T00:${String(i%60).padStart(2,'0')}:00+00:00`,raceTime:`2026-09-12T01:${String(i%60).padStart(2,'0')}:00+00:00`,raceId:`R${i+1}`,raceName:`Race ${i+1}`,meeting:'TEST',state:'VIC',raceNumber:(i%12)+1,runnerId:`RUN${i+1}`,runnerNumber:(i%20)+1,runnerName:`RUNNER WITH A DELIBERATELY LONG NAME ${i+1}`,betType:'WIN',stake,odds:2.5,result:win?'WIN':'LOSS',finishingPosition:win?1:4,return:ret,profitLoss,runningPnl:running,replayUrl:null};});
   const wins=bets.filter(x=>x.result==='WIN'),losses=bets.filter(x=>x.result==='LOSS');
   const bw=wins.reduce((a,b)=>(!a||b.profitLoss>a.profitLoss)?b:a,null);
   const bl=losses.reduce((a,b)=>(!a||b.profitLoss<a.profitLoss)?b:a,null);
