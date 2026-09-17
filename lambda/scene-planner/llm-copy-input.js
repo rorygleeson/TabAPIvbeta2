@@ -17,8 +17,9 @@ const FIELD_PHASES = {
 function buildLlmCopyInput(bettings, deterministicPlan, contracts = sceneContracts) {
   validateInputs(bettings, deterministicPlan, contracts);
   return {
-    copyInputVersion: '1.0',
+    copyInputVersion: '2.0',
     contractVersion: contracts.contractVersion,
+    groundingProtocol: 'FACT_ATOMS_V1',
     scenes: deterministicPlan.scenes.map((scene, sceneIndex) =>
       buildSceneCopyInput(scene, sceneIndex, bettings, contracts)
     )
@@ -88,186 +89,278 @@ function buildSceneContext(scene, bettings) {
 
 function scene1Context(bettings) {
   return {
-    preResultDayFacts: {
-      userName: bettings.user?.firstName ?? null,
-      date: bettings.day?.date ?? null,
-      totalBets: bettings.bets.length,
-      totalStaked: bettings.summary?.totalStaked ?? sum(bettings.bets.map(bet => bet.stake)),
-      meetings: unique(bettings.bets.map(bet => bet.meeting))
-    }
+    factAtomsByPhase: {
+      PRE_RESULT_DAY: preDayAtoms(bettings)
+    },
+    protectedTerms: protectedTerms(bettings, bettings.bets)
   };
 }
 
 function scene2Context(bettings, sequence) {
   const bet = betBySequence(bettings, sequence);
+  const pre = preBetAtoms(bet);
   return {
-    preResultFacts: preResultBetFacts(bet),
-    postResultFacts: postResultBetFacts(bet, previousRunningPnl(bettings, sequence))
+    factAtomsByPhase: {
+      PRE_RESULT: pre,
+      POST_RESULT: mergeAtoms(pre, postBetAtoms(bet))
+    },
+    protectedTerms: protectedTerms(bettings, [bet])
   };
 }
 
 function scene3Context(bettings, sequence) {
   const bet = betBySequence(bettings, sequence);
   return {
-    replayFacts: {
-      runnerName: bet.runnerName,
-      meeting: bet.meeting,
-      raceNumber: bet.raceNumber,
-      betType: bet.betType,
-      stake: bet.stake,
-      odds: bet.odds,
-      result: bet.result,
-      finishingPosition: bet.finishingPosition,
-      profitLoss: bet.profitLoss
-    }
+    factAtomsByPhase: {
+      POST_RESULT: mergeAtoms(preBetAtoms(bet), postBetAtoms(bet))
+    },
+    protectedTerms: protectedTerms(bettings, [bet])
   };
 }
 
 function scene4Context(bettings, checkpoint) {
   const completed = bettings.bets.filter(bet => bet.sequence <= checkpoint);
-  const future = bettings.bets.filter(bet => bet.sequence > checkpoint);
+  const future = bettings.bets.filter(bet => bet.sequence > checkpoint).slice(0, 3);
   return {
-    completedFacts: {
-      betsCompleted: completed.length,
-      totalBets: bettings.bets.length,
-      winnersSoFar: completed.filter(bet => bet.result === 'WIN').length,
-      currentRunningPnl: completed.length ? completed[completed.length - 1].runningPnl : 0,
-      bestWinSoFar: compactBestWin(completed)
+    factAtomsByPhase: {
+      POST_COMPLETED_BETS: checkpointAtoms(bettings, completed),
+      PRE_FUTURE_RESULTS: mergeAtoms(...future.map(preBetAtoms))
     },
-    upcomingFacts: future.slice(0, 3).map(preResultBetFacts)
+    protectedTerms: protectedTerms(bettings, [...completed, ...future])
   };
 }
 
 function groupedContext(bettings, sequences, scene8) {
   const bets = sequences.map(sequence => betBySequence(bettings, sequence));
-  const before = previousRunningPnl(bettings, sequences[0]);
-  const preFacts = bets.map(preResultBetFacts);
-  const postFacts = bets.map(bet => postResultBetFacts(bet, previousRunningPnl(bettings, bet.sequence)));
+  const preBlock = mergeAtoms(groupPreAtoms(bettings, bets), ...bets.map(preBetAtoms));
+  const postBlock = mergeAtoms(preBlock, groupPostAtoms(bets), ...bets.map(postBetAtoms));
 
   if (scene8) {
     return {
-      preResultBlockFacts: {
-        runningPnlBeforeBlock: before,
-        totalStake: sum(bets.map(bet => bet.stake)),
-        bets: preFacts
+      factAtomsByPhase: {
+        PRE_RESULT_BLOCK: preBlock,
+        POST_RESULT_BY_BET: bets.map(bet => mergeAtoms(preBetAtoms(bet), postBetAtoms(bet)))
       },
-      postResultFactsByBet: postFacts
+      protectedTerms: protectedTerms(bettings, bets)
     };
   }
 
   return {
-    preResultBlockFacts: {
-      runningPnlBeforeBlock: before,
-      bets: preFacts
+    factAtomsByPhase: {
+      PRE_RESULT_BLOCK: preBlock,
+      POST_RESULT_BLOCK: postBlock
     },
-    postResultBlockFacts: {
-      runningPnlAfterBlock: bets[bets.length - 1].runningPnl,
-      bets: postFacts
-    }
+    protectedTerms: protectedTerms(bettings, bets)
   };
 }
 
 function scene6Context(bettings) {
+  const options = buildStandoutOptions(bettings);
+  const optionAtoms = options.map(option => option.atoms || {});
   return {
-    daySummaryFacts: daySummaryFacts(bettings),
-    standoutOptions: buildStandoutOptions(bettings)
+    factAtomsByPhase: {
+      POST_DAY: mergeAtoms(postDayAtoms(bettings), ...optionAtoms)
+    },
+    standoutOptions: options.map(({ type, atoms }) => ({ type, factAtomIds: Object.keys(atoms || {}) })),
+    protectedTerms: protectedTerms(bettings, betsForStandoutOptions(bettings, options))
   };
 }
 
 function scene7Context(bettings) {
+  const highlights = buildFinalHighlights(bettings);
+  const highlightAtoms = highlights.map(option => option.atoms || {});
   return {
-    daySummaryFacts: daySummaryFacts(bettings),
-    availableFinalHighlights: buildFinalHighlights(bettings)
+    factAtomsByPhase: {
+      POST_DAY: mergeAtoms(postDayAtoms(bettings), ...highlightAtoms)
+    },
+    availableFinalHighlights: highlights.map(({ type, atoms }) => ({ type, factAtomIds: Object.keys(atoms || {}) })),
+    protectedTerms: protectedTerms(bettings, betsForFinalHighlights(bettings))
   };
 }
 
-function preResultBetFacts(bet) {
+function preDayAtoms(bettings) {
+  const meetings = unique(bettings.bets.map(bet => bet.meeting));
   return {
-    sequence: bet.sequence,
-    runnerName: bet.runnerName,
-    raceName: bet.raceName,
-    meeting: bet.meeting,
-    raceNumber: bet.raceNumber,
-    betType: bet.betType,
-    stake: bet.stake,
-    odds: bet.odds
+    DAY_USER: String(bettings.user?.firstName ?? ''),
+    DAY_TOTAL_BETS: countPhrase(bettings.bets.length, 'bet'),
+    DAY_TOTAL_STAKED: money(bettings.summary?.totalStaked ?? sum(bettings.bets.map(bet => bet.stake))) + ' staked',
+    DAY_MEETING_COUNT: countPhrase(meetings.length, 'meeting'),
+    DAY_MEETINGS: joinNatural(meetings)
   };
 }
 
-function postResultBetFacts(bet, runningPnlBefore) {
-  return {
-    sequence: bet.sequence,
-    runnerName: bet.runnerName,
-    result: bet.result,
-    finishingPosition: bet.finishingPosition,
-    return: bet.return,
-    profitLoss: bet.profitLoss,
-    runningPnlBefore,
-    runningPnlAfter: bet.runningPnl
-  };
-}
-
-function daySummaryFacts(bettings) {
+function postDayAtoms(bettings) {
   const summary = bettings.summary || {};
+  const raceWinners = bettings.bets.filter(bet => Number(bet.finishingPosition) === 1).length;
+  return mergeAtoms(preDayAtoms(bettings), {
+    DAY_WINNING_BETS: countPhrase(Number(summary.wins || 0), 'winning bet'),
+    DAY_LOSING_BETS: countPhrase(Number(summary.losses || 0), 'losing bet'),
+    DAY_RACE_WINNERS: countPhrase(raceWinners, 'backed runner') + ' won ' + (raceWinners === 1 ? 'its race' : 'their races'),
+    DAY_TOTAL_RETURNED: money(summary.totalReturned || 0) + ' returned',
+    DAY_FINAL_PNL: pnlPhrase(summary.finalPnl || 0, 'for the day')
+  });
+}
+
+function preBetAtoms(bet) {
+  const prefix = 'B' + bet.sequence + '_';
   return {
-    totalBets: bettings.bets.length,
-    wins: summary.wins,
-    losses: summary.losses,
-    totalStaked: summary.totalStaked,
-    totalReturned: summary.totalReturned,
-    finalPnl: summary.finalPnl
+    [prefix + 'RUNNER']: bet.runnerName,
+    [prefix + 'MEETING']: bet.meeting,
+    [prefix + 'RACE']: bet.meeting + ' Race ' + bet.raceNumber,
+    [prefix + 'RACE_NAME']: bet.raceName,
+    [prefix + 'BET_TYPE']: bet.betType + ' bet',
+    [prefix + 'STAKE']: money(bet.stake) + ' stake',
+    [prefix + 'ODDS']: formatNumber(bet.odds) + ' odds',
+    [prefix + 'BET_SETUP']: money(bet.stake) + ' ' + bet.betType + ' bet on ' + bet.runnerName + ' at ' + formatNumber(bet.odds)
   };
+}
+
+function postBetAtoms(bet) {
+  const prefix = 'B' + bet.sequence + '_';
+  const atoms = {
+    [prefix + 'FINISH']: bet.runnerName + ' finished ' + ordinal(bet.finishingPosition),
+    [prefix + 'BET_RESULT']: bet.result === 'WIN' ? 'the bet was a winning bet' : 'the bet was a losing bet',
+    [prefix + 'RETURN']: 'the bet returned ' + money(bet.return),
+    [prefix + 'PROFIT_LOSS']: betProfitLossPhrase(bet.profitLoss),
+    [prefix + 'RUNNING_PNL']: runningPnlPhrase(bet.runningPnl, 'after the bet'),
+    [prefix + 'RESULT_SUMMARY']: bet.runnerName + ' finished ' + ordinal(bet.finishingPosition) + ' and ' + betProfitLossPhrase(bet.profitLoss)
+  };
+  if (Number(bet.finishingPosition) === 1) {
+    atoms[prefix + 'RACE_WIN'] = bet.runnerName + ' won the race';
+  }
+  return atoms;
+}
+
+function groupPreAtoms(bettings, bets) {
+  const before = previousRunningPnl(bettings, bets[0].sequence);
+  const meetings = unique(bets.map(bet => bet.meeting));
+  return {
+    BLOCK_BET_COUNT: countPhrase(bets.length, 'bet') + ' in the block',
+    BLOCK_TOTAL_STAKE: money(sum(bets.map(bet => bet.stake))) + ' staked across the block',
+    BLOCK_RUNNING_PNL_BEFORE: runningPnlPhrase(before, 'before the block'),
+    BLOCK_MEETINGS: joinNatural(meetings)
+  };
+}
+
+function groupPostAtoms(bets) {
+  const pl = sum(bets.map(bet => bet.profitLoss));
+  const winningBets = bets.filter(bet => bet.result === 'WIN').length;
+  const raceWinners = bets.filter(bet => Number(bet.finishingPosition) === 1).length;
+  return {
+    BLOCK_PROFIT_LOSS: blockProfitLossPhrase(pl),
+    BLOCK_RUNNING_PNL_AFTER: runningPnlPhrase(bets[bets.length - 1].runningPnl, 'after the block'),
+    BLOCK_WINNING_BETS: countPhrase(winningBets, 'winning bet') + ' in the block',
+    BLOCK_RACE_WINNERS: countPhrase(raceWinners, 'backed runner') + ' won ' + (raceWinners === 1 ? 'its race' : 'their races') + ' in the block'
+  };
+}
+
+function checkpointAtoms(bettings, completed) {
+  const atoms = {};
+  if (!completed.length) return atoms;
+  const raceWinners = completed.filter(bet => Number(bet.finishingPosition) === 1).length;
+  const winningBets = completed.filter(bet => bet.result === 'WIN').length;
+  Object.assign(atoms, {
+    CHECKPOINT_BETS_COMPLETED: countPhrase(completed.length, 'bet') + ' completed',
+    CHECKPOINT_WINNING_BETS: countPhrase(winningBets, 'winning bet') + ' so far',
+    CHECKPOINT_RACE_WINNERS: countPhrase(raceWinners, 'backed runner') + ' won ' + (raceWinners === 1 ? 'its race' : 'their races') + ' so far',
+    CHECKPOINT_RUNNING_PNL: runningPnlPhrase(completed[completed.length - 1].runningPnl, 'at the checkpoint')
+  });
+  const best = bestPositiveWin(completed);
+  if (best) Object.assign(atoms, preBetAtoms(best), postBetAtoms(best));
+  return atoms;
 }
 
 function buildStandoutOptions(bettings) {
   const bets = bettings.bets;
   const options = [];
   const biggestWin = sequenceBet(bettings, bettings.summary?.biggestWinSequence);
-  if (biggestWin && biggestWin.profitLoss > 0) options.push({ type: 'biggestWin', facts: highlightBetFacts(biggestWin) });
+  if (biggestWin && biggestWin.profitLoss > 0) {
+    options.push({ type: 'biggestWin', atoms: highlightAtoms(biggestWin) });
+  }
   const highestOddsWinner = sequenceBet(bettings, bettings.summary?.highestOddsWinnerSequence);
-  if (highestOddsWinner) options.push({ type: 'highestOddsWinner', facts: highlightBetFacts(highestOddsWinner) });
+  if (highestOddsWinner) {
+    options.push({ type: 'highestOddsWinner', atoms: highlightAtoms(highestOddsWinner) });
+  }
   const biggestRecovery = bets.filter(bet => bet.profitLoss > 0)
     .reduce((best, bet) => !best || bet.profitLoss > best.profitLoss ? bet : best, null);
-  if (biggestRecovery) options.push({ type: 'biggestRecovery', facts: highlightBetFacts(biggestRecovery) });
+  if (biggestRecovery) {
+    options.push({ type: 'biggestRecovery', atoms: highlightAtoms(biggestRecovery) });
+  }
   const streak = longestLosingStreak(bets);
-  if (streak) options.push({ type: 'longestLosingStreak', facts: streak });
-  options.push({ type: 'strongestFinish', facts: strongestFinish(bets) });
-  options.push({ type: 'totalReturned', facts: { totalReturned: bettings.summary?.totalReturned } });
+  if (streak) {
+    options.push({
+      type: 'longestLosingStreak',
+      atoms: {
+        STANDOUT_LONGEST_LOSING_STREAK: countPhrase(streak.length, 'losing bet') + ' from bet ' + streak.startSequence + ' to bet ' + streak.endSequence
+      }
+    });
+  }
+  const finish = strongestFinish(bets);
+  options.push({
+    type: 'strongestFinish',
+    atoms: {
+      STANDOUT_STRONGEST_FINISH: 'the strongest closing stretch ran from bet ' + finish.startSequence + ' to bet ' + finish.endSequence + ' and ' + pnlPhrase(finish.netGain, 'over that stretch')
+    }
+  });
+  options.push({
+    type: 'totalReturned',
+    atoms: { DAY_TOTAL_RETURNED: money(bettings.summary?.totalReturned || 0) + ' returned' }
+  });
   return options;
 }
 
 function buildFinalHighlights(bettings) {
   const summary = bettings.summary || {};
   const highlights = [
-    { type: 'totalBets', facts: { totalBets: bettings.bets.length } },
-    { type: 'wins', facts: { wins: summary.wins } },
-    { type: 'losses', facts: { losses: summary.losses } },
-    { type: 'totalStaked', facts: { totalStaked: summary.totalStaked } },
-    { type: 'totalReturned', facts: { totalReturned: summary.totalReturned } },
-    { type: 'finalPnl', facts: { finalPnl: summary.finalPnl } }
+    { type: 'totalBets', atoms: { DAY_TOTAL_BETS: countPhrase(bettings.bets.length, 'bet') } },
+    { type: 'wins', atoms: { DAY_WINNING_BETS: countPhrase(Number(summary.wins || 0), 'winning bet') } },
+    { type: 'losses', atoms: { DAY_LOSING_BETS: countPhrase(Number(summary.losses || 0), 'losing bet') } },
+    { type: 'totalStaked', atoms: { DAY_TOTAL_STAKED: money(summary.totalStaked || 0) + ' staked' } },
+    { type: 'totalReturned', atoms: { DAY_TOTAL_RETURNED: money(summary.totalReturned || 0) + ' returned' } },
+    { type: 'finalPnl', atoms: { DAY_FINAL_PNL: pnlPhrase(summary.finalPnl || 0, 'for the day') } }
   ];
   const biggestWin = sequenceBet(bettings, summary.biggestWinSequence);
-  if (biggestWin && biggestWin.profitLoss > 0) highlights.push({ type: 'biggestWin', facts: highlightBetFacts(biggestWin) });
+  if (biggestWin && biggestWin.profitLoss > 0) {
+    highlights.push({ type: 'biggestWin', atoms: highlightAtoms(biggestWin) });
+  }
   const highestOddsWinner = sequenceBet(bettings, summary.highestOddsWinnerSequence);
-  if (highestOddsWinner) highlights.push({ type: 'highestOddsWinner', facts: highlightBetFacts(highestOddsWinner) });
+  if (highestOddsWinner) {
+    highlights.push({ type: 'highestOddsWinner', atoms: highlightAtoms(highestOddsWinner) });
+  }
   return highlights;
 }
 
-function highlightBetFacts(bet) {
-  return {
-    sequence: bet.sequence,
-    runnerName: bet.runnerName,
-    meeting: bet.meeting,
-    raceNumber: bet.raceNumber,
-    odds: bet.odds,
-    profitLoss: bet.profitLoss
-  };
+function highlightAtoms(bet) {
+  return mergeAtoms(preBetAtoms(bet), postBetAtoms(bet));
 }
 
-function compactBestWin(bets) {
-  const winner = bets.filter(bet => bet.result === 'WIN' && bet.profitLoss > 0)
-    .reduce((best, bet) => !best || bet.profitLoss > best.profitLoss ? bet : best, null);
-  return winner ? highlightBetFacts(winner) : null;
+function betsForStandoutOptions(bettings, options) {
+  const sequences = new Set();
+  for (const option of options) {
+    for (const id of Object.keys(option.atoms || {})) {
+      const match = /^B(\d+)_/.exec(id);
+      if (match) sequences.add(Number(match[1]));
+    }
+  }
+  return [...sequences].sort((a,b) => a-b).map(sequence => betBySequence(bettings, sequence));
+}
+
+function betsForFinalHighlights(bettings) {
+  const sequences = [bettings.summary?.biggestWinSequence, bettings.summary?.highestOddsWinnerSequence]
+    .filter(Number.isInteger);
+  return [...new Set(sequences)].map(sequence => betBySequence(bettings, sequence));
+}
+
+function protectedTerms(bettings, bets) {
+  return unique([
+    bettings.user?.firstName,
+    ...bets.flatMap(bet => [bet.runnerName, bet.meeting, bet.raceName])
+  ].filter(value => typeof value === 'string' && value.trim().length >= 2));
+}
+
+function bestPositiveWin(bets) {
+  return bets.filter(bet => bet.result === 'WIN' && Number(bet.profitLoss) > 0)
+    .reduce((best, bet) => !best || Number(bet.profitLoss) > Number(best.profitLoss) ? bet : best, null);
 }
 
 function longestLosingStreak(bets) {
@@ -296,6 +389,69 @@ function strongestFinish(bets) {
   return { startSequence: bets[bestStart].sequence, endSequence: bets[bets.length - 1].sequence, netGain: bestGain };
 }
 
+function betProfitLossPhrase(value) {
+  const n = Number(value);
+  if (n > 0) return 'the bet made ' + money(n) + ' profit';
+  if (n < 0) return 'the bet lost ' + money(Math.abs(n));
+  return 'the bet broke even';
+}
+
+function blockProfitLossPhrase(value) {
+  const n = Number(value);
+  if (n > 0) return 'the block made ' + money(n) + ' profit';
+  if (n < 0) return 'the block lost ' + money(Math.abs(n));
+  return 'the block broke even';
+}
+
+function pnlPhrase(value, suffix) {
+  const n = Number(value);
+  const ending = suffix ? ' ' + suffix : '';
+  if (n > 0) return money(n) + ' profit' + ending;
+  if (n < 0) return money(Math.abs(n)) + ' loss' + ending;
+  return 'break-even' + ending;
+}
+
+function runningPnlPhrase(value, suffix) {
+  const n = Number(value);
+  const ending = suffix ? ' ' + suffix : '';
+  if (n > 0) return 'running P&L was +' + money(n) + ending;
+  if (n < 0) return 'running P&L was -' + money(Math.abs(n)) + ending;
+  return 'running P&L was break-even' + ending;
+}
+
+function money(value) {
+  return '$' + formatNumber(Math.abs(Number(value || 0)));
+}
+
+function formatNumber(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return String(value);
+  return Number.isInteger(n) ? String(n) : n.toFixed(2).replace(/0+$/,'').replace(/\.$/,'');
+}
+
+function ordinal(value) {
+  const n = Number(value);
+  const mod100 = n % 100;
+  const suffix = (mod100 >= 11 && mod100 <= 13) ? 'th' : ({1:'st',2:'nd',3:'rd'}[n % 10] || 'th');
+  return n + suffix;
+}
+
+function countPhrase(count, singular) {
+  const n = Number(count);
+  return n + ' ' + singular + (n === 1 ? '' : 's');
+}
+
+function joinNatural(values) {
+  const xs = unique(values.filter(Boolean));
+  if (xs.length <= 1) return xs[0] || '';
+  if (xs.length === 2) return xs[0] + ' and ' + xs[1];
+  return xs.slice(0, -1).join(', ') + ' and ' + xs[xs.length - 1];
+}
+
+function mergeAtoms(...maps) {
+  return Object.assign({}, ...maps.filter(Boolean));
+}
+
 function previousRunningPnl(bettings, sequence) {
   return sequence <= 1 ? 0 : bettings.bets[sequence - 2].runningPnl;
 }
@@ -318,4 +474,13 @@ function sum(values) {
   return values.reduce((total, value) => total + Number(value || 0), 0);
 }
 
-module.exports = { buildLlmCopyInput, requiredLlmFields };
+module.exports = {
+  buildLlmCopyInput,
+  requiredLlmFields,
+  __test: {
+    preBetAtoms,
+    postBetAtoms,
+    postDayAtoms,
+    groupPostAtoms
+  }
+};
