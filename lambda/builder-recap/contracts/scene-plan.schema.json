@@ -175,7 +175,7 @@
     "Scene 5 contains exactly 2 or 3 consecutive ascending sequences.",
     "Scene 8 contains exactly 4 or 5 consecutive ascending sequences and comments.length must equal betSequences.length. Fresh LLM generation is instructed to emit headlineCategory; the field remains schema-optional for stored-plan recovery and the explicit post-validation quality-fallback exception. Category meaning, eligibility and diversity policy are owned by scene-contracts.json.",
     "Scene 8 pre-result headlines are deterministically rejected when code can mechanically prove an obvious grouped-result leak, including explicit outcome language, outcome-derived money values that are not valid pre-result facts, and explicit grouped finishing-position disclosure. Subtle semantic spoilers that cannot be proved safely by deterministic checks remain planner-prompt and live-inspection responsibilities.",
-    "Scene 3 immediately follows Scene 2 for same sequence and requires WIN + showReplay=true + replayUrl; Scene3 may not attach to Scene5 or Scene8.",
+    "Scene 3 immediately follows Scene 2 for same sequence and requires WIN + valid non-empty HTTPS replayUrl; Scene3 may not attach to Scene5 or Scene8.",
     "Planner fields only: FACT, builder-DERIVED, CONTROLLED and RUNTIME fields are forbidden. checkpointAfterBetSequence is the sole planner-code-owned structural field and is never authoritative from LLM output.",
     "Planner and builder enforce word/character limits and factual-grounding/markup prose policy from scene-contracts.json.",
     "Planner and builder deterministically calculate planned duration from runtime-contract.json. Conservative planned duration must not exceed the hard maximum.",
