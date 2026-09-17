@@ -1,6 +1,93 @@
 {
-  "$schema":"https://json-schema.org/draft/2020-12/schema","$id":"contracts/bettings.schema.json","title":"TAB Racing Day Bettings Input","type":"object","additionalProperties":false,"required":["schemaVersion","user","day","bets","summary"],
-  "properties":{"schemaVersion":{"const":"1.0"},"user":{"type":"object","additionalProperties":false,"required":["firstName"],"properties":{"firstName":{"type":"string","minLength":1}}},"day":{"type":"object","additionalProperties":false,"required":["date","timezone"],"properties":{"date":{"type":"string","format":"date"},"timezone":{"type":"string","minLength":1}}},"bets":{"type":"array","minItems":1,"items":{"$ref":"#/$defs/bet"}},"summary":{"$ref":"#/$defs/summary"}},
-  "$defs":{"bet":{"type":"object","additionalProperties":false,"required":["sequence","betTime","raceTime","raceId","raceName","meeting","state","raceNumber","runnerId","runnerNumber","runnerName","betType","stake","odds","result","finishingPosition","return","profitLoss","runningPnl","showReplay","replayUrl"],"properties":{"sequence":{"type":"integer","minimum":1},"betTime":{"type":"string","minLength":1},"raceTime":{"type":"string","minLength":1},"raceId":{"type":"string","minLength":1},"raceName":{"type":"string","minLength":1},"meeting":{"type":"string","minLength":1},"state":{"type":"string","minLength":1},"raceNumber":{"type":"integer","minimum":1},"runnerId":{"type":"string","minLength":1},"runnerNumber":{"type":"integer","minimum":1},"runnerName":{"type":"string","minLength":1},"betType":{"type":"string","minLength":1},"stake":{"type":"number","minimum":0},"odds":{"type":"number","exclusiveMinimum":0},"result":{"enum":["WIN","LOSS"]},"finishingPosition":{"type":"integer","minimum":1},"return":{"type":"number","minimum":0},"profitLoss":{"type":"number"},"runningPnl":{"type":"number"},"sceneType":{"type":"string","description":"Legacy/non-canonical metadata. New planner/builder MUST ignore this for canonical Scene Types 1-8."},"showReplay":{"type":"boolean"},"replayUrl":{"type":["string","null"]}}},"summary":{"type":"object","additionalProperties":false,"required":["totalBets","totalStaked","totalReturned","wins","losses","finalPnl","meetings","biggestStake","biggestWinSequence","biggestLossSequence","highestOddsWinnerSequence"],"properties":{"totalBets":{"type":"integer","minimum":1},"totalStaked":{"type":"number","minimum":0},"totalReturned":{"type":"number","minimum":0},"wins":{"type":"integer","minimum":0},"losses":{"type":"integer","minimum":0},"finalPnl":{"type":"number"},"meetings":{"type":"integer","minimum":1},"biggestStake":{"type":"number","minimum":0},"biggestWinSequence":{"type":["integer","null"],"minimum":1},"biggestLossSequence":{"type":["integer","null"],"minimum":1},"highestOddsWinnerSequence":{"type":["integer","null"],"minimum":1}}}},
-  "semanticValidation":["Use decimal arithmetic/tolerance appropriate to currency; compare money values to cents rather than raw floating-point equality.","bets[].sequence must be unique, contiguous and exactly 1..summary.totalBets, and bets must be ascending by sequence.","For every bet, profitLoss must equal return - stake.","For sequence 1, runningPnl must equal profitLoss. For every later bet, runningPnl must equal previous runningPnl + current profitLoss.","summary.totalBets=bets.length; totalStaked=sum(stake); totalReturned=sum(return); wins/losses equal result counts and sum to totalBets; finalPnl equals final runningPnl and totalReturned-totalStaked; meetings equals unique meeting count; biggestStake equals max stake.","biggestWinSequence: if there is no WIN with positive profitLoss it MUST be null; otherwise it MUST be the earliest sequence among WIN bets having maximum positive profitLoss.","biggestLossSequence: if there is no LOSS with negative profitLoss it MUST be null; otherwise it MUST be the earliest sequence among LOSS bets having minimum profitLoss (largest monetary loss).","highestOddsWinnerSequence: if there is no WIN it MUST be null; otherwise it MUST be the earliest sequence among WIN bets having maximum odds.","showReplay=true is not by itself eligibility: replay scenes additionally require result=WIN and a non-empty valid replayUrl.","bets[].sceneType is legacy metadata and must never drive canonical recap scene selection."]
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "contracts/bettings.schema.json",
+  "title": "TAB Racing Day Bettings Input",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "user", "day", "bets", "summary"],
+  "properties": {
+    "schemaVersion": { "const": "1.0" },
+    "user": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["firstName"],
+      "properties": { "firstName": { "type": "string", "minLength": 1 } }
+    },
+    "day": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["date", "timezone"],
+      "properties": {
+        "date": { "type": "string", "format": "date" },
+        "timezone": { "type": "string", "minLength": 1 }
+      }
+    },
+    "bets": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/bet" } },
+    "summary": { "$ref": "#/$defs/summary" }
+  },
+  "$defs": {
+    "bet": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sequence", "betTime", "raceTime", "raceId", "raceName", "meeting", "state", "raceNumber",
+        "runnerId", "runnerNumber", "runnerName", "betType", "stake", "odds", "result", "finishingPosition",
+        "return", "profitLoss", "runningPnl", "replayUrl"
+      ],
+      "properties": {
+        "sequence": { "type": "integer", "minimum": 1 },
+        "betTime": { "type": "string", "minLength": 1 },
+        "raceTime": { "type": "string", "minLength": 1 },
+        "raceId": { "type": "string", "minLength": 1 },
+        "raceName": { "type": "string", "minLength": 1 },
+        "meeting": { "type": "string", "minLength": 1 },
+        "state": { "type": "string", "minLength": 1 },
+        "raceNumber": { "type": "integer", "minimum": 1 },
+        "runnerId": { "type": "string", "minLength": 1 },
+        "runnerNumber": { "type": "integer", "minimum": 1 },
+        "runnerName": { "type": "string", "minLength": 1 },
+        "betType": { "type": "string", "minLength": 1 },
+        "stake": { "type": "number", "minimum": 0 },
+        "odds": { "type": "number", "exclusiveMinimum": 0 },
+        "result": { "enum": ["WIN", "LOSS"] },
+        "finishingPosition": { "type": "integer", "minimum": 1 },
+        "return": { "type": "number", "minimum": 0 },
+        "profitLoss": { "type": "number" },
+        "runningPnl": { "type": "number" },
+        "replayUrl": { "type": ["string", "null"] }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "totalBets", "totalStaked", "totalReturned", "wins", "losses", "finalPnl", "meetings",
+        "biggestStake", "biggestWinSequence", "biggestLossSequence", "highestOddsWinnerSequence"
+      ],
+      "properties": {
+        "totalBets": { "type": "integer", "minimum": 1 },
+        "totalStaked": { "type": "number", "minimum": 0 },
+        "totalReturned": { "type": "number", "minimum": 0 },
+        "wins": { "type": "integer", "minimum": 0 },
+        "losses": { "type": "integer", "minimum": 0 },
+        "finalPnl": { "type": "number" },
+        "meetings": { "type": "integer", "minimum": 1 },
+        "biggestStake": { "type": "number", "minimum": 0 },
+        "biggestWinSequence": { "type": ["integer", "null"], "minimum": 1 },
+        "biggestLossSequence": { "type": ["integer", "null"], "minimum": 1 },
+        "highestOddsWinnerSequence": { "type": ["integer", "null"], "minimum": 1 }
+      }
+    }
+  },
+  "semanticValidation": [
+    "Use decimal arithmetic/tolerance appropriate to currency; compare money values to cents rather than raw floating-point equality.",
+    "bets[].sequence must be unique, contiguous and exactly 1..summary.totalBets, and bets must be ascending by sequence.",
+    "For every bet, profitLoss must equal return - stake.",
+    "For sequence 1, runningPnl must equal profitLoss. For every later bet, runningPnl must equal previous runningPnl + current profitLoss.",
+    "summary.totalBets=bets.length; totalStaked=sum(stake); totalReturned=sum(return); wins/losses equal result counts and sum to totalBets; finalPnl equals final runningPnl and totalReturned-totalStaked; meetings equals unique meeting count; biggestStake equals max stake.",
+    "biggestWinSequence: if there is no WIN with positive profitLoss it MUST be null; otherwise it MUST be the earliest sequence among WIN bets having maximum positive profitLoss.",
+    "biggestLossSequence: if there is no LOSS with negative profitLoss it MUST be null; otherwise it MUST be the earliest sequence among LOSS bets having minimum profitLoss (largest monetary loss).",
+    "highestOddsWinnerSequence: if there is no WIN it MUST be null; otherwise it MUST be the earliest sequence among WIN bets having maximum odds.",
+    "Replay availability is represented only by replayUrl. A replayUrl must be a valid non-empty HTTPS URL to be available; null means unavailable. Replay selection is owned by Kubrick, not by canonical input."
+  ]
 }
