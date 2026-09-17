@@ -27,7 +27,7 @@
       "top": "--shell-top",
       "bottom": "--shell-bottom"
     },
-    "headerText": "TAB \u2022 YOUR RACING DAY",
+    "headerText": "TAB • YOUR RACING DAY",
     "hud": "play/pause button + scene progress",
     "sceneTransition": {
       "type": "crossfade",
@@ -228,7 +228,7 @@
     }
   },
   "formatting": {
-    "currency": "AUD $ prefix; no unnecessary .00; positive P&L +$; negative \u2212$; zero $0",
+    "currency": "AUD $ prefix; no unnecessary .00; positive P&L +$; negative −$; zero $0",
     "odds": "no unnecessary trailing zero",
     "pnlSignClasses": [
       "positive",
@@ -285,8 +285,8 @@
       }
     ],
     "priority": "Exact chronological coverage and factual correctness always outrank duration targets. Never drop, duplicate, reorder or pad bets merely to hit a target.",
-    "hardMaxBasis": "Conservative deterministic upper-bound planning calculation includes scene durations, scene transitions, Scene3 plannedPlaybackMs + exitFadeMs, and Scene3 metadata/play timeout allowances. Network/browser behaviour outside declared runtime timeouts is not claimed.",
-    "feasibility": "Before LLM generation the planner computes the minimum legal duration using Scene2/5/8 group options. If even the minimum exceeds hardMaxSeconds, fail before generation."
+    "hardMaxBasis": "The 300-second hard maximum applies to the deterministic user-visible planned timeline: scene durations, scene transitions, and Scene3 plannedPlaybackMs + exitFadeMs. Scene3 metadata/play timeout allowances are runtime failure-safety behaviour and are tracked conservatively but do not consume editorial duration budget.",
+    "feasibility": "Before LLM copy generation the deterministic planner must produce a legal structural plan whose user-visible planned duration does not exceed hardMaxSeconds. Exact chronological coverage and factual correctness remain mandatory."
   },
   "scene8": {
     "layout": "Compact horizontal result strips with substantially less vertical weight than Scene5. Two to five rows must fit without scrolling or clipping, including mobile portrait. Runner name, result and per-bet P&L are critical and must not be ellipsized.",
