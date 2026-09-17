@@ -40,9 +40,28 @@ const missing = goodResponse();
 delete missing.scenes[0].openingTeaser;
 assert.throws(() => validateCopyResponse(input, missing), /missing field openingTeaser/);
 
-const tooLong = goodResponse();
-tooLong.scenes[0].openingTeaser = 'one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen';
-assert.throws(() => validateCopyResponse(input, tooLong), /maxWords/);
+const wordTargetOvershoot = goodResponse();
+wordTargetOvershoot.scenes[0].openingTeaser = 'one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen';
+assert.doesNotThrow(() => validateCopyResponse(input, wordTargetOvershoot));
+
+const replayIndex = input.scenes.findIndex(scene => scene.sceneType === 3);
+assert.ok(replayIndex >= 0, '8-bet fixture must contain a replay scene');
+
+const withinCharTolerance = goodResponse();
+withinCharTolerance.scenes[replayIndex].replayLabel = 'x'.repeat(71);
+assert.doesNotThrow(() => validateCopyResponse(input, withinCharTolerance));
+
+const overCharTolerance = goodResponse();
+overCharTolerance.scenes[replayIndex].replayLabel = 'x'.repeat(72);
+assert.throws(() => validateCopyResponse(input, overCharTolerance), /hard maxChars tolerance/);
+
+const withinItemCharTolerance = goodResponse();
+withinItemCharTolerance.scenes[replayIndex].replayComments[0] = 'x'.repeat(71);
+assert.doesNotThrow(() => validateCopyResponse(input, withinItemCharTolerance));
+
+const overItemCharTolerance = goodResponse();
+overItemCharTolerance.scenes[replayIndex].replayComments[0] = 'x'.repeat(72);
+assert.throws(() => validateCopyResponse(input, overItemCharTolerance), /hard itemMaxChars tolerance/);
 
 const badIndex = goodResponse();
 badIndex.scenes[1].sceneIndex = 99;
