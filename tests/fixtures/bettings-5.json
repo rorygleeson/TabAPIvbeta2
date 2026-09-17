@@ -28,8 +28,6 @@
       "return": 0.0,
       "profitLoss": -20.0,
       "runningPnl": -20.0,
-      "sceneType": "QUICK_RESULTS",
-      "showReplay": false,
       "replayUrl": null
     },
     {
@@ -52,8 +50,6 @@
       "return": 60.0,
       "profitLoss": 35.0,
       "runningPnl": 15.0,
-      "sceneType": "FEATURE_WIN",
-      "showReplay": false,
       "replayUrl": null
     },
     {
@@ -76,8 +72,6 @@
       "return": 0.0,
       "profitLoss": -30.0,
       "runningPnl": -15.0,
-      "sceneType": "QUICK_RESULTS",
-      "showReplay": false,
       "replayUrl": null
     },
     {
@@ -100,8 +94,6 @@
       "return": 0.0,
       "profitLoss": -35.0,
       "runningPnl": -50.0,
-      "sceneType": "QUICK_RESULTS",
-      "showReplay": false,
       "replayUrl": null
     },
     {
@@ -124,8 +116,6 @@
       "return": 72.0,
       "profitLoss": 32.0,
       "runningPnl": -18.0,
-      "sceneType": "FEATURE_WIN",
-      "showReplay": false,
       "replayUrl": null
     }
   ],
