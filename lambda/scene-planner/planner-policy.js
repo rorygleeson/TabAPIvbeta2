@@ -54,8 +54,14 @@ module.exports = {
   },
 
   feature: {
-    // Prevent very large betting days from becoming dominated by Scene 2 moments.
-    maxScene2Count: 8
+    // Replay-backed Scene 2s are mandatory. This table limits only additional
+    // non-replay Scene 2 moments selected for editorial importance.
+    extraScene2ByBets: [
+      { maxBets: 10, maxExtra: 4 },
+      { maxBets: 20, maxExtra: 3 },
+      { maxBets: 40, maxExtra: 2 },
+      { maxBets: null, maxExtra: 1 }
+    ]
   },
 
   scoring: {
