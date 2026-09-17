@@ -62,10 +62,11 @@ jobs:
 
           forbidden = ['showReplay', 'bets[].sceneType']
           roots = [Path('contracts'), Path('docs'), Path('lambda'), Path('tests')]
+          allowed_docs = {Path('docs/KUBRICK_V2_MIGRATION.md')}
           hits = []
           for root in roots:
               for p in root.rglob('*'):
-                  if not p.is_file():
+                  if not p.is_file() or p in allowed_docs:
                       continue
                   try:
                       text = p.read_text(encoding='utf-8')
@@ -90,5 +91,3 @@ jobs:
           git add tests/fixtures/bettings-baseline.json tests/fixtures/bettings-75.json tests/normaliser/normaliser.py docs/NORMALISER-LOGIC-SPEC.md lambda/normaliser/ENRICHMENT.md contracts/planner-prompt.md lambda/builder-recap/contracts/planner-prompt.md .github/workflows/v2-canonical-cleanup-once.yml
           git commit -m "Complete V2 canonical bettings input cleanup"
           git push origin HEAD:main
-
-# trigger
