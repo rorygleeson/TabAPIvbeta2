@@ -119,9 +119,12 @@ jobs:
           node --check lambda/scene-planner/scene-planner.test.js
           node --check lambda/scene-planner/llm-copy-input.js
           node --check lambda/scene-planner/llm-copy-input.test.js
+          node --check lambda/scene-planner/llm-copy-merge.js
+          node --check lambda/scene-planner/llm-copy-merge.test.js
           node lambda/scene-planner/scene-planner.test.js
           node lambda/scene-planner/llm-copy-input.test.js
-          echo "OK: Kubrick v2 planner scaffold, deterministic fixtures and LLM copy-input boundary validated."
+          node lambda/scene-planner/llm-copy-merge.test.js
+          echo "OK: Kubrick v2 deterministic planner, LLM copy boundary and final Builder compatibility validated."
 
       - name: Reject obvious backup/history files
         run: |
