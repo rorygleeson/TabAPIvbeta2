@@ -17,14 +17,30 @@
       "minItems": 4,
       "items": {
         "oneOf": [
-          { "$ref": "#/$defs/s1" },
-          { "$ref": "#/$defs/s2" },
-          { "$ref": "#/$defs/s3" },
-          { "$ref": "#/$defs/s4" },
-          { "$ref": "#/$defs/s5" },
-          { "$ref": "#/$defs/s6" },
-          { "$ref": "#/$defs/s7" },
-          { "$ref": "#/$defs/s8" }
+          {
+            "$ref": "#/$defs/s1"
+          },
+          {
+            "$ref": "#/$defs/s2"
+          },
+          {
+            "$ref": "#/$defs/s3"
+          },
+          {
+            "$ref": "#/$defs/s4"
+          },
+          {
+            "$ref": "#/$defs/s5"
+          },
+          {
+            "$ref": "#/$defs/s6"
+          },
+          {
+            "$ref": "#/$defs/s7"
+          },
+          {
+            "$ref": "#/$defs/s8"
+          }
         ]
       }
     }
@@ -33,115 +49,265 @@
     "s1": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["sceneType", "openingTeaser"],
+      "required": [
+        "sceneType",
+        "openingTeaser"
+      ],
       "properties": {
-        "sceneType": { "const": 1 },
-        "openingTeaser": { "type": "string", "pattern": "\\S", "maxLength": 160 }
+        "sceneType": {
+          "const": 1
+        },
+        "openingTeaser": {
+          "type": "string",
+          "pattern": "\\S",
+          "maxLength": 160
+        }
       }
     },
     "s2": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["sceneType", "betSequence", "tensionLine", "reactionLine"],
+      "required": [
+        "sceneType",
+        "betSequence",
+        "tensionLine",
+        "reactionLine"
+      ],
       "properties": {
-        "sceneType": { "const": 2 },
-        "betSequence": { "type": "integer", "minimum": 1 },
-        "tensionLine": { "type": "string", "pattern": "\\S", "maxLength": 120 },
-        "reactionLine": { "type": "string", "pattern": "\\S", "maxLength": 120 }
+        "sceneType": {
+          "const": 2
+        },
+        "betSequence": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "tensionLine": {
+          "type": "string",
+          "pattern": "\\S",
+          "maxLength": 120
+        },
+        "reactionLine": {
+          "type": "string",
+          "pattern": "\\S",
+          "maxLength": 120
+        }
       }
     },
     "s3": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["sceneType", "betSequence", "replayLabel", "replayComments"],
+      "required": [
+        "sceneType",
+        "betSequence",
+        "replayLabel",
+        "replayComments"
+      ],
       "properties": {
-        "sceneType": { "const": 3 },
-        "betSequence": { "type": "integer", "minimum": 1 },
-        "replayLabel": { "type": "string", "pattern": "\\S", "maxLength": 64 },
+        "sceneType": {
+          "const": 3
+        },
+        "betSequence": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "replayLabel": {
+          "type": "string",
+          "pattern": "\\S",
+          "maxLength": 64
+        },
         "replayComments": {
           "type": "array",
           "minItems": 2,
           "maxItems": 4,
-          "items": { "type": "string", "pattern": "\\S", "maxLength": 64 }
+          "items": {
+            "type": "string",
+            "pattern": "\\S",
+            "maxLength": 64
+          }
         }
       }
     },
     "s4": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["sceneType", "lookingBackStory", "lookingAheadTeaser"],
+      "required": [
+        "sceneType",
+        "lookingBackStory",
+        "lookingAheadTeaser"
+      ],
       "properties": {
-        "sceneType": { "const": 4 },
-        "checkpointAfterBetSequence": { "type": "integer", "minimum": 1 },
-        "lookingBackStory": { "type": "string", "pattern": "\\S", "maxLength": 220 },
-        "lookingAheadTeaser": { "type": "string", "pattern": "\\S", "maxLength": 220 }
+        "sceneType": {
+          "const": 4
+        },
+        "checkpointAfterBetSequence": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "lookingBackStory": {
+          "type": "string",
+          "pattern": "\\S",
+          "maxLength": 220
+        },
+        "lookingAheadTeaser": {
+          "type": "string",
+          "pattern": "\\S",
+          "maxLength": 220
+        }
       }
     },
     "s5": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["sceneType", "betSequences", "setupKicker", "setupHeadline", "payoffHeadline", "contextLine"],
+      "required": [
+        "sceneType",
+        "betSequences",
+        "setupKicker",
+        "setupHeadline",
+        "payoffHeadline",
+        "contextLine"
+      ],
       "properties": {
-        "sceneType": { "const": 5 },
+        "sceneType": {
+          "const": 5
+        },
         "betSequences": {
           "type": "array",
           "minItems": 2,
           "maxItems": 3,
           "uniqueItems": true,
-          "items": { "type": "integer", "minimum": 1 }
+          "items": {
+            "type": "integer",
+            "minimum": 1
+          }
         },
-        "setupKicker": { "type": "string", "pattern": "\\S", "maxLength": 100 },
-        "setupHeadline": { "type": "string", "pattern": "\\S", "maxLength": 100 },
-        "payoffHeadline": { "type": "string", "pattern": "\\S", "maxLength": 110 },
-        "contextLine": { "type": "string", "pattern": "\\S", "maxLength": 220 }
+        "setupKicker": {
+          "type": "string",
+          "pattern": "\\S",
+          "maxLength": 100
+        },
+        "setupHeadline": {
+          "type": "string",
+          "pattern": "\\S",
+          "maxLength": 100
+        },
+        "payoffHeadline": {
+          "type": "string",
+          "pattern": "\\S",
+          "maxLength": 110
+        },
+        "contextLine": {
+          "type": "string",
+          "pattern": "\\S",
+          "maxLength": 220
+        }
       }
     },
     "s6": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["sceneType", "dayVerdict", "standoutHighlightType", "standoutCopy"],
+      "required": [
+        "sceneType",
+        "dayVerdict",
+        "standoutHighlightType",
+        "standoutCopy"
+      ],
       "properties": {
-        "sceneType": { "const": 6 },
-        "dayVerdict": { "type": "string", "pattern": "\\S", "maxLength": 220 },
-        "standoutHighlightType": {
-          "enum": ["biggestWin", "highestOddsWinner", "biggestRecovery", "longestLosingStreak", "strongestFinish", "totalReturned"]
+        "sceneType": {
+          "const": 6
         },
-        "standoutCopy": { "type": "string", "pattern": "\\S", "maxLength": 220 }
+        "dayVerdict": {
+          "type": "string",
+          "pattern": "\\S",
+          "maxLength": 220
+        },
+        "standoutHighlightType": {
+          "enum": [
+            "biggestWin",
+            "highestOddsWinner",
+            "biggestRecovery",
+            "longestLosingStreak",
+            "strongestFinish",
+            "totalReturned"
+          ]
+        },
+        "standoutCopy": {
+          "type": "string",
+          "pattern": "\\S",
+          "maxLength": 220
+        }
       }
     },
     "s7": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["sceneType", "selectedFinalHighlights", "finalSummary", "shareCaption"],
+      "required": [
+        "sceneType",
+        "selectedFinalHighlights",
+        "finalSummary",
+        "shareCaption"
+      ],
       "properties": {
-        "sceneType": { "const": 7 },
+        "sceneType": {
+          "const": 7
+        },
         "selectedFinalHighlights": {
           "type": "array",
           "minItems": 3,
           "maxItems": 4,
           "uniqueItems": true,
           "items": {
-            "enum": ["totalBets", "wins", "losses", "totalStaked", "totalReturned", "finalPnl", "biggestWin", "highestOddsWinner"]
+            "enum": [
+              "totalBets",
+              "wins",
+              "losses",
+              "totalStaked",
+              "totalReturned",
+              "finalPnl",
+              "biggestWin",
+              "highestOddsWinner"
+            ]
           }
         },
-        "finalSummary": { "type": "string", "pattern": "\\S", "maxLength": 240 },
-        "shareCaption": { "type": "string", "pattern": "\\S", "maxLength": 280 }
+        "finalSummary": {
+          "type": "string",
+          "pattern": "\\S",
+          "maxLength": 240
+        },
+        "shareCaption": {
+          "type": "string",
+          "pattern": "\\S",
+          "maxLength": 280
+        }
       }
     },
     "s8": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["sceneType", "betSequences", "headline", "comments"],
+      "required": [
+        "sceneType",
+        "betSequences",
+        "headline",
+        "comments"
+      ],
       "properties": {
-        "sceneType": { "const": 8 },
+        "sceneType": {
+          "const": 8
+        },
         "betSequences": {
           "type": "array",
           "minItems": 4,
           "maxItems": 5,
           "uniqueItems": true,
-          "items": { "type": "integer", "minimum": 1 }
+          "items": {
+            "type": "integer",
+            "minimum": 1
+          }
         },
-        "headline": { "type": "string", "pattern": "\\S", "maxLength": 80 },
+        "headline": {
+          "type": "string",
+          "pattern": "\\S",
+          "maxLength": 80
+        },
         "headlineCategory": {
           "description": "Fresh LLM generation is instructed to emit this for every Scene 8. It remains schema-optional for previously stored-plan recovery and for the explicit post-validation Scene 8 quality-fallback exception defined in scene-contracts.json. Category meaning, eligibility and diversity policy are owned by scene-contracts.json.",
           "enum": [
@@ -161,7 +327,11 @@
           "type": "array",
           "minItems": 4,
           "maxItems": 5,
-          "items": { "type": "string", "pattern": "\\S", "maxLength": 64 }
+          "items": {
+            "type": "string",
+            "pattern": "\\S",
+            "maxLength": 64
+          }
         }
       }
     }
