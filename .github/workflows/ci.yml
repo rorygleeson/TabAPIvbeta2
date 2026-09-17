@@ -109,13 +109,14 @@ jobs:
             test -n "$(find lambda/builder-recap/templates -maxdepth 1 -type f -name "scene-${n}-*-template.html" -print -quit)"
           done
 
-      - name: Confirm legacy scene planner is absent during v2 rewrite
+      - name: Verify Kubrick v2 planner scaffold
         run: |
-          if [ -d lambda/scene-planner ]; then
-            echo "Legacy lambda/scene-planner directory must not be restored during Kubrick v2 rewrite."
-            exit 1
-          fi
-          echo "OK: legacy scene planner is absent."
+          test -f contracts/deterministic-scene-plan.schema.json
+          test -f lambda/scene-planner/planner-policy.js
+          test -f lambda/scene-planner/scene-planner.js
+          node --check lambda/scene-planner/planner-policy.js
+          node --check lambda/scene-planner/scene-planner.js
+          echo "OK: Kubrick v2 planner scaffold present and syntactically valid."
 
       - name: Reject obvious backup/history files
         run: |
