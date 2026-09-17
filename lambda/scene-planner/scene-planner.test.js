@@ -69,10 +69,29 @@ function assertCoreInvariants(bettings, plan) {
   }
 
   const targetReplayCount = calculateDesiredReplayCount(totalBets, policy.replay);
+  const actualReplayCount = replaySequences(scenes).length;
   assert.ok(
-    replaySequences(scenes).length <= targetReplayCount,
+    actualReplayCount <= targetReplayCount,
     `${totalBets}-bet fixture must not exceed replay target`
   );
+
+  if (totalBets <= 16) {
+    assert.strictEqual(
+      scenes.some(scene => scene.sceneType === 8),
+      false,
+      `${totalBets}-bet fixture must not use Scene 8`
+    );
+  }
+
+  if (totalBets > 40) {
+    const eligibleReplayCount = bettings.bets.filter(
+      bet => bet.result === 'WIN' && /^https:\/\//.test(bet.replayUrl || '')
+    ).length;
+    assert.ok(
+      actualReplayCount >= Math.min(3, eligibleReplayCount),
+      `${totalBets}-bet fixture must retain at least three eligible replays`
+    );
+  }
 
   const scene4 = scenes.find(scene => scene.sceneType === 4);
   if (totalBets < policy.midpoint.minBets) {
