@@ -354,11 +354,11 @@ PROVEN:
 - `KUBRICK-ARCHITECTURE-GUIDE.md` rewritten for the deterministic V2 model
 - CI updated so the migration baseline passes without requiring the deleted old planner
 - existing Builder/downstream code retained
+- minimal canonical `bettings.json` cleanup completed: `bets[].sceneType` and `bets[].showReplay` removed from live producers, consumers, schemas and test fixtures
 
 IN PROGRESS:
 
 - deterministic structure policy design
-- minimal `bettings.json` schema change
 - fresh Kubrick V2 implementation
 
 NOT YET BUILT:
