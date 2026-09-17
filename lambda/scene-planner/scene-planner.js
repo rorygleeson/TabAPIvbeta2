@@ -1,40 +1,77 @@
 'use strict';
 
 const defaultPolicy = require('./planner-policy');
+const runtimeContract = require('../../contracts/runtime-contract.json');
 
-/**
- * Build the deterministic structural scene plan.
- *
- * Final intended responsibility:
- * - consume canonical bettings.json
- * - derive deterministic planning facts
- * - calculate the target duration
- * - score bets for editorial attention
- * - allocate primary coverage across Scene 2 / 5 / 8
- * - attach eligible Scene 3 replays
- * - place optional Scene 4 midpoint
- * - validate exact coverage, chronology and duration
- * - return the slim deterministicScenePlan artifact
- *
- * No LLM copy generation belongs in this function.
- */
 function buildDeterministicScenePlan(bettings, options = {}) {
   const policy = options.policy || defaultPolicy;
+  const runtime = options.runtimeContract || runtimeContract;
 
   validatePlannerInput(bettings, policy);
 
-  const facts = derivePlannerFacts(bettings);
+  const facts = derivePlannerFacts(bettings, policy);
   const targetDurationSeconds = calculateTargetDurationSeconds(
     facts.totalBets,
     policy.duration.targets
   );
 
-  // Structural scene allocation is deliberately implemented in the next step.
-  // Failing explicitly prevents this scaffold from producing a bogus artifact.
-  throw new Error(
-    `Deterministic scene allocation is not implemented yet. ` +
-    `Input has ${facts.totalBets} bets; target duration is ${targetDurationSeconds}s.`
+  const desiredReplayCount = calculateDesiredReplayCount(facts.totalBets, policy.replay);
+  const eligibleReplayBets = facts.bets
+    .filter(isReplayEligible)
+    .sort((a, b) => scoreBet(b, facts, policy) - scoreBet(a, facts, policy) || a.sequence - b.sequence);
+
+  const maximumReplayCount = Math.min(
+    desiredReplayCount,
+    eligibleReplayBets.length,
+    policy.replay.maxCount
   );
+
+  for (let replayCount = maximumReplayCount; replayCount >= 0; replayCount -= 1) {
+    const replaySequences = new Set(
+      eligibleReplayBets.slice(0, replayCount).map(bet => bet.sequence)
+    );
+
+    const minimumFeaturedCount = Math.max(1, replaySequences.size);
+    const maximumFeaturedCount = Math.min(policy.feature.maxScene2Count, facts.totalBets);
+    let bestCandidate = null;
+
+    for (let featuredCount = minimumFeaturedCount; featuredCount <= maximumFeaturedCount; featuredCount += 1) {
+      const featuredSequences = selectFeaturedSequences(
+        facts,
+        policy,
+        replaySequences,
+        featuredCount
+      );
+
+      const scenes = buildScenes(facts, policy, featuredSequences, replaySequences);
+      const duration = calculatePlanDurationSeconds(scenes, runtime);
+      const candidate = {
+        scenes,
+        plannedSeconds: duration.plannedSeconds,
+        conservativeSeconds: duration.conservativeSeconds,
+        distanceFromTarget: Math.abs(duration.plannedSeconds - targetDurationSeconds)
+      };
+
+      if (candidate.conservativeSeconds > runtime.durationPolicy.hardMaxSeconds) {
+        continue;
+      }
+
+      if (!bestCandidate || isBetterCandidate(candidate, bestCandidate)) {
+        bestCandidate = candidate;
+      }
+    }
+
+    if (bestCandidate) {
+      validateDeterministicPlan(bestCandidate.scenes, facts, replaySequences);
+      return {
+        artifactType: 'deterministicScenePlan',
+        artifactVersion: '1.0',
+        scenes: bestCandidate.scenes
+      };
+    }
+  }
+
+  throw new Error('Unable to build a valid deterministic scene plan within the runtime hard maximum.');
 }
 
 function validatePlannerInput(bettings, policy) {
@@ -58,12 +95,19 @@ function validatePlannerInput(bettings, policy) {
   if (!policy || !policy.duration || !Array.isArray(policy.duration.targets)) {
     throw new TypeError('planner policy duration.targets is required.');
   }
+
+  if (!policy.replay || !Array.isArray(policy.replay.minimumByBets)) {
+    throw new TypeError('planner policy replay.minimumByBets is required.');
+  }
 }
 
-function derivePlannerFacts(bettings) {
+function derivePlannerFacts(bettings, policy) {
+  const bets = bettings.bets;
   return {
-    totalBets: bettings.bets.length,
-    bets: bettings.bets
+    totalBets: bets.length,
+    bets,
+    summary: bettings.summary || {},
+    policy
   };
 }
 
@@ -93,15 +137,255 @@ function calculateTargetDurationSeconds(totalBets, targets) {
 
     const lower = points[i - 1];
     const ratio = (totalBets - lower.bets) / (upper.bets - lower.bets);
-    const interpolated = lower.seconds + ratio * (upper.seconds - lower.seconds);
-
-    return Math.round(interpolated);
+    return Math.round(lower.seconds + ratio * (upper.seconds - lower.seconds));
   }
 
   throw new Error('Unable to interpolate target duration.');
 }
 
+function calculateDesiredReplayCount(totalBets, replayPolicy) {
+  if (!replayPolicy.enabled) return 0;
+
+  const rule = replayPolicy.minimumByBets.find(item =>
+    item.maxBets === null || totalBets <= item.maxBets
+  );
+
+  return rule ? Math.min(rule.minCount, replayPolicy.maxCount) : 0;
+}
+
+function isReplayEligible(bet) {
+  return bet.result === 'WIN' && isHttpsUrl(bet.replayUrl);
+}
+
+function isHttpsUrl(value) {
+  if (typeof value !== 'string' || value.length === 0) return false;
+  try {
+    return new URL(value).protocol === 'https:';
+  } catch (_) {
+    return false;
+  }
+}
+
+function scoreBet(bet, facts, policy) {
+  const weights = policy.scoring;
+  const previousPnl = bet.sequence === 1 ? 0 : facts.bets[bet.sequence - 2].runningPnl;
+  let score = 0;
+
+  if (bet.sequence === facts.summary.biggestWinSequence) score += weights.biggestWin;
+  if (bet.sequence === facts.summary.biggestLossSequence) score += weights.biggestLoss;
+  if (bet.sequence === facts.summary.highestOddsWinnerSequence) score += weights.highestOddsWinner;
+  if (previousPnl <= 0 && bet.runningPnl > 0) score += weights.pnlCrossesIntoProfit;
+  if (previousPnl >= 0 && bet.runningPnl < 0) score += weights.pnlCrossesIntoLoss;
+  if (bet.profitLoss > 0) score += weights.positivePnlSwing;
+  if (bet.profitLoss < 0) score += weights.negativePnlSwing;
+  if (bet.result === 'WIN') score += weights.win;
+  if (isHttpsUrl(bet.replayUrl)) score += weights.replayAvailable;
+  if (bet.sequence === 1) score += weights.firstBet;
+  if (bet.sequence === facts.totalBets) score += weights.lastBet;
+
+  return score;
+}
+
+function selectFeaturedSequences(facts, policy, requiredSequences, targetCount) {
+  const selected = new Set(requiredSequences);
+  const ranked = facts.bets
+    .slice()
+    .sort((a, b) => scoreBet(b, facts, policy) - scoreBet(a, facts, policy) || a.sequence - b.sequence);
+
+  for (const bet of ranked) {
+    if (selected.size >= targetCount) break;
+    selected.add(bet.sequence);
+  }
+
+  return selected;
+}
+
+function buildScenes(facts, policy, featuredSequences, replaySequences) {
+  const primaryScenes = [];
+  let sequence = 1;
+
+  while (sequence <= facts.totalBets) {
+    if (featuredSequences.has(sequence)) {
+      primaryScenes.push({ sceneType: 2, betSequence: sequence });
+      sequence += 1;
+      continue;
+    }
+
+    const gap = [];
+    while (sequence <= facts.totalBets && !featuredSequences.has(sequence)) {
+      gap.push(sequence);
+      sequence += 1;
+    }
+
+    primaryScenes.push(...groupGap(gap));
+  }
+
+  const midpointAfter = calculateMidpointBoundary(primaryScenes, facts.totalBets, policy.midpoint);
+  const scenes = [{ sceneType: 1 }];
+
+  for (const primaryScene of primaryScenes) {
+    scenes.push(primaryScene);
+
+    if (primaryScene.sceneType === 2 && replaySequences.has(primaryScene.betSequence)) {
+      scenes.push({ sceneType: 3, betSequence: primaryScene.betSequence });
+    }
+
+    const completedSequence = lastCoveredSequence(primaryScene);
+    if (midpointAfter !== null && completedSequence === midpointAfter) {
+      scenes.push({ sceneType: 4, checkpointAfterBetSequence: midpointAfter });
+    }
+  }
+
+  scenes.push({ sceneType: 6 });
+  scenes.push({ sceneType: 7 });
+  return scenes;
+}
+
+function groupGap(sequences) {
+  const scenes = [];
+  let index = 0;
+  let remaining = sequences.length;
+
+  while (remaining > 0) {
+    let size;
+
+    if (remaining === 1) size = 1;
+    else if (remaining === 2 || remaining === 3) size = remaining;
+    else if (remaining === 4 || remaining === 5) size = remaining;
+    else {
+      const remainderAfterFive = remaining - 5;
+      size = remainderAfterFive === 1 ? 4 : 5;
+    }
+
+    const chunk = sequences.slice(index, index + size);
+    if (size === 1) scenes.push({ sceneType: 2, betSequence: chunk[0] });
+    else if (size <= 3) scenes.push({ sceneType: 5, betSequences: chunk });
+    else scenes.push({ sceneType: 8, betSequences: chunk });
+
+    index += size;
+    remaining -= size;
+  }
+
+  return scenes;
+}
+
+function calculateMidpointBoundary(primaryScenes, totalBets, midpointPolicy) {
+  if (!midpointPolicy.enabled || totalBets < midpointPolicy.minBets) return null;
+
+  let bestSequence = null;
+  let bestDistance = Infinity;
+
+  for (const scene of primaryScenes) {
+    const completed = lastCoveredSequence(scene);
+    if (completed >= totalBets) continue;
+
+    const distance = Math.abs(completed / totalBets - midpointPolicy.targetCoverageRatio);
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      bestSequence = completed;
+    }
+  }
+
+  return bestSequence;
+}
+
+function lastCoveredSequence(scene) {
+  return scene.sceneType === 2
+    ? scene.betSequence
+    : scene.betSequences[scene.betSequences.length - 1];
+}
+
+function calculatePlanDurationSeconds(scenes, runtime) {
+  let plannedMs = 0;
+  let conservativeMs = 0;
+
+  for (const scene of scenes) {
+    if (scene.sceneType === 7) continue;
+
+    let plannedSceneMs = 0;
+    let conservativeSceneMs = 0;
+
+    if (scene.sceneType === 1) plannedSceneMs = runtime.timeline.scene1.durationMs;
+    if (scene.sceneType === 2) plannedSceneMs = runtime.timeline.scene2.durationMs;
+    if (scene.sceneType === 4) plannedSceneMs = runtime.timeline.scene4.durationMs;
+    if (scene.sceneType === 5) {
+      plannedSceneMs = runtime.timeline.scene5.durationMsByRaceCount[String(scene.betSequences.length)];
+    }
+    if (scene.sceneType === 6) plannedSceneMs = runtime.timeline.scene6.durationMs;
+    if (scene.sceneType === 8) {
+      plannedSceneMs = runtime.timeline.scene8.durationMsByBetCount[String(scene.betSequences.length)];
+    }
+    if (scene.sceneType === 3) {
+      plannedSceneMs = runtime.timeline.scene3.plannedPlaybackMs + runtime.timeline.scene3.exitFadeMs;
+      conservativeSceneMs = plannedSceneMs +
+        runtime.timeline.scene3.metadataTimeoutMs +
+        runtime.timeline.scene3.playTimeoutMs;
+    }
+
+    if (!conservativeSceneMs) conservativeSceneMs = plannedSceneMs;
+    plannedMs += plannedSceneMs;
+    conservativeMs += conservativeSceneMs;
+  }
+
+  const transitionMs = runtime.shell.sceneTransition.durationMs * Math.max(0, scenes.length - 1);
+  plannedMs += transitionMs;
+  conservativeMs += transitionMs;
+
+  return {
+    plannedSeconds: plannedMs / 1000,
+    conservativeSeconds: conservativeMs / 1000
+  };
+}
+
+function isBetterCandidate(candidate, currentBest) {
+  if (candidate.distanceFromTarget !== currentBest.distanceFromTarget) {
+    return candidate.distanceFromTarget < currentBest.distanceFromTarget;
+  }
+  if (candidate.plannedSeconds !== currentBest.plannedSeconds) {
+    return candidate.plannedSeconds < currentBest.plannedSeconds;
+  }
+  return candidate.scenes.length < currentBest.scenes.length;
+}
+
+function validateDeterministicPlan(scenes, facts, replaySequences) {
+  if (scenes[0].sceneType !== 1) throw new Error('Scene 1 must be first.');
+  if (scenes[scenes.length - 2].sceneType !== 6) throw new Error('Scene 6 must be second-last.');
+  if (scenes[scenes.length - 1].sceneType !== 7) throw new Error('Scene 7 must be last.');
+
+  const covered = [];
+  const seenReplaySequences = new Set();
+
+  for (let index = 0; index < scenes.length; index += 1) {
+    const scene = scenes[index];
+    if (scene.sceneType === 2) covered.push(scene.betSequence);
+    if (scene.sceneType === 5 || scene.sceneType === 8) covered.push(...scene.betSequences);
+
+    if (scene.sceneType === 3) {
+      const previous = scenes[index - 1];
+      if (!previous || previous.sceneType !== 2 || previous.betSequence !== scene.betSequence) {
+        throw new Error(`Scene 3 for bet ${scene.betSequence} must immediately follow its Scene 2.`);
+      }
+      const bet = facts.bets[scene.betSequence - 1];
+      if (!isReplayEligible(bet)) {
+        throw new Error(`Scene 3 bet ${scene.betSequence} is not replay eligible.`);
+      }
+      seenReplaySequences.add(scene.betSequence);
+    }
+  }
+
+  const expected = facts.bets.map(bet => bet.sequence);
+  if (covered.length !== expected.length || covered.some((value, index) => value !== expected[index])) {
+    throw new Error('Primary bet coverage must be exact, chronological and one-time.');
+  }
+
+  if (seenReplaySequences.size !== replaySequences.size ||
+      [...replaySequences].some(sequence => !seenReplaySequences.has(sequence))) {
+    throw new Error('Selected replay coverage does not match emitted Scene 3 scenes.');
+  }
+}
+
 module.exports = {
   buildDeterministicScenePlan,
-  calculateTargetDurationSeconds
+  calculateTargetDurationSeconds,
+  calculateDesiredReplayCount
 };
