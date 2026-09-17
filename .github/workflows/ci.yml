@@ -116,7 +116,9 @@ jobs:
           test -f lambda/scene-planner/scene-planner.js
           node --check lambda/scene-planner/planner-policy.js
           node --check lambda/scene-planner/scene-planner.js
-          echo "OK: Kubrick v2 planner scaffold present and syntactically valid."
+          node --check lambda/scene-planner/scene-planner.test.js
+          node lambda/scene-planner/scene-planner.test.js
+          echo "OK: Kubrick v2 planner scaffold and regression fixtures validated."
 
       - name: Reject obvious backup/history files
         run: |
