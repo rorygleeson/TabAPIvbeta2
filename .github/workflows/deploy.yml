@@ -173,6 +173,7 @@ jobs:
           cp lambda/scene-planner/planner-policy.js dist/scene-planner-package/planner-policy.js
           cp lambda/scene-planner/llm-copy-input.js dist/scene-planner-package/llm-copy-input.js
           cp lambda/scene-planner/llm-copy-response.js dist/scene-planner-package/llm-copy-response.js
+          cp lambda/scene-planner/llm-copy-fallback.js dist/scene-planner-package/llm-copy-fallback.js
           cp lambda/scene-planner/llm-copy-merge.js dist/scene-planner-package/llm-copy-merge.js
           cp lambda/scene-planner/package.json dist/scene-planner-package/package.json
           cp -R lambda/scene-planner/node_modules dist/scene-planner-package/node_modules
@@ -188,6 +189,7 @@ jobs:
           test -f dist/scene-planner-package/planner-policy.js
           test -f dist/scene-planner-package/llm-copy-input.js
           test -f dist/scene-planner-package/llm-copy-response.js
+          test -f dist/scene-planner-package/llm-copy-fallback.js
           test -f dist/scene-planner-package/llm-copy-merge.js
           test -f dist/scene-planner-package/contracts/planner-prompt.md
           test -f dist/scene-planner-package/contracts/bettings.schema.json
@@ -206,6 +208,7 @@ jobs:
           unzip -l dist/scene-planner.zip | grep 'scene-planner.js'
           unzip -l dist/scene-planner.zip | grep 'llm-copy-input.js'
           unzip -l dist/scene-planner.zip | grep 'llm-copy-response.js'
+          unzip -l dist/scene-planner.zip | grep 'llm-copy-fallback.js'
           unzip -l dist/scene-planner.zip | grep 'llm-copy-merge.js'
           unzip -l dist/scene-planner.zip | grep 'contracts/planner-prompt.md'
           unzip -l dist/scene-planner.zip | grep 'contracts/bettings.schema.json'
