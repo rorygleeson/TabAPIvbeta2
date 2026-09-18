@@ -44,6 +44,10 @@ Resources:
                 Resource: arn:aws:sqs:ap-southeast-2:134387458447:tab-recap-vbeta1-planning
               - Effect: Allow
                 Action:
+                  - sqs:SendMessage
+                Resource: arn:aws:sqs:ap-southeast-2:134387458447:tab-recap-vbeta1-rendering
+              - Effect: Allow
+                Action:
                   - s3:GetObject
                   - s3:PutObject
                 Resource: arn:aws:s3:::tab-recap-vbeta1/working/*
@@ -92,6 +96,7 @@ Resources:
           STORAGE_BUCKET: tab-recap-vbeta1
           JOBS_TABLE: tab-recap-vbeta1-jobs
           PLANNER_MODEL_ID: !Ref PlannerModelId
+          RENDERING_QUEUE_URL: !Sub https://sqs.${AWS::Region}.amazonaws.com/${AWS::AccountId}/tab-recap-vbeta1-rendering
       Code:
         S3Bucket: !Ref ArtifactBucket
         S3Key: !Ref ArtifactKey

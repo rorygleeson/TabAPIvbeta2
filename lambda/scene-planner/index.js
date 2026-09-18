@@ -18,11 +18,13 @@ const REGION = process.env.AWS_REGION || 'ap-southeast-2';
 const STORAGE_BUCKET = process.env.STORAGE_BUCKET;
 const JOBS_TABLE = process.env.JOBS_TABLE;
 const PLANNER_MODEL_ID = process.env.PLANNER_MODEL_ID;
+const RENDERING_QUEUE_URL = process.env.RENDERING_QUEUE_URL;
 const PLANNING_LEASE_SECONDS = 300;
 
 const s3 = new S3Client({ region: REGION });
 const ddb = new DynamoDBClient({ region: REGION });
 const bedrock = new BedrockRuntimeClient({ region: REGION });
+let sqsClient = null;
 
 const plannerPrompt = loadContractText('planner-prompt.md');
 const bettingsSchema = loadContract('bettings.schema.json');
@@ -80,6 +82,42 @@ async function putJsonToS3(key, value) {
     Body: JSON.stringify(value),
     ContentType: 'application/json'
   }));
+}
+
+
+function buildRenderingMessage(jobId, bettingsS3Key, sceneS3Key) {
+  return {
+    schemaVersion: '1.0',
+    jobId,
+    bettingsS3Key,
+    sceneS3Key
+  };
+}
+
+async function sendRenderingMessage(jobId, bettingsS3Key, sceneS3Key) {
+  // Node.js Lambda runtimes include AWS SDK v3. Keep this dependency lazy so
+  // planner unit tests remain pure and the deployment package stays unchanged.
+  if (!sqsClient) {
+    const { SQSClient } = require('@aws-sdk/client-sqs');
+    sqsClient = new SQSClient({ region: REGION });
+  }
+  const { SendMessageCommand } = require('@aws-sdk/client-sqs');
+  const message = buildRenderingMessage(jobId, bettingsS3Key, sceneS3Key);
+  const response = await sqsClient.send(new SendMessageCommand({
+    QueueUrl: RENDERING_QUEUE_URL,
+    MessageBody: JSON.stringify(message)
+  }));
+
+  console.log(JSON.stringify({
+    event: 'rendering-message-sent',
+    jobId,
+    queueUrl: RENDERING_QUEUE_URL,
+    sqsMessageId: response.MessageId || null,
+    bettingsS3Key,
+    sceneS3Key
+  }));
+
+  return response.MessageId || null;
 }
 
 async function getJob(jobId) {
@@ -222,14 +260,22 @@ async function processMessage(context) {
   const sceneS3Key = 'working/' + jobId + '/scene.json';
 
   const before = await getJob(jobId);
-  if ((before.status === 'RENDERING' || before.status === 'READY') && before.sceneS3Key) {
-    return { jobId, status: before.status, sceneS3Key: before.sceneS3Key, idempotent: true };
+  if (before.status === 'READY' && before.sceneS3Key) {
+    return { jobId, status: 'READY', sceneS3Key: before.sceneS3Key, idempotent: true };
+  }
+  if (before.status === 'RENDERING' && before.sceneS3Key) {
+    await sendRenderingMessage(jobId, bettingsS3Key, before.sceneS3Key);
+    return { jobId, status: 'RENDERING', sceneS3Key: before.sceneS3Key, idempotent: true, renderQueued: true };
   }
 
   const claim = await claimJob(jobId);
   if (!claim.claimed) {
-    if ((claim.current.status === 'RENDERING' || claim.current.status === 'READY') && claim.current.sceneS3Key) {
-      return { jobId, status: claim.current.status, sceneS3Key: claim.current.sceneS3Key, idempotent: true };
+    if (claim.current.status === 'READY' && claim.current.sceneS3Key) {
+      return { jobId, status: 'READY', sceneS3Key: claim.current.sceneS3Key, idempotent: true };
+    }
+    if (claim.current.status === 'RENDERING' && claim.current.sceneS3Key) {
+      await sendRenderingMessage(jobId, bettingsS3Key, claim.current.sceneS3Key);
+      return { jobId, status: 'RENDERING', sceneS3Key: claim.current.sceneS3Key, idempotent: true, renderQueued: true };
     }
     if (claim.current.status === 'PLANNING') {
       return { jobId, status: 'PLANNING', idempotent: true, inFlight: true };
@@ -244,7 +290,8 @@ async function processMessage(context) {
     if (recovered) {
       schemaCheck(validateScenePlanSchema, recovered, 'scene.json');
       await markRendering(jobId, attemptId, sceneS3Key);
-      return { jobId, status: 'RENDERING', sceneS3Key, idempotent: true, recovered: true };
+      await sendRenderingMessage(jobId, bettingsS3Key, sceneS3Key);
+      return { jobId, status: 'RENDERING', sceneS3Key, idempotent: true, recovered: true, renderQueued: true };
     }
 
     const bettings = await getJsonFromS3(bettingsS3Key);
@@ -260,13 +307,15 @@ async function processMessage(context) {
     schemaCheck(validateScenePlanSchema, finalPlan, 'scene.json');
     await putJsonToS3(sceneS3Key, finalPlan);
     await markRendering(jobId, attemptId, sceneS3Key);
+    await sendRenderingMessage(jobId, bettingsS3Key, sceneS3Key);
 
     return {
       jobId,
       status: 'RENDERING',
       deterministicS3Key,
       sceneS3Key,
-      sceneCount: finalPlan.scenes.length
+      sceneCount: finalPlan.scenes.length,
+      renderQueued: true
     };
   } catch (error) {
     try { await markFailed(jobId, attemptId, error); } catch (_) {}
@@ -277,11 +326,12 @@ async function processMessage(context) {
 exports.__test = {
   validatePlanningMessage,
   normalizeEvent,
-  invokeCopyModel
+  invokeCopyModel,
+  buildRenderingMessage
 };
 
 exports.handler = async event => {
-  if (!STORAGE_BUCKET || !JOBS_TABLE || !PLANNER_MODEL_ID) {
+  if (!STORAGE_BUCKET || !JOBS_TABLE || !PLANNER_MODEL_ID || !RENDERING_QUEUE_URL) {
     throw new Error('Missing required scene planner environment configuration.');
   }
   const contexts = normalizeEvent(event);
