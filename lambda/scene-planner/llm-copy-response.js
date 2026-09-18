@@ -247,6 +247,6 @@ module.exports = {
   __test: {
     atomsForPhase,
     composeParts,
-    isClauseAtom
+    appendWithSafeBoundary
   }
 };
