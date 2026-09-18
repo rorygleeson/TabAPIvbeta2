@@ -356,6 +356,8 @@ Planner validation resolves fact parts from the same recap-wide catalog and chro
 
 Soft stylistic imperfections, awkward joins and length overshoots should not fail an otherwise factually and structurally valid recap.
 
+Frozen validation boundary: hard failures are limited to objective response/structure/fact-scope/enum-cardinality/downstream-contract correctness. Harmless extra model fields/part metadata are ignored. Prose length, grammar, factual-looking wording and markup-like characters are non-fatal; Builder HTML-escapes display substitutions.
+
 ---
 
 ## 9. Contracts
