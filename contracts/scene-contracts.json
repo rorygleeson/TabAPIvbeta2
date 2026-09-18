@@ -1,5 +1,5 @@
 {
-  "contractVersion": "2.0.14",
+  "contractVersion": "2.0.15",
   "companionContracts": [
     "contracts/bettings.schema.json",
     "contracts/scene-plan.schema.json",
@@ -45,13 +45,14 @@
       "hardCharacterTolerance": "Validation fails only above target + min(ceil(target * 0.10), 12 characters), applied uniformly to every LLM-owned string and string-array item."
     },
     "groundedCopyProtocol": {
-      "version": "FACT_PARTS_V2_1",
-      "copyInputVersion": "2.2",
-      "modelCallPolicy": "One LLM copy call per recap. Structured fact/text parts add no verifier, repair or per-scene model calls.",
-      "rule": "Fresh LLM prose uses two response part types. Exact facts come through deterministic phase-scoped fact IDs; narrative language comes through text parts. Factual atoms that end in sentence punctuation are complete clause atoms and must stand as sentence segments rather than completing or being completed by surrounding grammar. Short inline atoms may still compose naturally with text.",
+      "version": "FACT_PARTS_V2_2",
+      "copyInputVersion": "2.3",
+      "modelCallPolicy": "One LLM copy call per recap. No verifier, repair loop or per-scene model calls.",
+      "rule": "Stable day/bet facts are supplied once in a recap-wide factCatalog. Each scene phase carries a deterministic allowedGlobalFactIdsByPhase scope derived from chronology, while scene-specific aggregates remain local factAtomsByPhase. The model may use only fact IDs allowed by the current phase. Fact atoms ending in sentence punctuation are complete clause atoms and must stand as sentence segments; short inline atoms may compose naturally with text.",
+      "scopePolicy": "PRE_RESULT_DAY exposes pre-result facts only; PRE_RESULT and PRE_RESULT_BLOCK expose all pre-result facts plus outcomes already completed before that point; POST_RESULT and POST_RESULT_BLOCK add outcomes through the completed bet/block; POST_COMPLETED_BETS and PRE_FUTURE_RESULTS expose outcomes only through the deterministic checkpoint; POST_RESULT_BY_BET advances row-by-row; POST_DAY exposes all stable facts from the completed day.",
       "semanticDistinction": "A winning bet is not necessarily a race-winning runner. Race-win wording requires finishingPosition=1; bet-result wording follows the wager result.",
-      "validation": "Planner rejects malformed parts, unknown or wrong-phase fact IDs, extra part fields, protected factual literals inside text parts, raw numeric/money/odds-symbol facts inside text parts, explicit finishing-position constructions inside text parts, and grammatical stitching into or out of complete clause atoms. Normal wagering vocabulary such as win, winner, loss, profit, return, stake and odds is allowed in narrative text. Valid fact parts are expanded and joined before final scene-plan merge.",
-      "finalPlan": "Fact IDs, part objects and grounding metadata are copy-stage-only and are stripped before scene.json. Builder interface remains unchanged."
+      "validation": "Planner resolves fact IDs from the same recap-wide catalog and deterministic chronological scope sent to the model, plus scene-local aggregate atoms. It rejects unknown or out-of-scope IDs, malformed parts, protected factual literals typed raw in text, raw numeric/money/odds-symbol facts, explicit finishing-position constructions in text, and grammar stitched into or out of complete clause atoms. Normal wagering vocabulary is allowed in narrative text.",
+      "finalPlan": "Fact IDs, part objects, factCatalog and grounding metadata are copy-stage-only and are stripped before scene.json. Builder interface remains unchanged."
     }
   },
   "fieldSources": {
