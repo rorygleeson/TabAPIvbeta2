@@ -352,9 +352,9 @@ The LLM remains free to control rhythm, transitions, emphasis and narrative colo
 
 There is still exactly one LLM copy call per recap. There is no second verifier model, no per-scene model fan-out and no structural/copy repair loop.
 
-Planner validation resolves facts from the same recap-wide catalog and chronological allow-list sent to the model, plus scene-local aggregates. It rejects unknown or out-of-scope IDs, raw concrete factual literals inside narrative text, and grammar stitched into or out of complete clause atoms. Pre-result phases cannot access later result facts; `POST_DAY` can access all completed-day facts. Part metadata never reaches final `scene.json`, so the existing Builder interface remains unchanged.
+Planner validation resolves facts from the same recap-wide catalog and chronological allow-list sent to the model, plus scene-local aggregates. It hard-rejects only machine-verifiable correctness failures such as unknown/out-of-scope IDs, malformed parts, raw concrete factual literals, invalid enums/cardinality, forbidden markup and downstream contract violations. Grammar, sentence flow, capitalization and copy-length targets are deliberately non-fatal. Pre-result phases cannot access later result facts; `POST_DAY` can access all completed-day facts. Part metadata never reaches final `scene.json`, so the existing Builder interface remains unchanged.
 
-Soft stylistic imperfections should not fail an otherwise structurally valid recap.
+Soft stylistic imperfections, awkward joins and length overshoots should not fail an otherwise factually and structurally valid recap.
 
 ---
 
