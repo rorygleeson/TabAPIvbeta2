@@ -18,9 +18,9 @@ function buildLlmCopyInput(bettings, deterministicPlan, contracts = sceneContrac
   validateInputs(bettings, deterministicPlan, contracts);
   const factCatalog = buildGlobalFactCatalog(bettings);
   return {
-    copyInputVersion: '2.4',
+    copyInputVersion: '3.0',
     contractVersion: contracts.contractVersion,
-    groundingProtocol: 'FACT_PARTS_V2_3',
+    groundingProtocol: 'FACT_TEMPLATES_V3_0',
     factCatalog,
     protectedTerms: protectedTerms(bettings, bettings.bets),
     scenes: deterministicPlan.scenes.map((scene, sceneIndex) =>
@@ -36,7 +36,7 @@ function buildLlmModelPayload(copyInput) {
 
   return {
     modelPayloadVersion: '1.0',
-    groundingProtocol: 'FACT_PARTS_COMPACT_V1',
+    groundingProtocol: 'FACT_TEMPLATE_COMPACT_V1',
     scenes: copyInput.scenes.map(scene => {
       const item = {
         sceneIndex: scene.sceneIndex,
@@ -130,8 +130,8 @@ function requiredLlmFields(sceneType, contracts) {
     }
     if (Array.isArray(definition.enum)) rule.enum = [...definition.enum];
     if (rule.enum) rule.responseType = 'enum';
-    else if (definition.minItems !== undefined || definition.maxItems !== undefined) rule.responseType = 'partsArray';
-    else rule.responseType = 'parts';
+    else if (definition.minItems !== undefined || definition.maxItems !== undefined) rule.responseType = 'groundedTextArray';
+    else rule.responseType = 'groundedText';
     required[name] = rule;
   }
   return required;
