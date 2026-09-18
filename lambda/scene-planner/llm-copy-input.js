@@ -565,13 +565,6 @@ function typedPnlAtoms(prefix, value) {
   return { [prefix + '_BREAK_EVEN_AMOUNT']: '$0' };
 }
 
-function pnlDirection(value) {
-  const n = Number(value);
-  if (n > 0) return 'PROFIT';
-  if (n < 0) return 'LOSS';
-  return 'BREAK_EVEN';
-}
-
 function groupPositionSemantics(bettings, bets) {
   const startSequence = bets[0].sequence;
   const endSequence = bets[bets.length - 1].sequence;
@@ -590,13 +583,6 @@ function rangeValue(start, end) {
   return start === end ? String(start) : String(start) + '-' + String(end);
 }
 
-function signedMoney(value) {
-  const n = Number(value);
-  if (n > 0) return '+' + money(n);
-  if (n < 0) return '-' + money(Math.abs(n));
-  return '$0';
-}
-
 function money(value) {
   return '$' + formatNumber(Math.abs(Number(value || 0)));
 }
@@ -612,11 +598,6 @@ function ordinal(value) {
   const mod100 = n % 100;
   const suffix = (mod100 >= 11 && mod100 <= 13) ? 'th' : ({1:'st',2:'nd',3:'rd'}[n % 10] || 'th');
   return n + suffix;
-}
-
-function countPhrase(count, singular) {
-  const n = Number(count);
-  return n + ' ' + singular + (n === 1 ? '' : 's');
 }
 
 function joinNatural(values) {
@@ -664,7 +645,6 @@ module.exports = {
     buildGlobalFactCatalog,
     buildAllowedGlobalFactIdsByPhase,
     typedPnlAtoms,
-    pnlDirection,
     groupPositionSemantics
   }
 };
