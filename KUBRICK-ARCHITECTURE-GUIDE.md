@@ -404,28 +404,26 @@ The actual Bedrock request uses a compact projection so 75-bet recaps remain com
 Current rich internal grounding protocol:
 
 ```text
-FACT_PARTS_V2_3
-copyInputVersion = 2.4
+FACT_TEMPLATES_V3_0
+copyInputVersion = 3.0
 ```
 
 Current compact Bedrock payload protocol remains:
 
 ```text
-FACT_PARTS_COMPACT_V1
+FACT_TEMPLATE_COMPACT_V1
 modelPayloadVersion = 1.0
 ```
 
 Each scene receives only its relevant phase-scoped fact atoms and requested field rules.
 
-The model returns prose as fact/text parts:
+The model returns normal grounded strings containing compact fact references:
 
 ```json
-[
-  {"type":"text","text":"Backed "},
-  {"type":"fact","id":"DAY_TOTAL_BETS"},
-  {"type":"text","text":" bets."}
-]
+"Backed <DAY_TOTAL_BETS> bets across <DAY_MEETING_COUNT> meetings."
 ```
+
+For array fields such as Scene 8 comments, it returns one grounded string per required item.
 
 The atom ownership rule is now explicit:
 
@@ -435,7 +433,7 @@ Model-facing fact atoms are exact values or small factual units, not pre-written
 
 Redundant prose-shaped composite atoms such as per-bet setup/result-summary sentences are not exposed.
 
-Fact parts are expanded deterministically during validation/merge. The assembler performs only mechanical safe-boundary spacing when neither adjacent part supplied spacing/punctuation; it does not rewrite grammar or facts.
+Every `<ATOM_ID>` reference is validated against the field's deterministic chronology scope and then substituted with the exact fact value. Unknown, wrong-phase or malformed placeholders reject the single copy response to deterministic fallback. JavaScript does not rewrite grammar or facts.
 
 The model never receives authority to reconstruct structure.
 
@@ -455,7 +453,7 @@ The following are non-fatal copy-quality issues:
 - capitalization
 - repetitive wording
 - word-target overshoot
-- clumsy fact/text joins
+- clumsy fact/grammar joins
 - factual-looking free text that JavaScript cannot reliably semantically interpret
 - customer-unfriendly internal vocabulary such as “block”
 
@@ -708,11 +706,11 @@ code -> exact facts, chronology and eligibility
 LLM  -> grammar, sentence construction and narrative colour
 ```
 
-The model-facing catalog now prefers atomic values/small factual units. The prompt reflects those semantics, sentence-atom composition logic has been removed, and deterministic assembly uses only safe mechanical spacing.
+The model-facing catalog now prefers atomic values/small factual units. Live tests then exposed a second scaling problem in the verbose fact/text-part response encoding: 50 bets produced 7,614 output tokens and one invented atom ID, while 75 bets hit the configured 8,000 output-token ceiling and was truncated. The model response protocol has therefore been compacted to grounded strings using validated `<ATOM_ID>` placeholders. This preserves the same factual ownership while removing repeated `type/fact/id/text` JSON wrappers.
 
 This is a copy-interface change only. It does not alter deterministic scene planning, grouping, replay policy, midpoint policy, Builder inputs or the one-call/fallback architecture.
 
-The source change must still be deployed and live-tested with the 5- and 75-bet fixtures before the new copy quality is marked proven. Do not add grammar validators, repair loops or a second model call if individual stylistic imperfections remain.
+The compact grounded-string protocol must still be deployed and live-tested, especially at 50 and 75 bets, before scale/cost improvement is marked proven. Do not raise the output ceiling as the first response to protocol bloat, and do not add grammar validators, repair loops or a second model call if individual stylistic imperfections remain.
 
 ---
 
@@ -746,6 +744,7 @@ These rules are mandatory:
 - duration candidate selection implemented;
 - compact one-call copy payload implemented;
 - atomic fact-value copy interface implemented in source;
+- compact grounded-string response protocol implemented in source/CI;
 - deterministic copy fallback implemented;
 - existing Builder compatibility retained;
 - direct live planner tests pass at 5 / 8 / 16 / 32 / 50 / 75;
@@ -765,7 +764,7 @@ These rules are mandatory:
 
 ### REMAINING / PLANNED
 
-- deploy and live-test the atomic fact-value copy interface at 5 and 75 bets;
+- deploy and live-test the compact grounded-string copy protocol, with token/cost comparison at 32 / 50 / 75 bets;
 - continue Builder/rendered-HTML regression proof with the new real fixtures where useful;
 - continue Normaliser integration toward canonical `bettings.json`;
 - complete the full upload/orchestration/status/delivery product path when that work is resumed.
