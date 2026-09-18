@@ -128,10 +128,10 @@ function composeParts(parts, source, phase, itemIndex, sceneIndex, field, copyIn
     }
 
     if (part.type === 'text') {
-      if (typeof part.text !== 'string' || !part.text.length) {
-        throw new Error(label + ' text part ' + partIndex + ' must contain non-empty text.');
+      if (typeof part.text !== 'string') {
+        throw new Error(label + ' text part ' + partIndex + ' text must be a string.');
       }
-      validateNarrativeText(part.text, source, label + ' text part ' + partIndex, copyInput);
+      if (!part.text.trim()) return;
       rendered.push({ kind: 'text', text: part.text, partIndex });
       return;
     }
@@ -190,13 +190,6 @@ function atomsForPhase(source, phase, itemIndex, copyInput) {
   return { ...globalAtoms, ...localAtoms };
 }
 
-function validateNarrativeText(rawText, source, label, copyInput) {
-  const text = String(rawText || '');
-  if (!text.trim()) {
-    throw new Error(label + ' must contain non-empty text.');
-  }
-}
-
 function hardCharLimit(target) {
   const n = Number(target);
   if (!Number.isFinite(n) || n <= 0) return null;
@@ -250,7 +243,6 @@ module.exports = {
   __test: {
     atomsForPhase,
     composeParts,
-    isClauseAtom,
-    validateNarrativeText
+    isClauseAtom
   }
 };
