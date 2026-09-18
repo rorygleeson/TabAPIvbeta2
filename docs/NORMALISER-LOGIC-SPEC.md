@@ -2,9 +2,11 @@
 
 Last updated: 2026-09-18
 
-Status: **LOCAL ONLY / v0.9 READY FOR RUN 2**  
+Status: **LOCAL-ONLY INTEGRATION DESIGN / v0.9 READY FOR RUN 2**  
 Repository: `rorygleeson/TabAPIvbeta2`  
 Canonical runnable script: `tests/normaliser/normaliser.py`
+
+> This is the current integrated Normaliser design for vbeta2. The component documents under `lambda/normaliser/` are retained as lower-level Pass 1 / Pass 2 design history and must not override this file where they differ.
 
 ## 1. Locked execution model
 
