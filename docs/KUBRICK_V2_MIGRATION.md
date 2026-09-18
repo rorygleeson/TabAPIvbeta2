@@ -410,7 +410,7 @@ The planner migration sits inside the larger intended pilot flow:
 pilot frontend
   -> presigned CSV upload to private S3
   -> Orchestrator creates/tracks job
-  -> Python Normaliser
+  -> one Python Normaliser Lambda (planned production shape)
        -> Pass 1 CSV parse/normalise
        -> Pass 2 historical enrichment
        -> Pass 3 canonical bettings.json
