@@ -97,16 +97,30 @@ assert.strictEqual(groundedGroupNormalized.scenes[group67Index].contextLine, 'th
 
 const falseCollectiveFinish = goodResponse();
 falseCollectiveFinish.scenes[group67Index].payoffHeadline = text('Both runners second');
-assert.throws(() => validateCopyResponse(input, falseCollectiveFinish), /concrete factual wording/);
+assert.throws(() => validateCopyResponse(input, falseCollectiveFinish), /raw concrete factual wording/);
 
 const ordinaryNarrativeOrdinal = goodResponse();
 ordinaryNarrativeOrdinal.scenes[0].openingTeaser = text('The first chapter is about to unfold.');
 assert.doesNotThrow(() => validateCopyResponse(input, ordinaryNarrativeOrdinal));
 
 const dayIndex = input.scenes.findIndex(scene => scene.sceneType === 6);
-const ambiguousWinners = goodResponse();
-ambiguousWinners.scenes[dayIndex].dayVerdict = text('Three winners shaped the day');
-assert.throws(() => validateCopyResponse(input, ambiguousWinners), /concrete factual wording/);
+const wageringVocabulary = [
+  'That win changed the mood.',
+  'The losses were starting to bite.',
+  'Profit was back in the conversation.',
+  'The return gave the story another twist.',
+  'The stake was on and the tension was building.',
+  'The odds looked tempting.'
+];
+for (const phrase of wageringVocabulary) {
+  const response = goodResponse();
+  response.scenes[dayIndex].dayVerdict = text(phrase);
+  assert.doesNotThrow(() => validateCopyResponse(input, response), phrase);
+}
+
+const rawNumber = goodResponse();
+rawNumber.scenes[dayIndex].dayVerdict = text('Three winners became 3 winners.');
+assert.throws(() => validateCopyResponse(input, rawNumber), /raw concrete factual wording/);
 
 const groundedWinningBets = goodResponse();
 groundedWinningBets.scenes[dayIndex].dayVerdict = [
@@ -117,6 +131,14 @@ const groundedDayNormalized = validateCopyResponse(input, groundedWinningBets);
 assert.strictEqual(groundedDayNormalized.scenes[dayIndex].dayVerdict, '3 winning bets shaped the day.');
 
 const bet3SceneIndex = input.scenes.findIndex(scene => scene.sceneType === 2 && scene.betSequence === 3);
+const rawMoney = goodResponse();
+rawMoney.scenes[dayIndex].dayVerdict = text('The day finished $20 up.');
+assert.throws(() => validateCopyResponse(input, rawMoney), /raw concrete factual wording/);
+
+const explicitPosition = goodResponse();
+explicitPosition.scenes[group67Index].payoffHeadline = text('Both runners finished second');
+assert.throws(() => validateCopyResponse(input, explicitPosition), /raw concrete factual wording/);
+
 const protectedRunner = goodResponse();
 protectedRunner.scenes[bet3SceneIndex].tensionLine = text('ROCEM is ready to go');
 assert.throws(() => validateCopyResponse(input, protectedRunner), /protected factual text/);
