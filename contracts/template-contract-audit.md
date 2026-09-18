@@ -1,225 +1,262 @@
-# Builder / Contract Compatibility Audit — Kubrick V2
+# Template / Contract Audit — Kubrick V2
 
 Last updated: 2026-09-18
 
 ## Status
 
-The Builder remains the downstream compatibility boundary for Kubrick V2.
+**CURRENT V2 BOUNDARY DOCUMENT**
 
-This document supersedes the older pre-builder remediation record that described the vbeta1 LLM planner, copy repair calls and prose hard-fail rules.
+This record replaces the earlier pre-Builder remediation notes that described the old LLM-plans-structure / repair-loop architecture.
 
-Those old planner behaviours are not part of Kubrick V2.
+The current rule is:
+
+> deterministic code owns structure; the LLM owns copy only; the existing Builder consumes the final validated scene plan.
 
 ## Canonical contracts
 
 Root contracts:
 
-1. `contracts/bettings.schema.json` — canonical factual input.
-2. `contracts/deterministic-scene-plan.schema.json` — deterministic scene skeleton artifact.
-3. `contracts/scene-plan.schema.json` — final `scene.json` contract.
-4. `contracts/scene-contracts.json` — Scene Types 1-8 ownership/resolution rules.
-5. `contracts/runtime-contract.json` — timing/runtime/rendering contract.
-6. `contracts/planner-prompt.md` — current one-call grounded copy prompt.
+1. `contracts/bettings.schema.json` — canonical factual input shape plus documented semantic validation rules.
+2. `contracts/deterministic-scene-plan.schema.json` — deterministic pre-copy scene skeleton artifact.
+3. `contracts/scene-plan.schema.json` — final downstream `scene.json` planVersion 2.0 contract.
+4. `contracts/scene-contracts.json` — scene ownership/data-resolution contract.
+5. `contracts/runtime-contract.json` — runtime timing, replay, transition, shell and rendering behaviour.
+6. `contracts/planner-prompt.md` — the current grounded copy prompt used by the one Bedrock copy call.
 
-Builder-bundled contract copies live under:
+Builder-bundled contract copies remain synchronized where the deploy package expects local copies.
 
-```text
-lambda/builder-recap/contracts/
-```
+## Current ownership boundary
 
-The CI/deploy process must keep canonical root contracts and bundled copies synchronized where both are used.
+### Canonical bettings input
 
-## Kubrick V2 ownership boundary
+`bettings.json` supplies factual day/bet state.
 
-```text
-bettings.json
--> deterministic planner structure
--> one grounded LLM copy call
--> deterministic fallback if copy stage fails
--> final scene.json
--> existing Builder
-```
-
-The Builder does not perform structural planning or copy repair.
-
-## Planner gate
-
-Before `scene.json` is accepted, the planner owns objective validation of:
-
-- canonical input schema and semantic arithmetic;
-- exact primary coverage;
-- chronology;
-- legal Scene 2/5/8 membership;
-- Scene 3 replay eligibility and immediate placement;
-- Scene 4 legal midpoint boundary;
-- fixed Scene 1/6/7 positioning;
-- copy response shape;
-- required copy fields;
-- enum/cardinality;
-- grounded fact IDs and phase scope;
-- final scene-plan schema.
-
-The planner does not hard-reject copy merely because it has awkward grammar, repeated wording, capitalization issues or poor sentence joins.
-
-## Copy availability boundary
-
-Kubrick V2 makes at most one Bedrock copy call.
-
-On copy-stage failure:
+The planner input no longer contains:
 
 ```text
-Bedrock failure
-OR parse failure
-OR copy-response validation failure
-        |
-        v
-deterministic safe fallback copy
-        |
-        v
-same deterministic scene skeleton
+sceneType
+showReplay
 ```
 
-There is no repair call and no second model call.
+Replay availability is represented only by `replayUrl`.
 
-Fallback implementation:
+### Deterministic Scene Planner
 
-```text
-lambda/scene-planner/llm-copy-fallback.js
-```
+Code owns:
 
-## Builder gate
+- scene order;
+- primary coverage;
+- Scene 2 promotion;
+- Scene 3 replay selection and placement;
+- Scene 4 midpoint;
+- Scene 5 grouping;
+- Scene 8 grouping;
+- duration candidate selection;
+- Scene 6/7 ending positions.
 
-The Builder independently protects rendering compatibility.
+The model cannot alter these decisions.
 
-Current design principles:
+### LLM copy layer
 
-- Builder consumes final `scene.json` and canonical `bettings.json`;
-- Builder must not invent scene membership or reorder coverage;
-- factual display values resolve from canonical data/controlled scene references;
-- narrative copy is treated as display text, not trusted structural control;
-- display substitutions are HTML-escaped;
-- replay runtime behaviour belongs to the Builder/runtime;
-- missing replay availability is represented upstream by null/invalid `replayUrl` and therefore should not be selected into Scene 3.
-
-## Scene template set
-
-Current production templates:
-
-```text
-scene-1-opening-pre-race-template.html
-scene-2-single-race-card-template.html
-scene-3-race-replay-template.html
-scene-4-status-story-summary-template.html
-scene-5-multi-race-scene-template.html
-scene-6-daily-summary-template.html
-scene-7-final-share-template.html
-scene-8-fast-results-template.html
-```
-
-Kubrick V2 preserves Scene Types 1-8.
-
-No template redesign is required merely because planner implementation changed.
-
-## Runtime timing authority
-
-Physical scene timing remains owned by `runtime-contract.json`.
-
-The planner reads the runtime contract for duration calculation rather than duplicating physical timing constants as structural truth.
-
-Editorial target duration is owned separately by `planner-policy.js`.
-
-This separation is intentional:
-
-```text
-runtime-contract.json -> physical scene timing
-planner-policy.js     -> editorial target curve / selection policy
-```
-
-## Current planner policy compatibility
-
-Current deterministic structural rules include:
-
-- Scene 8 only for recaps with 17+ bets;
-- Scene 5 covers 2-3 consecutive bets;
-- Scene 8 covers 4-5 consecutive bets;
-- Scene 3 only for a selected winning bet with valid HTTPS replay media;
-- Scene 3 immediately follows matching Scene 2;
-- Scene 4 is nearest legal primary boundary to 50% coverage for 6+ bets;
-- Scene 6 is second-last;
-- Scene 7 is last;
-- hard runtime maximum is 300 seconds.
-
-See `KUBRICK-ARCHITECTURE-GUIDE.md` for the authoritative complete policy.
-
-## Copy protocol compatibility
-
-Current Bedrock copy protocol:
+One Bedrock call receives a compact grounded copy payload using:
 
 ```text
 FACT_PARTS_COMPACT_V1
 modelPayloadVersion = 1.0
 ```
 
-The rich copy input remains internal for validation/merge.
+The model returns requested copy fields only.
 
-The compact payload is what is sent to the model.
+No structural repair call exists.
 
-This is required for large-day payload size control.
+No second model call exists.
+
+### Copy fallback
+
+Copy-stage failure is non-fatal to an otherwise valid recap.
+
+The planner uses:
+
+```text
+lambda/scene-planner/llm-copy-fallback.js
+```
+
+for deterministic safe copy when Bedrock/parsing/copy validation fails.
+
+The deterministic scene skeleton is preserved.
+
+### Existing Builder
+
+The Builder receives final validated `bettings.json` + `scene.json`.
+
+It does not:
+
+- plan scenes;
+- select replay bets;
+- move midpoint;
+- repair LLM structure;
+- interpret planner policy.
+
+It renders the supplied contract through the existing templates/runtime.
+
+## Validation boundary
+
+Hard failures remain appropriate for objective machine-verifiable conditions:
+
+- invalid canonical bettings schema/semantics;
+- missing, duplicated or reordered primary coverage;
+- illegal Scene 3 placement or replay eligibility;
+- illegal grouped scene membership;
+- invalid deterministic midpoint;
+- hard runtime duration maximum;
+- malformed copy response;
+- missing required copy fields;
+- unknown/out-of-scope fact IDs;
+- invalid enums/cardinality;
+- invalid final `scene.json` contract;
+- S3/Dynamo/runtime failures.
+
+Narrative quality is intentionally not a hard availability gate.
+
+Do **not** hard-fail for:
+
+- grammar;
+- capitalization;
+- repeated phrases;
+- prose-length target overshoot;
+- awkward fact/text joins;
+- internal terminology such as “block” leaking into copy;
+- semantic quality that deterministic JavaScript cannot safely prove.
+
+The Builder HTML-escapes display substitutions.
+
+## Scene/template expectations
+
+### Scene 1
+
+- always first;
+- opening copy only;
+- no primary bet coverage.
+
+### Scene 2
+
+- one deterministic featured bet;
+- copy may provide tension/reaction.
+
+### Scene 3
+
+- optional replay;
+- only for a replay-eligible winning bet;
+- immediately follows matching Scene 2;
+- replay URL comes from canonical factual input.
+
+### Scene 4
+
+- at most once;
+- omitted for recaps below the configured minimum;
+- checkpoint boundary supplied by deterministic planner.
+
+### Scene 5
+
+- covers 2 or 3 consecutive primary bets;
+- grouping is structural;
+- customer copy should not expose internal planner vocabulary such as “block”.
+
+### Scene 6
+
+- always second-last;
+- daily summary/standout wording only;
+- factual highlight identity remains controlled by contract/planner facts.
+
+### Scene 7
+
+- always last;
+- final/share copy;
+- untimed/permanent ending in runtime.
+
+### Scene 8
+
+- high-volume compression;
+- covers 4 or 5 consecutive primary bets;
+- one comment per covered bet;
+- grouping/order cannot be changed by copy.
+
+## Current runtime/template source
+
+Existing templates remain under:
+
+```text
+lambda/builder-recap/templates/
+```
+
+Runtime remains under:
+
+```text
+lambda/builder-recap/runtime/
+```
+
+The Kubrick V2 migration does not redesign them.
 
 ## Current real-data regression state
 
-Planner direct tests have reached `RENDERING` for:
+New real-race fixtures:
 
 ```text
-5
-8
-16
-32
-50
-75
+bettings-5.json
+bettings-8.json
+bettings-32.json
+bettings-50.json
+bettings-75.json
 ```
 
-The 5 / 8 / 32 / 50 / 75 fixtures use the new real-race dataset.
+Retained older fixture:
 
-The 75 fixture includes two deliberate null replay URLs.
+```text
+bettings-16.json
+bettings-baseline.json
+```
 
-The Builder boundary should continue to be tested against these fixtures when rendering changes are made.
+The 75-bet fixture intentionally contains two `null` replay URLs.
 
-## Copy-quality boundary
+Deployed direct planner tests on 2026-09-18 reached `RENDERING` for:
 
-Examples such as:
+```text
+5 bets  -> 8 scenes
+8 bets  -> 11 scenes
+16 bets -> 16 scenes
+32 bets -> 20 scenes
+50 bets -> 25 scenes
+75 bets -> 27 scenes
+```
+
+This proves the current planner-to-final-plan contract boundary at those sizes.
+
+## Current outstanding quality item
+
+Generated copy is structurally safe but can still be stylistically rough.
+
+Observed examples include:
 
 ```text
 The block lost $45.
 profit for the day day.
+Backed 8 backed runners won their races.
 delivered The bet made $2800 profit.
 ```
 
-are copy-quality defects.
+The first remediation, if approved, should be prompt-only and should focus on natural sentence joining, avoiding duplicated phrases and keeping internal architecture vocabulary out of customer-facing copy.
 
-They are not evidence that the Builder or deterministic planner contract is wrong.
+No contract or Builder redesign is justified by these examples.
 
-Do not solve them by:
+## Change control
 
-- adding a second LLM call;
-- restoring field repair;
-- restoring whole-plan repair;
-- adding grammar/capitalization validators;
-- adding numeric prose bans;
-- moving editorial planning into the Builder.
+Before changing contracts/templates:
 
-Preferred first treatment is a small prompt-only wording improvement.
+1. inspect current repo state;
+2. identify whether the issue is factual, structural, copy-quality or rendering;
+3. change the owning layer only;
+4. make one controlled change;
+5. run focused regression;
+6. verify no downstream ownership moved accidentally.
 
-## Change-control rule
-
-A change that affects structure, scene ownership, canonical facts, replay semantics or runtime timing must update the relevant canonical contract/document at the same time.
-
-A copy-style-only prompt change should not require structural contract changes.
-
-Before modifying Builder behaviour:
-
-1. prove a real downstream compatibility defect;
-2. make the smallest change;
-3. run focused Builder tests;
-4. run planner regression if scene contract assumptions changed;
-5. do not use Builder changes to hide planner architecture problems.
+For copy-quality issues, do not “solve” them by adding hard validators, repair loops or extra model calls.
