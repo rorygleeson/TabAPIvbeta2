@@ -89,8 +89,8 @@ for (const totalBets of [5, 8, 16, 32, 75]) {
   const deterministicPlan = buildDeterministicScenePlan(bettings);
   const payload = buildLlmCopyInput(bettings, deterministicPlan);
 
-  assert.strictEqual(payload.copyInputVersion, '2.1');
-  assert.strictEqual(payload.groundingProtocol, 'FACT_PARTS_V2');
+  assert.strictEqual(payload.copyInputVersion, '2.2');
+  assert.strictEqual(payload.groundingProtocol, 'FACT_PARTS_V2_1');
   assert.strictEqual(payload.scenes.length, deterministicPlan.scenes.length);
   assertNoForbiddenFields(payload);
   assertGroundingScopes(payload);
@@ -124,14 +124,14 @@ for (const totalBets of [5, 8, 16, 32, 75]) {
   );
   assert.ok(group67, '8-bet fixture must contain Scene 5 for bets 6 and 7');
   const post = group67.context.factAtomsByPhase.POST_RESULT_BLOCK;
-  assert.strictEqual(post.B6_FINISH, 'GIN AND BARE IT finished 4th');
-  assert.strictEqual(post.B7_FINISH, 'INSAIN CHAOS finished 2nd');
-  assert.strictEqual(post.BLOCK_PROFIT_LOSS, 'the block lost $85');
+  assert.strictEqual(post.B6_FINISH, 'GIN AND BARE IT finished 4th.');
+  assert.strictEqual(post.B7_FINISH, 'INSAIN CHAOS finished 2nd.');
+  assert.strictEqual(post.BLOCK_PROFIT_LOSS, 'The block lost $85.');
 
   const dayScene = payload.scenes.find(scene => scene.sceneType === 6);
   const day = dayScene.context.factAtomsByPhase.POST_DAY;
   assert.strictEqual(day.DAY_WINNING_BETS, '3 winning bets');
-  assert.strictEqual(day.DAY_RACE_WINNERS, '2 backed runners won their races');
+  assert.strictEqual(day.DAY_RACE_WINNERS, '2 backed runners won their races.');
 }
 
-console.log('FACT_PARTS_V2 LLM copy input regression tests passed.');
+console.log('FACT_PARTS_V2_1 LLM copy input regression tests passed.');

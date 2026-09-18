@@ -1,5 +1,5 @@
 {
-  "contractVersion": "2.0.13",
+  "contractVersion": "2.0.14",
   "companionContracts": [
     "contracts/bettings.schema.json",
     "contracts/scene-plan.schema.json",
@@ -45,12 +45,12 @@
       "hardCharacterTolerance": "Validation fails only above target + min(ceil(target * 0.10), 12 characters), applied uniformly to every LLM-owned string and string-array item."
     },
     "groundedCopyProtocol": {
-      "version": "FACT_PARTS_V2",
-      "copyInputVersion": "2.1",
+      "version": "FACT_PARTS_V2_1",
+      "copyInputVersion": "2.2",
       "modelCallPolicy": "One LLM copy call per recap. Structured fact/text parts add no verifier, repair or per-scene model calls.",
-      "rule": "Fresh LLM prose is composed from only two part types: fact parts referencing deterministic phase-scoped fact atoms, and text parts containing narrative/connective language only. The model never reconstructs factual wording inside text.",
+      "rule": "Fresh LLM prose uses two response part types. Exact facts come through deterministic phase-scoped fact IDs; narrative language comes through text parts. Factual atoms that end in sentence punctuation are complete clause atoms and must stand as sentence segments rather than completing or being completed by surrounding grammar. Short inline atoms may still compose naturally with text.",
       "semanticDistinction": "A winning bet is not necessarily a race-winning runner. Race-win wording requires finishingPosition=1; bet-result wording follows the wager result.",
-      "validation": "Planner rejects malformed parts, unknown or wrong-phase fact IDs, extra part fields, protected factual literals inside text parts, raw numeric/money/odds-symbol facts inside text parts, and explicit finishing-position constructions inside text parts. Normal wagering vocabulary such as win, winner, loss, profit, return, stake and odds is allowed in narrative text. Valid fact parts are expanded and all parts joined before final scene-plan merge.",
+      "validation": "Planner rejects malformed parts, unknown or wrong-phase fact IDs, extra part fields, protected factual literals inside text parts, raw numeric/money/odds-symbol facts inside text parts, explicit finishing-position constructions inside text parts, and grammatical stitching into or out of complete clause atoms. Normal wagering vocabulary such as win, winner, loss, profit, return, stake and odds is allowed in narrative text. Valid fact parts are expanded and joined before final scene-plan merge.",
       "finalPlan": "Fact IDs, part objects and grounding metadata are copy-stage-only and are stripped before scene.json. Builder interface remains unchanged."
     }
   },

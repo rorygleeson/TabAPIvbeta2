@@ -122,7 +122,7 @@ function composeParts(parts, source, phase, itemIndex, sceneIndex, field) {
   }
 
   const atomMap = atomsForPhase(source, phase, itemIndex);
-  let output = '';
+  const rendered = [];
 
   parts.forEach((part, partIndex) => {
     if (!part || typeof part !== 'object' || Array.isArray(part)) {
@@ -140,7 +140,8 @@ function composeParts(parts, source, phase, itemIndex, sceneIndex, field) {
       if (!Object.prototype.hasOwnProperty.call(atomMap, part.id)) {
         throw new Error(label + ' references unknown or wrong-phase fact atom ' + part.id + '.');
       }
-      output += String(atomMap[part.id]);
+      const text = String(atomMap[part.id]);
+      rendered.push({ kind: isClauseAtom(text) ? 'clause' : 'inline', text, partIndex });
       return;
     }
 
@@ -153,15 +154,55 @@ function composeParts(parts, source, phase, itemIndex, sceneIndex, field) {
         throw new Error(label + ' text part ' + partIndex + ' must contain non-empty text.');
       }
       validateNarrativeText(part.text, source, label + ' text part ' + partIndex);
-      output += part.text;
+      rendered.push({ kind: 'text', text: part.text, partIndex });
       return;
     }
 
     throw new Error(label + ' part ' + partIndex + ' has unsupported type.');
   });
 
+  validateClauseBoundaries(rendered, label);
+
+  let output = '';
+  rendered.forEach((part, index) => {
+    if (index === 0) {
+      output = part.text;
+      return;
+    }
+    const previous = rendered[index - 1];
+    if (previous.kind === 'clause' || part.kind === 'clause') {
+      output = output.trimEnd() + ' ' + part.text.trimStart();
+    } else {
+      output += part.text;
+    }
+  });
+
   if (!output.trim()) throw new Error(label + ' must not resolve to empty text.');
   return output;
+}
+
+function isClauseAtom(text) {
+  return /[.!?]\s*$/u.test(String(text || ''));
+}
+
+function validateClauseBoundaries(rendered, label) {
+  rendered.forEach((part, index) => {
+    if (part.kind !== 'clause') return;
+
+    const previous = rendered[index - 1];
+    if (previous && previous.kind !== 'clause' && !/[.!?]\s*$/u.test(previous.text)) {
+      throw new Error(label + ' clause fact part ' + part.partIndex + ' must start a new sentence, not complete preceding grammar.');
+    }
+
+    const next = rendered[index + 1];
+    if (!next) return;
+    if (next.kind === 'inline') {
+      throw new Error(label + ' clause fact part ' + part.partIndex + ' cannot be glued to an inline fact.');
+    }
+    if (next.kind === 'text' && !/^\s*["'“‘(]*\p{Lu}/u.test(next.text)) {
+      throw new Error(label + ' text after clause fact part ' + part.partIndex + ' must start a new sentence.');
+    }
+  });
 }
 
 function atomsForPhase(source, phase, itemIndex) {
@@ -257,6 +298,8 @@ module.exports = {
   __test: {
     atomsForPhase,
     composeParts,
+    isClauseAtom,
+    validateClauseBoundaries,
     validateNarrativeText,
     containsProtectedTerm
   }

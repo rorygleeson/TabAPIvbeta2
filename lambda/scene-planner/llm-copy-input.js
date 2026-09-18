@@ -17,9 +17,9 @@ const FIELD_PHASES = {
 function buildLlmCopyInput(bettings, deterministicPlan, contracts = sceneContracts) {
   validateInputs(bettings, deterministicPlan, contracts);
   return {
-    copyInputVersion: '2.1',
+    copyInputVersion: '2.2',
     contractVersion: contracts.contractVersion,
-    groundingProtocol: 'FACT_PARTS_V2',
+    groundingProtocol: 'FACT_PARTS_V2_1',
     scenes: deterministicPlan.scenes.map((scene, sceneIndex) =>
       buildSceneCopyInput(scene, sceneIndex, bettings, contracts)
     )
@@ -198,7 +198,7 @@ function postDayAtoms(bettings) {
   return mergeAtoms(preDayAtoms(bettings), {
     DAY_WINNING_BETS: countPhrase(Number(summary.wins || 0), 'winning bet'),
     DAY_LOSING_BETS: countPhrase(Number(summary.losses || 0), 'losing bet'),
-    DAY_RACE_WINNERS: countPhrase(raceWinners, 'backed runner') + ' won ' + (raceWinners === 1 ? 'its race' : 'their races'),
+    DAY_RACE_WINNERS: sentence(capitalize(countPhrase(raceWinners, 'backed runner')) + ' won ' + (raceWinners === 1 ? 'its race' : 'their races')),
     DAY_TOTAL_RETURNED: money(summary.totalReturned || 0) + ' returned',
     DAY_FINAL_PNL: pnlPhrase(summary.finalPnl || 0, 'for the day')
   });
@@ -221,15 +221,15 @@ function preBetAtoms(bet) {
 function postBetAtoms(bet) {
   const prefix = 'B' + bet.sequence + '_';
   const atoms = {
-    [prefix + 'FINISH']: bet.runnerName + ' finished ' + ordinal(bet.finishingPosition),
-    [prefix + 'BET_RESULT']: bet.result === 'WIN' ? 'the bet was a winning bet' : 'the bet was a losing bet',
-    [prefix + 'RETURN']: 'the bet returned ' + money(bet.return),
-    [prefix + 'PROFIT_LOSS']: betProfitLossPhrase(bet.profitLoss),
-    [prefix + 'RUNNING_PNL']: runningPnlPhrase(bet.runningPnl, 'after the bet'),
-    [prefix + 'RESULT_SUMMARY']: bet.runnerName + ' finished ' + ordinal(bet.finishingPosition) + ' and ' + betProfitLossPhrase(bet.profitLoss)
+    [prefix + 'FINISH']: sentence(bet.runnerName + ' finished ' + ordinal(bet.finishingPosition)),
+    [prefix + 'BET_RESULT']: sentence(bet.result === 'WIN' ? 'The bet was a winning bet' : 'The bet was a losing bet'),
+    [prefix + 'RETURN']: sentence('The bet returned ' + money(bet.return)),
+    [prefix + 'PROFIT_LOSS']: sentence(capitalize(betProfitLossPhrase(bet.profitLoss))),
+    [prefix + 'RUNNING_PNL']: sentence(capitalize(runningPnlPhrase(bet.runningPnl, 'after the bet'))),
+    [prefix + 'RESULT_SUMMARY']: sentence(bet.runnerName + ' finished ' + ordinal(bet.finishingPosition) + ' and ' + betProfitLossPhrase(bet.profitLoss))
   };
   if (Number(bet.finishingPosition) === 1) {
-    atoms[prefix + 'RACE_WIN'] = bet.runnerName + ' won the race';
+    atoms[prefix + 'RACE_WIN'] = sentence(bet.runnerName + ' won the race');
   }
   return atoms;
 }
@@ -240,7 +240,7 @@ function groupPreAtoms(bettings, bets) {
   return {
     BLOCK_BET_COUNT: countPhrase(bets.length, 'bet') + ' in the block',
     BLOCK_TOTAL_STAKE: money(sum(bets.map(bet => bet.stake))) + ' staked across the block',
-    BLOCK_RUNNING_PNL_BEFORE: runningPnlPhrase(before, 'before the block'),
+    BLOCK_RUNNING_PNL_BEFORE: sentence(capitalize(runningPnlPhrase(before, 'before the block'))),
     BLOCK_MEETINGS: joinNatural(meetings)
   };
 }
@@ -250,10 +250,10 @@ function groupPostAtoms(bets) {
   const winningBets = bets.filter(bet => bet.result === 'WIN').length;
   const raceWinners = bets.filter(bet => Number(bet.finishingPosition) === 1).length;
   return {
-    BLOCK_PROFIT_LOSS: blockProfitLossPhrase(pl),
-    BLOCK_RUNNING_PNL_AFTER: runningPnlPhrase(bets[bets.length - 1].runningPnl, 'after the block'),
-    BLOCK_WINNING_BETS: countPhrase(winningBets, 'winning bet') + ' in the block',
-    BLOCK_RACE_WINNERS: countPhrase(raceWinners, 'backed runner') + ' won ' + (raceWinners === 1 ? 'its race' : 'their races') + ' in the block'
+    BLOCK_PROFIT_LOSS: sentence(capitalize(blockProfitLossPhrase(pl))),
+    BLOCK_RUNNING_PNL_AFTER: sentence(capitalize(runningPnlPhrase(bets[bets.length - 1].runningPnl, 'after the block'))),
+    BLOCK_WINNING_BETS: sentence((winningBets === 1 ? 'There was ' : 'There were ') + countPhrase(winningBets, 'winning bet') + ' in the block'),
+    BLOCK_RACE_WINNERS: sentence(capitalize(countPhrase(raceWinners, 'backed runner')) + ' won ' + (raceWinners === 1 ? 'its race' : 'their races') + ' in the block')
   };
 }
 
@@ -263,10 +263,10 @@ function checkpointAtoms(bettings, completed) {
   const raceWinners = completed.filter(bet => Number(bet.finishingPosition) === 1).length;
   const winningBets = completed.filter(bet => bet.result === 'WIN').length;
   Object.assign(atoms, {
-    CHECKPOINT_BETS_COMPLETED: countPhrase(completed.length, 'bet') + ' completed',
-    CHECKPOINT_WINNING_BETS: countPhrase(winningBets, 'winning bet') + ' so far',
-    CHECKPOINT_RACE_WINNERS: countPhrase(raceWinners, 'backed runner') + ' won ' + (raceWinners === 1 ? 'its race' : 'their races') + ' so far',
-    CHECKPOINT_RUNNING_PNL: runningPnlPhrase(completed[completed.length - 1].runningPnl, 'at the checkpoint')
+    CHECKPOINT_BETS_COMPLETED: sentence(capitalize(countPhrase(completed.length, 'bet')) + ' completed'),
+    CHECKPOINT_WINNING_BETS: sentence(capitalize(countPhrase(winningBets, 'winning bet')) + ' so far'),
+    CHECKPOINT_RACE_WINNERS: sentence(capitalize(countPhrase(raceWinners, 'backed runner')) + ' won ' + (raceWinners === 1 ? 'its race' : 'their races') + ' so far'),
+    CHECKPOINT_RUNNING_PNL: sentence(capitalize(runningPnlPhrase(completed[completed.length - 1].runningPnl, 'at the checkpoint')))
   });
   const best = bestPositiveWin(completed);
   if (best) Object.assign(atoms, preBetAtoms(best), postBetAtoms(best));
@@ -294,7 +294,7 @@ function buildStandoutOptions(bettings) {
     options.push({
       type: 'longestLosingStreak',
       atoms: {
-        STANDOUT_LONGEST_LOSING_STREAK: countPhrase(streak.length, 'losing bet') + ' from bet ' + streak.startSequence + ' to bet ' + streak.endSequence
+        STANDOUT_LONGEST_LOSING_STREAK: sentence(capitalize(countPhrase(streak.length, 'losing bet')) + ' ran from bet ' + streak.startSequence + ' to bet ' + streak.endSequence)
       }
     });
   }
@@ -302,7 +302,7 @@ function buildStandoutOptions(bettings) {
   options.push({
     type: 'strongestFinish',
     atoms: {
-      STANDOUT_STRONGEST_FINISH: 'the strongest closing stretch ran from bet ' + finish.startSequence + ' to bet ' + finish.endSequence + ' and ' + pnlPhrase(finish.netGain, 'over that stretch')
+      STANDOUT_STRONGEST_FINISH: sentence('The strongest closing stretch ran from bet ' + finish.startSequence + ' to bet ' + finish.endSequence + ' and delivered ' + pnlPhrase(finish.netGain, 'over that stretch'))
     }
   });
   options.push({
@@ -420,6 +420,16 @@ function runningPnlPhrase(value, suffix) {
   if (n > 0) return 'running P&L was +' + money(n) + ending;
   if (n < 0) return 'running P&L was -' + money(Math.abs(n)) + ending;
   return 'running P&L was break-even' + ending;
+}
+
+function sentence(value) {
+  const text = String(value || '').trim();
+  return /[.!?]$/u.test(text) ? text : text + '.';
+}
+
+function capitalize(value) {
+  const text = String(value || '');
+  return text ? text[0].toLocaleUpperCase('en-AU') + text.slice(1) : text;
 }
 
 function money(value) {
