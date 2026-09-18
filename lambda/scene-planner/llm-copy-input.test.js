@@ -43,7 +43,7 @@ function assertNoLegacySemanticAtoms(payload) {
     /^BLOCK_RUNNING_PNL_/u,
     /^CHECKPOINT_RUNNING_PNL$/u,
     /^STANDOUT_STRONGEST_FINISH_(?:START_BET|END_BET|PNL)$/u,
-    /_(?:RETURN_AMOUNT|PROFIT_AMOUNT|LOSS_AMOUNT|BREAK_EVEN_AMOUNT)$/u
+    /_(?:RETURN_AMOUNT|RETURN_TEXT|PROFIT_AMOUNT|LOSS_AMOUNT|BREAK_EVEN_AMOUNT)$/u
   ];
   for (const id of Object.keys(payload.factCatalog || {})) {
     for (const pattern of legacy) {
@@ -91,6 +91,8 @@ function assertGroundingScopes(payload) {
       assert.ok(pre.BLOCK_END_BET);
       assert.strictEqual(typeof sem.isFirstGroup, 'boolean');
       assert.strictEqual(typeof sem.isFinalGroup, 'boolean');
+      assert.ok(['FINAL_GROUP','MORE_BETS_REMAIN'].includes(sem.finality));
+      assert.strictEqual(sem.finality, sem.isFinalGroup ? 'FINAL_GROUP' : 'MORE_BETS_REMAIN');
     }
 
     if (scene.sceneType === 8) {
@@ -99,6 +101,8 @@ function assertGroundingScopes(payload) {
       const sem = scene.context.semanticContextByPhase.PRE_RESULT_BLOCK.groupPosition;
       assert.ok(pre.BLOCK_TOTAL_STAKE);
       assert.strictEqual(typeof sem.isFinalGroup, 'boolean');
+      assert.ok(['FINAL_GROUP','MORE_BETS_REMAIN'].includes(sem.finality));
+      assert.strictEqual(sem.finality, sem.isFinalGroup ? 'FINAL_GROUP' : 'MORE_BETS_REMAIN');
       assert.ok(Array.isArray(byBet));
       assert.strictEqual(byBet.length, scene.betSequences.length);
       byBet.forEach((atoms, index) => {
@@ -165,7 +169,8 @@ for (const totalBets of [5, 8, 16, 32, 75]) {
   assert.strictEqual(payload.factCatalog.B3_PROFIT_TEXT, '$96 profit');
   assert.strictEqual(payload.factCatalog.B4_LOSS_TEXT, '$35 loss');
   assert.strictEqual(payload.factCatalog.B5_PROFIT_TEXT, '$38 profit');
-  assert.strictEqual(payload.factCatalog.B3_RETURN_TEXT, '$126 returned');
+  assert.strictEqual(payload.factCatalog.B3_RETURN_PHRASE, 'a $126 return');
+  assert.strictEqual(Object.prototype.hasOwnProperty.call(payload.factCatalog, 'B3_RETURN_TEXT'), false);
   assert.strictEqual(Object.prototype.hasOwnProperty.call(payload.factCatalog, 'B3_ODDS'), false);
   assert.strictEqual(Object.prototype.hasOwnProperty.call(payload.factCatalog, 'B3_PROFIT_LOSS'), false);
   assert.strictEqual(Object.prototype.hasOwnProperty.call(payload.factCatalog, 'B3_RACE_WIN'), false);
@@ -207,9 +212,10 @@ for (const totalBets of [5, 8, 16, 32, 75]) {
       start: Number(middleFacts.BLOCK_START_BET),
       end: Number(middleFacts.BLOCK_END_BET),
       remaining: Number(middleFacts.BLOCK_BETS_REMAINING_AFTER),
-      final: middleSem.isFinalGroup
+      final: middleSem.isFinalGroup,
+      finality: middleSem.finality
     },
-    { start: 36, end: 38, remaining: 37, final: false }
+    { start: 36, end: 38, remaining: 37, final: false, finality: 'MORE_BETS_REMAIN' }
   );
 
   const finalGroup = payload.scenes.find(scene =>
@@ -221,6 +227,18 @@ for (const totalBets of [5, 8, 16, 32, 75]) {
   const finalSem = finalGroup.context.semanticContextByPhase.PRE_RESULT_BLOCK.groupPosition;
   assert.strictEqual(finalGroup.context.factAtomsByPhase.PRE_RESULT_BLOCK.BLOCK_BETS_REMAINING_AFTER, '0');
   assert.strictEqual(finalSem.isFinalGroup, true);
+  assert.strictEqual(finalSem.finality, 'FINAL_GROUP');
+
+  const nearEndScene8 = payload.scenes.find(scene =>
+    scene.sceneType === 8 &&
+    Array.isArray(scene.betSequences) &&
+    scene.betSequences[0] === 70
+  );
+  assert.ok(nearEndScene8, 'Expected Scene 8 for bets 70-73');
+  const nearEndSem = nearEndScene8.context.semanticContextByPhase.PRE_RESULT_BLOCK.groupPosition;
+  assert.strictEqual(nearEndScene8.context.factAtomsByPhase.PRE_RESULT_BLOCK.BLOCK_BETS_REMAINING_AFTER, '2');
+  assert.strictEqual(nearEndSem.isFinalGroup, false);
+  assert.strictEqual(nearEndSem.finality, 'MORE_BETS_REMAIN');
 
   const day = payload.scenes.find(scene => scene.sceneType === 6).context.factAtomsByPhase.POST_DAY;
   assert.strictEqual(day.DAY_PROFIT_TEXT, '$3813.65 profit');
@@ -251,8 +269,8 @@ for (const totalBets of [5, 8, 16, 32, 75]) {
     }
   }
   for (const [id, value] of Object.entries(payload.factCatalog)) {
-    if (/_RETURN_TEXT$/u.test(id)) {
-      assert.match(String(value), /^\$\d+(?:\.\d+)? returned$/u);
+    if (/_RETURN_PHRASE$/u.test(id)) {
+      assert.match(String(value), /^a \$\d+(?:\.\d+)? return$/u);
     }
   }
 }
