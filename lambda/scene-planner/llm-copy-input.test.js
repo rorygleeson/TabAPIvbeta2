@@ -168,7 +168,20 @@ for (const totalBets of [5, 8, 16, 32, 75]) {
   const firstBet = bettings.bets[0];
   const firstPrefix = 'B' + firstBet.sequence + '_';
   assert.strictEqual(payload.factCatalog[firstPrefix + 'BET_TYPE'], firstBet.betType);
-  assert.strictEqual(payload.factCatalog[firstPrefix + 'STAKE'].startsWith('
+  assert.strictEqual(payload.factCatalog[firstPrefix + 'STAKE'].startsWith('$'), true);
+  assert.match(payload.factCatalog[firstPrefix + 'ODDS'], /^\d+(?:\.\d+)?$/u);
+  assert.match(payload.factCatalog[firstPrefix + 'FINISH'], /^\d+(?:st|nd|rd|th)$/u);
+  assert.ok(['WIN', 'LOSS'].includes(payload.factCatalog[firstPrefix + 'BET_RESULT']));
+  assert.match(payload.factCatalog[firstPrefix + 'PROFIT_LOSS'], /^(?:[+-]\$|\$0$)/u);
+  assert.strictEqual(Object.prototype.hasOwnProperty.call(payload.factCatalog, firstPrefix + 'BET_SETUP'), false);
+  assert.strictEqual(Object.prototype.hasOwnProperty.call(payload.factCatalog, firstPrefix + 'RESULT_SUMMARY'), false);
+
+  assert.match(post.BLOCK_BET_COUNT, /^\d+$/u);
+  assert.strictEqual(post.BLOCK_TOTAL_STAKE.startsWith('$'), true);
+  assert.match(post.BLOCK_PROFIT_LOSS, /^(?:[+-]\$|\$0$)/u);
+  assert.match(post.BLOCK_WINNING_BETS, /^\d+$/u);
+  assert.match(post.BLOCK_RACE_WINNERS, /^\d+$/u);
+}
 
 {
   const bettings = readJson('bettings-8.json');
