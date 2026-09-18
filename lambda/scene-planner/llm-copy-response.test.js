@@ -235,7 +235,7 @@ assert.throws(() => validateCopyResponse(input, legacyPlaceholder), /non-empty a
 const factPartWithExtraMetadata = goodResponse();
 factPartWithExtraMetadata.scenes[bet3SceneIndex].tensionLine = [{ type: 'fact', id: 'B3_RUNNER', note: 'harmless metadata' }];
 const extraMetadataNormalized = validateCopyResponse(input, factPartWithExtraMetadata);
-assert.strictEqual(extraMetadataNormalized.scenes[bet3SceneIndex].tensionLine, 'ROCEM');
+assert.strictEqual(extraMetadataNormalized.scenes[bet3SceneIndex].tensionLine, bet3Runner);
 
 
 
@@ -244,7 +244,7 @@ assert.strictEqual(extraMetadataNormalized.scenes[bet3SceneIndex].tensionLine, '
   const semanticToleranceCases = [
     'Two chances remain.',
     'The day finished $20 up.',
-    'Backed ROCEM at 5.',
+    'Backed ' + bet3Runner + ' at 5.',
     'Both runners finished second.',
     'Three winning bets from 8 bets.',
     'Odds @ 3 looked short.',
