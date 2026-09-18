@@ -2,69 +2,125 @@
 
 Last updated: 2026-09-18
 
-This document describes the current Kubrick V2 regression boundary.
+This document describes the **current Kubrick V2 regression expectations** for `rorygleeson/TabAPIvbeta2`.
+
+The old vbeta1 planner repair-loop tests are historical and are no longer the acceptance model for Kubrick V2.
 
 ## 1. Planner architecture under test
 
-Current flow:
-
 ```text
 bettings.json
-  -> deterministic scene plan
-  -> compact grounded copy payload
-  -> exactly one Bedrock copy call
-  -> copy validation
-       -> valid copy: merge
+  -> deterministic scene structure
+  -> one compact grounded Bedrock copy call
+  -> validate copy response
+       -> valid: merge copy
        -> copy-stage failure: deterministic fallback
-  -> final scene.json
+  -> scene.json
   -> existing Builder
 ```
 
-The LLM is a copywriter only. It does not plan scene structure.
+Code owns structure. The LLM owns copy only.
 
-There is no structural repair loop and no second LLM call.
+There is:
+- no LLM structural planning;
+- no structural repair loop;
+- no second LLM call;
+- no hard grammar/capitalisation/copy-length gate.
 
-## 2. Hard planner regression requirements
+## 2. Deterministic structure regression gate
 
-Automated tests must continue to prove:
+Planner tests must prove:
 
-1. canonical bettings input validation;
-2. contiguous chronological bet sequence;
-3. deterministic Scene 1 / 6 / 7 placement;
-4. exact primary bet coverage exactly once and in order;
-5. Scene 2 single-bet ownership;
-6. Scene 3 replay eligibility and immediate placement after matching Scene 2;
-7. Scene 4 deterministic midpoint placement;
-8. Scene 5 legal 2-3 bet grouping;
-9. Scene 8 legal 4-5 bet grouping where enabled;
-10. deterministic replay count/ranking policy;
-11. hard runtime duration maximum;
-12. stable deterministic structure for identical input;
-13. grounded copy response shape and fact-ID scope;
-14. invalid copy response falls back instead of killing a structurally valid recap;
-15. final scene-plan schema validation;
-16. canonical root contracts and Builder-bundled copies remain synchronized where mirrored.
+1. Scene 1 is first.
+2. Scene 6 is second-last.
+3. Scene 7 is last.
+4. Every bet is covered exactly once by Scene 2/5/8 primary scenes.
+5. Primary coverage is chronological.
+6. Scene 3 only exists for replay-eligible bets.
+7. Scene 3 immediately follows its matching Scene 2.
+8. Scene 4 is omitted below the configured minimum bet count.
+9. Scene 4 is placed at the legal primary-scene boundary nearest 50% coverage.
+10. Scene 5 covers only 2–3 consecutive bets.
+11. Scene 8 covers only 4–5 consecutive bets and is used only above the configured threshold.
+12. Duration stays below the runtime hard maximum.
+13. Identical input produces identical structure.
 
-Copy grammar, capitalization, repetition and prose-length targets are not hard availability gates.
+## 3. Current locked policy
 
-## 3. Copy availability regression
+### Duration targets
 
-The planner makes at most one Bedrock copy call.
+```text
+1  -> 60s
+5  -> 80s
+10 -> 105s
+20 -> 145s
+40 -> 195s
+60 -> 240s
+75 -> 285s
+hard max -> 300s
+```
 
-These copy-stage failures must use deterministic fallback copy:
+### Replay desired counts
 
-- Bedrock invocation error;
-- malformed/unparseable model output;
-- invalid copy response;
-- missing/unusable required copy.
+```text
+<=5  -> 1
+<=10 -> 2
+<=20 -> 3
+<=40 -> 4
+>40  -> 5
+max  -> 5
+```
 
-Fallback must not alter deterministic scene structure.
+For >40 bets, at least 3 replays are retained when at least 3 eligible replay bets exist.
 
-No test should reintroduce a second model call, field repair call, whole-plan repair call or semantic prose validator.
+Replay eligibility:
 
-## 4. Current representative fixtures
+```text
+WIN + valid HTTPS replayUrl
+```
 
-Current fixtures:
+### Extra Scene 2 allowance
+
+```text
+<=10 -> 4
+<=20 -> 3
+<=40 -> 2
+>40  -> 1
+```
+
+### Scene 8
+
+```text
+minimum total bets = 17
+```
+
+## 4. Copy regression gate
+
+The copy boundary must prove:
+
+1. exactly one Bedrock copy call maximum;
+2. compact model payload uses `FACT_PARTS_COMPACT_V1`;
+3. 75-bet compact payload remains substantially smaller than rich internal copy input;
+4. valid fact IDs are expanded deterministically;
+5. unknown/out-of-scope fact IDs are rejected;
+6. required fields/enums/cardinality are enforced;
+7. malformed or unusable model output triggers deterministic fallback rather than planner failure;
+8. fallback preserves the deterministic scene skeleton exactly;
+9. final `scene.json` remains plain downstream strings/enums with no fact-part metadata.
+
+Narrative wording quality is deliberately non-fatal.
+
+Do **not** add hard validators for:
+- grammar;
+- capitalisation;
+- repeated words;
+- prose length targets;
+- internal terminology;
+- semantic interpretation of arbitrary narrative text.
+
+## 5. Current fixtures
+
+Current canonical fixtures:
 
 ```text
 tests/fixtures/bettings-5.json
@@ -76,83 +132,84 @@ tests/fixtures/bettings-75.json
 tests/fixtures/bettings-baseline.json
 ```
 
-5 / 8 / 32 / 50 / 75 use the new real-race master data set.
+The 5 / 8 / 32 / 50 / 75 files are consistent prefixes of one recent real-race 75-bet master dataset.
 
-16 and baseline remain the retained older baseline fixture.
+`bettings-16.json` remains the older retained baseline fixture.
 
-The 75-bet fixture deliberately contains two missing replay URLs:
+The 75-bet fixture intentionally has two missing replay URLs:
 
 ```text
 sequence 74 -> replayUrl = null
 sequence 75 -> replayUrl = null
 ```
 
-This is intentional regression coverage.
+This is intentional missing-media coverage.
 
-## 5. Latest deployed direct planner proof
+## 6. Baseline fixture validation
 
-On 2026-09-18 the deployed planner reached `RENDERING` for:
+The new 5 / 8 / 32 / 50 / 75 fixtures have been checked against `bettings-baseline.json` for identical canonical field shape.
 
-| Bets | Scene count | Fixture | Result |
-|---:|---:|---|---|
-| 5 | 8 | new real-data | PASS |
-| 8 | 11 | new real-data | PASS |
-| 16 | 16 | retained older fixture | PASS |
-| 32 | 20 | new real-data | PASS |
-| 50 | 25 | new real-data | PASS |
-| 75 | 27 | new real-data + two null replay URLs | PASS |
+Semantic fixture checks include:
 
-These tests prove the current planner boundary across small, medium and large recaps.
+- contiguous sequence;
+- `profitLoss = return - stake`;
+- cumulative `runningPnl`;
+- summary totals;
+- win/loss counts;
+- unique meeting count;
+- biggest/highest sequence references;
+- valid HTTPS replay URLs where non-null.
 
-They do not certify prose perfection.
+## 7. Current direct AWS proof
 
-## 6. Current copy-quality status
+On 2026-09-18 the current planner reached `RENDERING` for:
 
-Observed copy can still contain awkward wording such as:
+| Bets | Scene count | Fixture state |
+|---:|---:|---|
+| 5 | 8 | new real-race fixture |
+| 8 | 11 | new real-race fixture |
+| 16 | 16 | older retained fixture |
+| 32 | 20 | new real-race fixture |
+| 50 | 25 | new real-race fixture |
+| 75 | 27 | new real-race fixture, two null replay URLs |
+
+All six direct tests passed.
+
+## 8. Current known issue
+
+The remaining visible issue is copy quality only.
+
+Examples include awkward joins, repeated wording and internal planner vocabulary such as `block`.
+
+These are not structural failures and must not be turned into hard availability failures.
+
+If copy quality is refined, the preferred first change is prompt-only, followed by 5- and 75-bet comparison tests.
+
+## 9. Builder regression gate
+
+The Builder remains downstream-compatible and should continue to prove:
+
+- valid scene plan accepted;
+- invalid coverage rejected;
+- invalid factual/P&L input rejected;
+- replay media failure does not stall runtime;
+- Scene 5 and Scene 8 render correctly;
+- Scene 4 renders at the deterministic checkpoint;
+- final HTML remains functional;
+- display substitutions are escaped safely.
+
+The Builder must not become a second planner or a prose semantic validator.
+
+## 10. Working rule
+
+For every significant change:
 
 ```text
-The block lost $45.
-profit for the day day.
-Backed 8 backed runners won their races.
-delivered The bet made $2800 profit.
+inspect current state
+-> make one controlled change
+-> run focused test
+-> verify
+-> only then continue
 ```
 
-These are copy-quality defects, not structural defects.
-
-Preferred remediation is a small prompt-only wording refinement.
-
-Do not add hard grammar/semantic validators or another model call.
-
-## 7. Builder regression boundary
-
-The existing Builder remains downstream-compatible.
-
-Builder regression should continue to prove:
-
-- accepted `scene.json` renders without planner-specific restructuring;
-- factual values come from validated input/plan;
-- replay scenes use supplied replay URLs;
-- missing replay media does not stall the recap;
-- Scene 5 and Scene 8 grouped scenes render correctly;
-- Scene 4 renders at the supplied checkpoint;
-- Scene 6/7 final state renders correctly;
-- display substitutions are escaped safely;
-- rendered HTML remains functional.
-
-## 8. Manual AWS tests
-
-Deployed-AWS smoke procedures and historical resilience evidence live in:
-
-```text
-tests/manual-cli-tests.md
-```
-
-The helper:
-
-```cmd
-tests\tools\run-planner-test.cmd <size>
-```
-
-directly invokes the planner and proves the job reaches `RENDERING`.
-
-It does not automatically send the rendering SQS message.
+Distinguish clearly between **PROVEN**, **LOCKED**, **IN PROGRESS**, and **PLANNED**.
