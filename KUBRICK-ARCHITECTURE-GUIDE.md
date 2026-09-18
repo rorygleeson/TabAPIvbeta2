@@ -401,7 +401,14 @@ The rich internal copy contract is built first for deterministic validation and 
 
 The actual Bedrock request uses a compact projection so 75-bet recaps remain comfortably within model input limits.
 
-Current model protocol:
+Current rich internal grounding protocol:
+
+```text
+FACT_PARTS_V2_3
+copyInputVersion = 2.4
+```
+
+Current compact Bedrock payload protocol remains:
 
 ```text
 FACT_PARTS_COMPACT_V1
@@ -414,12 +421,21 @@ The model returns prose as fact/text parts:
 
 ```json
 [
-  {"type":"fact","id":"..."},
-  {"type":"text","text":" ..."}
+  {"type":"text","text":"Backed "},
+  {"type":"fact","id":"DAY_TOTAL_BETS"},
+  {"type":"text","text":" bets."}
 ]
 ```
 
-Fact parts are expanded deterministically during validation/merge.
+The atom ownership rule is now explicit:
+
+> **Code owns exact factual values and eligibility. The LLM owns grammar and storytelling.**
+
+Model-facing fact atoms are exact values or small factual units, not pre-written customer sentences. Counts are counts, stakes/returns are exact money values, P&L values are signed, odds remain exact supplied decimal odds, finishing positions remain exact ordinals, and race-win wording is exposed only when the runner actually won.
+
+Redundant prose-shaped composite atoms such as per-bet setup/result-summary sentences are not exposed.
+
+Fact parts are expanded deterministically during validation/merge. The assembler performs only mechanical safe-boundary spacing when neither adjacent part supplied spacing/punctuation; it does not rewrite grammar or facts.
 
 The model never receives authority to reconstruct structure.
 
@@ -681,30 +697,22 @@ This proves planner structural stability across the tested sizes. It does not me
 
 ---
 
-## 14. Current quality issue: copy polish only
+## 14. Copy-quality hardening
 
-The remaining visible issue is wording quality.
+Live 5- and 75-bet tests proved the deterministic planner remained structurally stable, but exposed a systemic copy-interface problem: the old fact catalog mixed raw values, noun phrases and complete customer sentences. That gave both code and the LLM partial ownership of grammar and produced failures such as repeated nouns, sentence fragments and awkward sentence-atom joins.
 
-Examples observed in valid output include constructions such as:
+The source implementation has now been hardened around one ownership boundary:
 
 ```text
-Both runners missed, The block lost $45.
-profit for the day day.
-Backed 8 backed runners won their races.
-SAUCISSON won the race. at 81 odds delivered The bet made $2800 profit.
+code -> exact facts, chronology and eligibility
+LLM  -> grammar, sentence construction and narrative colour
 ```
 
-These are not structural planner failures.
+The model-facing catalog now prefers atomic values/small factual units. The prompt reflects those semantics, sentence-atom composition logic has been removed, and deterministic assembly uses only safe mechanical spacing.
 
-Preferred treatment:
+This is a copy-interface change only. It does not alter deterministic scene planning, grouping, replay policy, midpoint policy, Builder inputs or the one-call/fallback architecture.
 
-1. preserve current architecture;
-2. if improvement is required, make a small prompt-only wording change first;
-3. do not add hard prose validators;
-4. do not add repair loops;
-5. do not add a second LLM call;
-6. test 5 and 75 before widening changes;
-7. revert the prompt-only change if quality regresses.
+The source change must still be deployed and live-tested with the 5- and 75-bet fixtures before the new copy quality is marked proven. Do not add grammar validators, repair loops or a second model call if individual stylistic imperfections remain.
 
 ---
 
@@ -737,6 +745,7 @@ These rules are mandatory:
 - Scene 5 and Scene 8 grouping implemented;
 - duration candidate selection implemented;
 - compact one-call copy payload implemented;
+- atomic fact-value copy interface implemented in source;
 - deterministic copy fallback implemented;
 - existing Builder compatibility retained;
 - direct live planner tests pass at 5 / 8 / 16 / 32 / 50 / 75;
@@ -756,7 +765,7 @@ These rules are mandatory:
 
 ### REMAINING / PLANNED
 
-- optional small prompt-only copy-quality refinement;
+- deploy and live-test the atomic fact-value copy interface at 5 and 75 bets;
 - continue Builder/rendered-HTML regression proof with the new real fixtures where useful;
 - continue Normaliser integration toward canonical `bettings.json`;
 - complete the full upload/orchestration/status/delivery product path when that work is resumed.
