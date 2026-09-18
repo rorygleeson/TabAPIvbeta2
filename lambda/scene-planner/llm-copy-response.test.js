@@ -144,4 +144,12 @@ const malformedFactPart = goodResponse();
 malformedFactPart.scenes[bet3SceneIndex].tensionLine = [{ type: 'fact', id: 'B3_RUNNER', text: 'bad' }];
 assert.throws(() => validateCopyResponse(input, malformedFactPart), /must contain only type and id/);
 
+
+const boundarySource = { context: { protectedTerms: ['Al', 'Sale', 'Te Aroha'] } };
+assert.doesNotThrow(() => validateCopyResponse(input, goodResponse()));
+assert.strictEqual(require('./llm-copy-response').__test.containsProtectedTerm('final chapter', 'al'), false);
+assert.strictEqual(require('./llm-copy-response').__test.containsProtectedTerm('wholesale move', 'sale'), false);
+assert.strictEqual(require('./llm-copy-response').__test.containsProtectedTerm('al is next', 'al'), true);
+assert.strictEqual(require('./llm-copy-response').__test.containsProtectedTerm('back at te aroha today', 'te aroha'), true);
+
 console.log('FACT_PARTS_V2 LLM copy response validation tests passed.');
