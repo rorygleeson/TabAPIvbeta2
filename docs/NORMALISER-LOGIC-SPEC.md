@@ -744,12 +744,14 @@ The v0.9 cleanup also replaces deprecated `datetime.utcnow()` usage with timezon
 
 ## 23. Park point
 
-When Run 1 and Run 2 pass:
+When the current local regression runs pass:
 
 ```text
-NORMALISER = PARKED / LOCAL ONLY
+NORMALISER = PARKED / LOCAL PROVEN CANDIDATE
 ```
 
-Do not deploy it into the vbeta1 runtime yet.
+Do not silently deploy it into the existing AWS runtime.
 
-Return to Step 10 scheduler/planner work.
+Productionisation is a separate controlled step and should preserve the agreed target shape: one Python Normaliser Lambda with internal Pass 1 / Pass 2 / Pass 3 stages, producing canonical `bettings.json` for Kubrick V2.
+
+Until that productionisation step is explicitly started, the implemented Kubrick V2 planner remains independently testable from canonical fixtures.
