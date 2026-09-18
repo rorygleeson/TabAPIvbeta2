@@ -8,7 +8,7 @@ const { DynamoDBClient, GetItemCommand, UpdateItemCommand } = require('@aws-sdk/
 const { BedrockRuntimeClient, ConverseCommand } = require('@aws-sdk/client-bedrock-runtime');
 
 const { buildDeterministicScenePlan } = require('./scene-planner');
-const { buildLlmCopyInput } = require('./llm-copy-input');
+const { buildLlmCopyInput, buildLlmModelPayload } = require('./llm-copy-input');
 const { parseJsonObject, validateCopyResponse } = require('./llm-copy-response');
 const { mergeCopyIntoPlan } = require('./llm-copy-merge');
 const { buildFallbackCopy } = require('./llm-copy-fallback');
@@ -165,12 +165,13 @@ async function markFailed(jobId, attemptId, error) {
 
 async function invokeCopyModel(copyInput) {
   try {
+    const modelPayload = buildLlmModelPayload(copyInput);
     const response = await bedrock.send(new ConverseCommand({
       modelId: PLANNER_MODEL_ID,
       system: [{ text: plannerPrompt }],
       messages: [{
         role: 'user',
-        content: [{ text: 'copyInput:\n' + JSON.stringify(copyInput) }]
+        content: [{ text: 'copyInput:\n' + JSON.stringify(modelPayload) }]
       }],
       inferenceConfig: {
         maxTokens: 8000,
@@ -185,6 +186,7 @@ async function invokeCopyModel(copyInput) {
     console.log(JSON.stringify({
       event: 'llm-copy-completed',
       fallbackUsed: false,
+      modelPayloadBytes: Buffer.byteLength(JSON.stringify(modelPayload), 'utf8'),
       inputTokens: response.usage?.inputTokens,
       outputTokens: response.usage?.outputTokens,
       totalTokens: response.usage?.totalTokens,
