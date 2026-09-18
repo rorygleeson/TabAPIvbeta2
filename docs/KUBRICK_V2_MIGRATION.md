@@ -197,7 +197,7 @@ ordered scene skeleton
 ONE LLM CALL FOR COPY ONLY
     |
     v
-validate + expand phase-scoped FACT_PARTS_V2_1 fact/text parts
+validate + expand FACT_PARTS_V2_2 fact/text parts against the shared chronological fact scope
     |
     v
 merge LLM copy into code-owned skeleton
@@ -227,7 +227,7 @@ The key principle is:
 
 > The LLM does not implement the contract. The software implements the contract.
 
-Fresh Kubrick V2 copy uses a grounded-copy boundary: deterministic code supplies approved factual atoms; the LLM writes one recap-wide response as structured `fact` and `text` parts; planner validation expands fact IDs and joins the parts into ordinary strings before final merge. Short inline facts may compose with narrative text, while complete factual clauses stand as sentence segments so the model does not have to stitch grammar around deterministic facts. Narrative text remains LLM-written. A winning bet and a race-winning runner remain distinct semantics. This adds no additional LLM calls and does not change the downstream Builder contract.
+Fresh Kubrick V2 copy uses a grounded-copy boundary: deterministic code compiles stable day/bet facts into one recap-wide catalog and computes the allowed fact IDs for every scene phase from chronology. The LLM and validator consume that same scope, so a fact seen elsewhere in the one-call recap can be reused only when it is valid at the target point in time. Scene-local aggregate atoms remain local. Short inline facts may compose with narrative text, while complete factual clauses stand as sentence segments. This adds no additional LLM calls and does not change the downstream Builder contract.
 
 ## Scene policy still to define before coding
 
