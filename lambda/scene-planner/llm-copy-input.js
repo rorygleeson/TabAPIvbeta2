@@ -296,7 +296,8 @@ function groupedContext(bettings, sequences, scene8) {
   const groupSemantics = {
     groupPosition: {
       isFirstGroup: position.isFirstGroup,
-      isFinalGroup: position.isFinalGroup
+      isFinalGroup: position.isFinalGroup,
+      finality: position.isFinalGroup ? 'FINAL_GROUP' : 'MORE_BETS_REMAIN'
     }
   };
 
@@ -390,7 +391,7 @@ function postBetAtoms(bet) {
   return mergeAtoms({
     [prefix + 'FINISH']: ordinal(bet.finishingPosition),
     [prefix + 'BET_RESULT']: bet.result,
-    [prefix + 'RETURN_TEXT']: money(bet.return) + ' returned'
+    [prefix + 'RETURN_PHRASE']: 'a ' + money(bet.return) + ' return'
   },
   typedPnlAtoms('B' + bet.sequence, bet.profitLoss),
   typedPnlAtoms('B' + bet.sequence + '_RUNNING', bet.runningPnl));
