@@ -180,6 +180,17 @@ async function invokeCopyModel(copyInput) {
     }));
 
     const outputText = (response.output?.message?.content || []).map(x => x.text || '').join('').trim();
+
+    console.log(JSON.stringify({
+      event: 'llm-copy-response-received',
+      stopReason: response.stopReason,
+      inputTokens: response.usage?.inputTokens,
+      outputTokens: response.usage?.outputTokens,
+      totalTokens: response.usage?.totalTokens,
+      outputChars: outputText.length,
+      latencyMs: response.metrics?.latencyMs
+    }));
+
     const parsed = parseJsonObject(outputText);
     const validatedCopy = validateCopyResponse(copyInput, parsed);
 
