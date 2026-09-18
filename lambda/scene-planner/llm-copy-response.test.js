@@ -158,7 +158,10 @@ groundedWinningBets.scenes[dayIndex].dayVerdict = [
   textPart(' shaped the day.')
 ];
 const groundedDayNormalized = validateCopyResponse(input, groundedWinningBets);
-assert.strictEqual(groundedDayNormalized.scenes[dayIndex].dayVerdict, '3 winning bets shaped the day.');
+assert.strictEqual(
+  groundedDayNormalized.scenes[dayIndex].dayVerdict,
+  input.scenes[dayIndex].context.factAtomsByPhase.POST_DAY.DAY_WINNING_BETS + ' shaped the day.'
+);
 
 const bet3SceneIndex = input.scenes.findIndex(scene => scene.sceneType === 2 && scene.betSequence === 3);
 const rawMoney = goodResponse();
