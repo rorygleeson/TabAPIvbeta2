@@ -161,7 +161,6 @@ function composeParts(parts, source, phase, itemIndex, sceneIndex, field, copyIn
     throw new Error(label + ' part ' + partIndex + ' has unsupported type.');
   });
 
-  validateClauseBoundaries(rendered, label);
 
   let output = '';
   rendered.forEach((part, index) => {
@@ -183,26 +182,6 @@ function composeParts(parts, source, phase, itemIndex, sceneIndex, field, copyIn
 
 function isClauseAtom(text) {
   return /[.!?]\s*$/u.test(String(text || ''));
-}
-
-function validateClauseBoundaries(rendered, label) {
-  rendered.forEach((part, index) => {
-    if (part.kind !== 'clause') return;
-
-    const previous = rendered[index - 1];
-    if (previous && previous.kind !== 'clause' && !/[.!?]\s*$/u.test(previous.text)) {
-      throw new Error(label + ' clause fact part ' + part.partIndex + ' must start a new sentence, not complete preceding grammar.');
-    }
-
-    const next = rendered[index + 1];
-    if (!next) return;
-    if (next.kind === 'inline') {
-      throw new Error(label + ' clause fact part ' + part.partIndex + ' cannot be glued to an inline fact.');
-    }
-    if (next.kind === 'text' && !/^\s*["'“‘(]*\p{Lu}/u.test(next.text)) {
-      throw new Error(label + ' text after clause fact part ' + part.partIndex + ' must start a new sentence.');
-    }
-  });
 }
 
 function atomsForPhase(source, phase, itemIndex, copyInput) {
@@ -317,7 +296,6 @@ module.exports = {
     atomsForPhase,
     composeParts,
     isClauseAtom,
-    validateClauseBoundaries,
     validateNarrativeText,
     containsProtectedTerm
   }
