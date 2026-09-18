@@ -89,8 +89,8 @@ for (const totalBets of [5, 8, 16, 32, 75]) {
   const deterministicPlan = buildDeterministicScenePlan(bettings);
   const payload = buildLlmCopyInput(bettings, deterministicPlan);
 
-  assert.strictEqual(payload.copyInputVersion, '2.0');
-  assert.strictEqual(payload.groundingProtocol, 'FACT_ATOMS_V1');
+  assert.strictEqual(payload.copyInputVersion, '2.1');
+  assert.strictEqual(payload.groundingProtocol, 'FACT_PARTS_V2');
   assert.strictEqual(payload.scenes.length, deterministicPlan.scenes.length);
   assertNoForbiddenFields(payload);
   assertGroundingScopes(payload);
@@ -99,6 +99,9 @@ for (const totalBets of [5, 8, 16, 32, 75]) {
     assert.strictEqual(scene.sceneIndex, index);
     assert.strictEqual(scene.sceneType, deterministicPlan.scenes[index].sceneType);
     assert.ok(Object.keys(scene.requiredFields).length > 0, 'Scene ' + index + ' must request LLM fields');
+    for (const rule of Object.values(scene.requiredFields)) {
+      assert.ok(['parts', 'partsArray', 'enum'].includes(rule.responseType), 'Every LLM field must declare responseType');
+    }
   });
 
   const scene8s = payload.scenes.filter(scene => scene.sceneType === 8);
@@ -131,4 +134,4 @@ for (const totalBets of [5, 8, 16, 32, 75]) {
   assert.strictEqual(day.DAY_RACE_WINNERS, '2 backed runners won their races');
 }
 
-console.log('Grounded LLM copy input regression tests passed.');
+console.log('FACT_PARTS_V2 LLM copy input regression tests passed.');
