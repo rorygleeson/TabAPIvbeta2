@@ -1,373 +1,342 @@
 # Manual AWS CLI Smoke Tests
 
-Purpose: deployed AWS proof for the vbeta1 backend. Commands are intentionally single-line Windows CMD commands.
+Last updated: 2026-09-18
 
-## Preconditions
+Purpose: deployed AWS proof for the current Kubrick V2 planner while reusing the existing vbeta1-named backend resources.
 
-Target account: `134387458447`
+All commands are Windows CMD-compatible unless stated otherwise.
 
-Target region: `ap-southeast-2`
+## Environment
 
-Planner Lambda: `tab-recap-vbeta1-scene-planner`
+Account:
 
-Planning queue: `https://sqs.ap-southeast-2.amazonaws.com/134387458447/tab-recap-vbeta1-planning`
+```text
+134387458447
+```
 
-Planning DLQ: `https://sqs.ap-southeast-2.amazonaws.com/134387458447/tab-recap-vbeta1-planning-dlq`
+Region:
 
-Storage bucket: `tab-recap-vbeta1`
+```text
+ap-southeast-2
+```
 
-Jobs table: `tab-recap-vbeta1-jobs`
+Planner Lambda:
 
-Bedrock model/profile: `au.anthropic.claude-sonnet-4-5-20250929-v1:0`
+```text
+tab-recap-vbeta1-scene-planner
+```
 
-Current source-controlled planner timeout target: `240` seconds. Planning lease remains `300` seconds. Verify the deployed Lambda reflects the timeout after the next deployment before running the new Scene 8 live proof.
+Storage:
 
-Final pilot planning-queue operating decision: retain `VisibilityTimeout=1440` seconds and `maxReceiveCount=3`. This intentionally favours conservative non-overlapping redelivery over fast poison-message testing. A permanently failing message may take roughly 48+ minutes after its first failed receive to progress through the remaining receives and reach the DLQ. Do not shorten the queue solely to speed the test.
+```text
+tab-recap-vbeta1
+```
 
-The Lambda role currently retains Bedrock `InvokeModel` and the scoped Marketplace entitlement permissions required during Step 10 diagnosis. IAM minimisation is a separate controlled cleanup after the full Step 10 resilience gate passes.
+Jobs table:
 
-## A. Pre-deploy identity
+```text
+tab-recap-vbeta1-jobs
+```
+
+Planning queue:
+
+```text
+https://sqs.ap-southeast-2.amazonaws.com/134387458447/tab-recap-vbeta1-planning
+```
+
+Rendering queue:
+
+```text
+https://sqs.ap-southeast-2.amazonaws.com/134387458447/tab-recap-vbeta1-rendering
+```
+
+Bedrock model/profile:
+
+```text
+au.anthropic.claude-sonnet-4-5-20250929-v1:0
+```
+
+Current source-controlled planner timeout:
+
+```text
+240 seconds
+```
+
+Planning lease:
+
+```text
+300 seconds
+```
+
+The vbeta1 resource names are intentional. Do not create parallel vbeta2 AWS resources merely because the source repo is now TabAPIvbeta2.
+
+## 1. Identity
 
 ```cmd
 aws sts get-caller-identity --region ap-southeast-2
 ```
 
-Expected account: `134387458447`.
+Expected account:
 
-## B. Direct happy path
-
-Use a fresh job ID for every live LLM proof.
-
-```cmd
-aws dynamodb put-item --region ap-southeast-2 --table-name tab-recap-vbeta1-jobs --item "{\"jobId\":{\"S\":\"JOB_ID\"},\"status\":{\"S\":\"RECEIVED\"},\"bettingsS3Key\":{\"S\":\"working/JOB_ID/bettings.json\"},\"createdAt\":{\"S\":\"TIMESTAMP\"},\"updatedAt\":{\"S\":\"TIMESTAMP\"}}"
+```text
+134387458447
 ```
 
-```cmd
-aws s3 cp bettings.json s3://tab-recap-vbeta1/working/JOB_ID/bettings.json --region ap-southeast-2
-```
+## 2. Primary direct planner test helper
+
+Current helper:
 
 ```cmd
-aws lambda invoke --region ap-southeast-2 --function-name tab-recap-vbeta1-scene-planner --cli-binary-format raw-in-base64-out --payload "{\"schemaVersion\":\"1.0\",\"jobId\":\"JOB_ID\",\"bettingsS3Key\":\"working/JOB_ID/bettings.json\",\"testMode\":true}" %TEMP%\step10-response.json
+tests\tools\run-planner-test.cmd <size>
 ```
+
+Examples:
 
 ```cmd
-aws dynamodb get-item --region ap-southeast-2 --table-name tab-recap-vbeta1-jobs --key "{\"jobId\":{\"S\":\"JOB_ID\"}}" --consistent-read
+tests\tools\run-planner-test.cmd 5
+tests\tools\run-planner-test.cmd 8
+tests\tools\run-planner-test.cmd 16
+tests\tools\run-planner-test.cmd 32
+tests\tools\run-planner-test.cmd 50
+tests\tools\run-planner-test.cmd 75
 ```
 
-Expected: `status=RENDERING`, matching `sceneS3Key`, `error=NULL`.
+The script:
 
-Status: **PASS** from prior Step 10 direct live proofs.
+1. uploads the selected fixture to S3;
+2. creates a fresh DynamoDB `RECEIVED` job;
+3. creates a direct planner event;
+4. invokes `tab-recap-vbeta1-scene-planner` at `$LATEST`;
+5. requires returned status `RENDERING`;
+6. downloads final `scene.json`;
+7. writes a render-message file for optional manual Builder handoff.
 
-## C. Real SQS happy path
+It does not automatically send the rendering SQS message.
 
-```cmd
-aws sqs send-message --region ap-southeast-2 --queue-url https://sqs.ap-southeast-2.amazonaws.com/134387458447/tab-recap-vbeta1-planning --message-body "{\"schemaVersion\":\"1.0\",\"jobId\":\"JOB_ID\",\"bettingsS3Key\":\"working/JOB_ID/bettings.json\",\"testMode\":true}"
+## 3. Latest direct live proof — PASS
+
+All of the following were run against deployed `$LATEST` on 2026-09-18.
+
+### 5 bets
+
+Job:
+
+```text
+test-step10-5-20260918051253
 ```
-
-### Live result — PASS
-
-Job: `test-step10-sqs-75-20260913071119`
-
-Message: `3c86ab20-7a3c-4817-ac1c-7f10b394f346`
 
 Observed:
-- real SQS invocation claimed and processed the job;
-- 75-bet fixture validated;
-- one Scene 7 word-limit violation triggered the allowed single field-repair call;
-- plan validated and stored;
-- DynamoDB ended `RENDERING`, matching `sceneS3Key`, `error=NULL`;
-- generated plan preserved complete 75-bet chronological coverage and remained below the 300-second hard maximum.
 
-## D. Duplicate / idempotency
-
-Resend the same SQS message after the job is already `RENDERING`.
-
-### Live result — PASS
-
-Job: `test-step10-sqs-75-20260913071119`
-
-Duplicate message: `e9732210-810c-4403-9f2d-f6e04537f893`
-
-Observed:
-- DynamoDB remained `RENDERING`;
-- `updatedAt` remained `2026-09-13T07:14:28.749Z`;
-- logs contained `planning-message-already-complete`;
-- no second Bedrock planning run occurred.
-
-## E. Existing-scene recovery
-
-Pre-populate `working/JOB_ID/scene.json` with a previously validated scene, create a fresh job, then invoke the planner.
-
-```cmd
-aws s3 cp "s3://tab-recap-vbeta1/working/SOURCE_JOB_ID/scene.json" "s3://tab-recap-vbeta1/working/JOB_ID/scene.json" --region ap-southeast-2
+```text
+status     = RENDERING
+sceneCount = 8
 ```
 
-### Live result — PASS
+Result: **PASS**
 
-Job: `test-step10-existing-scene-20260913072355`
+### 8 bets
 
-Source scene: `working/test-step10-sqs-75-20260913071119/scene.json`
+Job:
 
-Message: `019291a8-9bb1-49c3-a5c4-9debc3faca21`
-
-Observed:
-- planner claimed the fresh job;
-- logs contained `scene-plan-recovered`;
-- no Bedrock generation was logged;
-- DynamoDB ended `RENDERING`, matching `sceneS3Key`, `error=NULL`.
-
-## F. Expired planning lease recovery
-
-Create a test job in `PLANNING` with an expired lease and no completed scene.
-
-```cmd
-aws dynamodb put-item --table-name tab-recap-vbeta1-jobs --item "{\"jobId\":{\"S\":\"JOB_ID\"},\"status\":{\"S\":\"PLANNING\"},\"createdAt\":{\"S\":\"TIMESTAMP\"},\"updatedAt\":{\"S\":\"TIMESTAMP\"},\"planningAttemptId\":{\"S\":\"dead-test-attempt\"},\"planningLeaseUntil\":{\"N\":\"1\"}}" --region ap-southeast-2
+```text
+test-step10-8-20260918051209
 ```
 
-### Live result — PASS
-
-Job: `test-step10-expired-lease-20260913072844`
-
-Message: `5933321c-a47e-4c5f-894b-3b408e14afdc`
-
 Observed:
-- stale attempt `dead-test-attempt` was replaced by fresh attempt `8fd2b2c4-abc6-47ff-a09a-330f43e0e16b`;
-- fresh lease was written;
-- planning completed successfully;
-- DynamoDB ended `RENDERING` with `sceneS3Key=working/test-step10-expired-lease-20260913072844/scene.json` and `error=NULL`;
-- lease ownership fields were removed after success.
 
-## G. Invalid bettings failure
-
-Create a deliberately invalid copy of a known-good fixture:
-
-```cmd
-node -e "const fs=require('fs'),path=require('path');const p='C:\\Dev\\TabAPIvbeta1\\tests\\fixtures\\bettings-75.json';const j=JSON.parse(fs.readFileSync(p,'utf8'));j.bets[0].profitLoss=999999;const out=path.join(process.env.TEMP,'bettings-invalid.json');fs.writeFileSync(out,JSON.stringify(j,null,2));console.log(out);"
+```text
+status     = RENDERING
+sceneCount = 11
 ```
 
-Upload it, create a fresh `RECEIVED` job, then invoke directly.
+Result: **PASS**
 
-### Live result — PASS
+### 16 bets
 
-Job: `test-step10-invalid-bettings-20260913081923`
+Job:
 
-Observed:
-- test fixture was corrupted by setting bet 1 `profitLoss` to `999999`;
-- Lambda returned `FunctionError=Unhandled`;
-- DynamoDB ended `FAILED`;
-- persisted error was exactly `Bet 1: profitLoss mismatch.`;
-- no successful scene plan was produced.
-
-## H. Missing job failure
-
-Invoke the planner with a unique job ID that does not exist in DynamoDB.
-
-```cmd
-aws lambda invoke --region ap-southeast-2 --function-name tab-recap-vbeta1-scene-planner --cli-binary-format raw-in-base64-out --payload "{\"schemaVersion\":\"1.0\",\"jobId\":\"JOB_ID\",\"bettingsS3Key\":\"working/JOB_ID/bettings.json\",\"testMode\":true}" "%TEMP%\step10-missing-job-response.json"
+```text
+test-step10-16-20260918051457
 ```
 
-Verify the job was not auto-created:
+Observed:
 
-```cmd
-aws dynamodb get-item --table-name tab-recap-vbeta1-jobs --key "{\"jobId\":{\"S\":\"JOB_ID\"}}" --region ap-southeast-2
+```text
+status     = RENDERING
+sceneCount = 16
 ```
 
-### Live result — PASS
+Result: **PASS**
 
-Job: `test-step10-missing-job-20260913082450`
+Note: this fixture remains the older retained baseline data set.
+
+### 32 bets
+
+Job:
+
+```text
+test-step10-32-20260918051624
+```
 
 Observed:
-- direct Lambda invocation returned `FunctionError=Unhandled`;
-- DynamoDB returned no item;
-- planner did not auto-create the missing job.
 
-## I. Retry / DLQ proof
+```text
+status     = RENDERING
+sceneCount = 20
+```
 
-### Final pilot operating decision
+Result: **PASS**
 
-Source-controlled target:
-- `VisibilityTimeout=1440` seconds;
-- `maxReceiveCount=3`;
-- Planner Lambda timeout target `240` seconds.
+### 50 bets
 
-Decision: **ACCEPT 1440/3 for the pilot.** Do not reduce visibility or receive count merely to make this proof complete faster. The 1440-second visibility is six times the 240-second Lambda timeout target and deliberately provides a conservative redelivery buffer. `maxReceiveCount=3` means the initial receive plus two retries before dead-lettering.
+Job:
 
-Expected poison-message timing: after the first failed receive, subsequent receives are separated by roughly the 24-minute visibility period, so DLQ arrival can take roughly 48+ minutes after the first failure, excluding processing and Lambda/SQS trigger scheduling overhead. The 300-second DynamoDB planning lease does not make SQS redeliver earlier.
+```text
+test-step10-50-20260918051812
+```
 
-Before the final proof, verify the deployed queue configuration:
+Observed:
+
+```text
+status     = RENDERING
+sceneCount = 25
+```
+
+Result: **PASS**
+
+### 75 bets
+
+Job:
+
+```text
+test-step10-75-20260918051948
+```
+
+Observed:
+
+```text
+status     = RENDERING
+sceneCount = 27
+```
+
+Result: **PASS**
+
+The 75-bet fixture deliberately had `replayUrl = null` at sequences 74 and 75. Planning still completed successfully.
+
+## 4. Current direct-test acceptance statement
+
+The deployed planner boundary is proven across:
+
+```text
+5 -> 8 -> 16 -> 32 -> 50 -> 75 bets
+```
+
+Current direct tests prove:
+
+- canonical fixture acceptance;
+- deterministic scene structure;
+- Scene 5 / Scene 8 scaling;
+- Scene 4 midpoint placement;
+- replay selection;
+- missing replay URL handling;
+- 75-bet compact model payload;
+- successful transition to `RENDERING`.
+
+The tests do not prove perfect prose quality.
+
+## 5. Current copy-quality note
+
+Valid plans still occasionally contain awkward LLM wording.
+
+Examples seen in live output:
+
+```text
+The block lost $45.
+profit for the day day.
+Backed 8 backed runners won their races.
+delivered The bet made $2800 profit.
+```
+
+Do not convert these into planner hard failures.
+
+If copy polish is attempted, keep it prompt-only first and compare 5- and 75-bet outputs.
+
+## 6. Historical resilience proofs retained
+
+Earlier live testing already proved these backend behaviours and the evidence remains useful:
+
+- direct happy path;
+- real planning-SQS happy path;
+- duplicate/idempotent message handling;
+- existing-scene recovery;
+- expired planning lease recovery;
+- invalid bettings rejection;
+- missing DynamoDB job rejection;
+- final direct/SQS happy path.
+
+Those tests were performed against earlier deployed planner generations. They demonstrate the surrounding S3/SQS/DynamoDB operating model, but they are not evidence that old LLM repair-loop behaviour still exists.
+
+Kubrick V2 intentionally removed that old copy/plan repair architecture.
+
+## 7. Planning queue operating decision
+
+Current source-controlled queue policy remains intentionally conservative:
+
+```text
+VisibilityTimeout = 1440 seconds
+maxReceiveCount   = 3
+```
+
+This favours non-overlapping redelivery over quick poison-message tests.
+
+A permanent failure may take roughly 48+ minutes after the first failed receive to progress to the DLQ.
+
+Verify live queue configuration when needed:
 
 ```cmd
 aws sqs get-queue-attributes --queue-url https://sqs.ap-southeast-2.amazonaws.com/134387458447/tab-recap-vbeta1-planning --attribute-names RedrivePolicy VisibilityTimeout --region ap-southeast-2
 ```
 
-Final expected configuration after deployment:
-- `VisibilityTimeout=1440`;
-- `maxReceiveCount=3`;
-- DLQ `tab-recap-vbeta1-planning-dlq`.
+## 8. Optional manual Builder handoff
 
-### Historical older-config poison test
-
-The existing poison-message evidence below was started against the older live configuration and therefore does **not** complete the final 1440/3 acceptance proof.
-
-Older observed configuration:
-- `maxReceiveCount=3`;
-- `VisibilityTimeout=1080` seconds;
-- DLQ `tab-recap-vbeta1-planning-dlq`.
-
-Historical poison-message job: `test-step10-dlq-20260913083000`
-
-SQS message ID: `f0eefad6-de29-4943-8c47-0990d30ac9bb`
-
-The job deliberately does not exist in DynamoDB, so every receive must fail.
-
-Attempt #1 observed at `2026-09-13T08:33:33Z`:
-- `planning-message-accepted`;
-- error `Job test-step10-dlq-20260913083000 does not exist.`
-
-Historical status: **IN PROGRESS / NOT FINAL ACCEPTANCE EVIDENCE**.
-
-### Fresh final 1440/3 proof after deployment
-
-Use a new unique poison job ID that does not exist in DynamoDB, send exactly one SQS message, record its message ID, and allow the real queue to retry naturally. Do not manually receive/delete from the source queue and do not alter queue visibility during the proof.
-
-Check retry logs:
+After a planner helper test passes, the generated render-message file can be sent manually:
 
 ```cmd
-aws logs tail /aws/lambda/tab-recap-vbeta1-scene-planner --region ap-southeast-2 --since 6h | findstr "JOB_ID"
+aws sqs send-message --queue-url https://sqs.ap-southeast-2.amazonaws.com/134387458447/tab-recap-vbeta1-rendering --message-body file://PATH_TO_RENDER_MESSAGE.json --region ap-southeast-2
 ```
 
-Check the DLQ without consuming the message:
+Do not send it automatically from the planner test helper.
 
-```cmd
-aws sqs receive-message --queue-url https://sqs.ap-southeast-2.amazonaws.com/134387458447/tab-recap-vbeta1-planning-dlq --attribute-names All --message-attribute-names All --max-number-of-messages 10 --visibility-timeout 0 --wait-time-seconds 1 --region ap-southeast-2
-```
+## 9. Logging expectations
 
-Final acceptance requires:
-- live source queue verified at `VisibilityTimeout=1440` and `maxReceiveCount=3`;
-- the same poison message is observed failing on repeated receives;
-- no successful planner state is created for the missing job;
-- after the third receive/failure, that exact message is visible in `tab-recap-vbeta1-planning-dlq`;
-- the observed receive/DLQ timing is recorded rather than inferred.
+Normal planner happy path should contain the applicable events for:
 
-## J. Final hardened pass
+- planning message accepted;
+- job claimed;
+- bettings validated;
+- deterministic plan created/stored;
+- one LLM copy request attempted;
+- valid copy merged OR copy fallback used;
+- final scene plan validated/stored;
+- job moved to `RENDERING`.
 
-### Direct final proof — PASS
+Copy fallback is an availability path, not a second model attempt.
 
-Job: `test-step10-final-direct-20260913083410`
+## 10. Current manual-test status
 
-Observed:
-- direct Lambda invocation returned status 200 with no `FunctionError`;
-- DynamoDB ended `RENDERING`;
-- `sceneS3Key=working/test-step10-final-direct-20260913083410/scene.json`;
-- `error=NULL`.
+### PROVEN
 
-### SQS final proof — PASS
+- direct deployed planner at 5 / 8 / 16 / 32 / 50 / 75;
+- 75-bet payload no longer exceeds model input;
+- missing replay URLs are harmless;
+- surrounding vbeta1 S3/Dynamo/SQS topology remains in use.
 
-Job: `test-step10-final-sqs-20260913083816`
+### RETAINED HISTORICAL EVIDENCE
 
-Message: `2119e101-5d3d-4493-aa69-e1ac2e62d7b2`
+- SQS idempotency/recovery/failure-path proofs from earlier Step-10 testing.
 
-Observed:
-- SQS accepted the message;
-- DynamoDB moved `RECEIVED -> PLANNING -> RENDERING`;
-- final `sceneS3Key=working/test-step10-final-sqs-20260913083816/scene.json`;
-- `error=NULL`.
+### REMAINING WHEN REQUIRED
 
-## K. Scene 8 headline-diversity live proof
-
-Status: **PENDING DEPLOYMENT / LIVE TEST**.
-
-Source/CI state before live proof:
-- six-item compatibility audit tracked in GitHub Issue #4;
-- deterministic category eligibility implemented from pre-result `bettings.json` facts;
-- repair payload supplies `eligibleHeadlineCategories` per Scene 8 block;
-- both initial and post-repair diversity checks use `bettings.json` eligibility;
-- Scene 8 taxonomy/category meaning/diversity policy canonical in `scene-contracts.json`;
-- schema enum/taxonomy parity is enforced in CI;
-- deployable package including `headline-diversity.js` is smoke-tested in CI;
-- headline repair is constrained to `headlineCategory` + `headline` only and remains non-fatal;
-- current source-controlled Lambda timeout target is 240s with a 300s planning lease;
-- latest second-audit source hardening also includes deterministic no-spoiler protection, normalized duplicate/template checks, tightened category-meaning edge cases, recovery-quality inspection, bounded optional Bedrock calls, and a worst-case orchestration regression test.
-
-Before running the fresh 75-bet proof, verify deployed configuration:
-
-```cmd
-aws lambda get-function-configuration --function-name tab-recap-vbeta1-scene-planner --region ap-southeast-2 --query "{Timeout:Timeout,Runtime:Runtime,LastModified:LastModified,CodeSha256:CodeSha256}" --output table
-```
-
-Expected after deployment: `Timeout=240`.
-
-Use a fresh 75-bet job and inspect its stored scene plan:
-
-```cmd
-aws s3 cp s3://tab-recap-vbeta1/working/JOB_ID/scene.json "%TEMP%\scene75.json" --region ap-southeast-2
-```
-
-```cmd
-node -e "const j=require(process.env.TEMP+'\\scene75.json');const s=j.scenes.filter(x=>x.sceneType===8);console.log('Scene8 count:',s.length);s.forEach((x,i)=>console.log(i+1,x.headlineCategory,'|',x.headline,'|',x.betSequences.join(',')));"
-```
-
-Acceptance for the fresh 75-bet proof:
-- all Scene 8 blocks have a valid `headlineCategory`;
-- declared categories are deterministically eligible for each block;
-- for 13 Scene 8 blocks, at least 4 distinct categories are used, no category exceeds 35% of blocks, and no category repeats more than twice consecutively;
-- headlines are grounded in supplied facts, use the declared category lens, stay within 6 words / 80 chars, and do not leak grouped or future outcomes;
-- exact normalized duplicate headlines and same-template/different-number repetition are absent;
-- the three semantic-only categories from Finding 7 are manually inspected for genuine wording/category match rather than accepted from metadata alone;
-- complete primary bet coverage remains exactly `1..75`, chronological and once only;
-- Scene 8 blocks remain 4–5 consecutive bets only;
-- Scene 4 placement, replay placement, comments, duration logic and P&L data are not altered by headline repair;
-- if the initial plan fails the diversity/eligibility gate, logs show exactly one `llm-headline-diversity-repair` attempt followed by either `scene8-headline-diversity-validated` or safe `scene8-headline-diversity-fallback-used`;
-- a headline-quality failure does not fail the entire otherwise-valid recap.
-
-Relevant new log events:
-- `scene8-headline-diversity-repair-requested`
-- `llm-headline-diversity-repair-started`
-- `llm-headline-diversity-repair-completed`
-- `scene8-headline-diversity-validated`
-- `scene8-headline-diversity-fallback-used`
-
-Inspect the fresh job logs:
-
-```cmd
-aws logs tail /aws/lambda/tab-recap-vbeta1-scene-planner --region ap-southeast-2 --since 30m | findstr "JOB_ID scene8-headline llm-headline-diversity"
-```
-
-Do not mark this section PASS until the hardened code is actually deployed and a fresh generated 75-bet plan is inspected.
-
-## Planner logging expectations
-
-Normal happy path contains the applicable events:
-- `planning-message-accepted`
-- `planning-job-claimed`
-- `bettings-validated`
-- `llm-request-started`
-- `llm-request-completed`
-- optional normal validation/repair events
-- optional Scene 8 headline-diversity events listed in section K
-- optional Scene 4 final narration events
-- `scene-plan-validated`
-- `scene-plan-stored`
-
-Recovery/idempotency paths may contain:
-- `planning-message-already-complete`
-- `scene-plan-recovered`
-- `planning-message-duplicate-in-flight`
-- `scene-plan-write-race-recovered`
-
-## Step 10 acceptance gate
-
-Current live status as of 2026-09-14:
-
-- B Direct happy path: **PASS**.
-- C Real SQS happy path: **PASS**.
-- D Duplicate / idempotency: **PASS**.
-- E Existing-scene recovery: **PASS on older deployed baseline; fresh recovery-quality proof required after deployment**.
-- F Expired planning lease recovery: **PASS**.
-- G Invalid bettings failure: **PASS**.
-- H Missing job failure: **PASS**.
-- I Retry / DLQ proof: **FINAL POLICY ACCEPTED; FRESH 1440/3 LIVE PROOF PENDING DEPLOYMENT**.
-- J Final hardened pass: **PASS** for the previously deployed planner baseline.
-- K Scene 8 headline-diversity live proof: **PENDING DEPLOYMENT / LIVE TEST**.
-
-Do not start Step 11 until the final deployed-AWS Step 10 proof is completed, recorded, and Step 10 is explicitly signed off.
+- fresh full Builder/rendered-HTML proof using the new real fixtures;
+- fresh poison-message/DLQ timing proof if that operational acceptance evidence is still required;
+- any final end-to-end frontend/orchestrator/normaliser flow proof once those planned components are integrated.

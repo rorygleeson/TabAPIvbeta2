@@ -4,42 +4,54 @@ Last updated: 2026-09-18
 
 ## Objective
 
-Rewrite only the Kubrick / Scene Planner implementation while preserving the proven downstream Daily Recap system.
-
-The migration is intentionally narrow:
+Replace the old LLM-heavy Kubrick planner with a deterministic structure engine while preserving the proven downstream Daily Recap system.
 
 ```text
-TabAPIvbeta2 = TabAPIvbeta1
-MINUS old Kubrick implementation
-PLUS new deterministic Kubrick implementation
-PLUS minimal bettings.json cleanup
+TabAPIvbeta2
+=
+TabAPIvbeta1
+- old Kubrick structural planning complexity
++ deterministic Kubrick V2 planner
++ one grounded LLM copy call
++ deterministic copy fallback
++ minimal canonical bettings.json cleanup
 ```
 
-The existing Builder, renderer, templates, runtime assets, scene contract boundary, S3/SQS/DynamoDB architecture and AWS resources remain in place.
+The existing Builder, templates, runtime, S3/SQS/DynamoDB topology and vbeta1-named AWS resources remain intentionally reused.
 
-## Frozen working baseline
+## Repositories
 
-Reference repository:
+Active source:
+
+```text
+rorygleeson/TabAPIvbeta2
+```
+
+Frozen migration reference/fallback:
 
 ```text
 rorygleeson/TabAPIvbeta1
 ```
 
-Known working source baseline:
-
-```text
-deploy @ 949a2d421851a666a9285c46a1c962143a8ab37c
-```
-
-`TabAPIvbeta1` remains the frozen working reference and fallback source during the migration.
+Do not copy old Kubrick complexity into vbeta2 merely because it existed in vbeta1.
 
 ## AWS migration rule
 
-V2 reuses the exact existing AWS environment.
+Kubrick V2 reuses the existing AWS environment.
 
-Do not create parallel vbeta2 infrastructure unless explicitly approved later.
+Account:
 
-Existing resources remain authoritative, including:
+```text
+134387458447
+```
+
+Region:
+
+```text
+ap-southeast-2
+```
+
+Key resources remain:
 
 ```text
 tab-recap-vbeta1
@@ -52,63 +64,50 @@ tab-recap-vbeta1-scene-planner
 tab-recap-vbeta1-builder-recap
 ```
 
-The migration changes source ownership and planner implementation, not infrastructure topology.
+No parallel vbeta2 AWS environment should be created unless explicitly approved.
 
-## Scope
+GitHub changes do not imply AWS deployment. Deployment remains an explicit push/deploy action.
 
-### In scope
+## Scope boundary
 
-- New `lambda/scene-planner` implementation
-- Deterministic scene-structure engine
-- One LLM copy-generation/enhancement pass
-- Planner-specific tests
-- Planner-specific CI/deploy packaging as the new implementation is introduced
-- Minimal `bettings.json` schema cleanup
+### Kubrick V2 owns
 
-### Out of scope
+- canonical planner input validation;
+- deterministic scene structure;
+- replay selection;
+- midpoint placement;
+- Scene 5/8 grouping;
+- duration candidate selection;
+- grounded copy-input construction;
+- exactly one Bedrock copy request;
+- copy response validation;
+- deterministic safe fallback on copy-stage failure;
+- merge into final `scene.json`.
 
-Do not redesign or refactor these as part of Kubrick V2:
+### Existing Builder owns
 
-- Builder behaviour
-- `lambda/builder-recap`
-- HTML templates
-- runtime JavaScript/CSS
-- rendering behaviour
-- S3 object model
-- DynamoDB job-state model
-- Planning SQS / Rendering SQS topology
-- API Gateway / Orchestrator work
-- CSV Normalizer implementation
-- unrelated infrastructure
+- deterministic template selection;
+- factual rendering from `bettings.json` and `scene.json`;
+- runtime HTML/JS/CSS behaviour;
+- replay playback/runtime handling;
+- final recap HTML generation.
 
-If a downstream change is later proven necessary for compatibility, it must be small, explicit and separately justified.
+### Separate concerns
 
-## Primary compatibility rule
+The CSV Normaliser is a separate upstream subsystem.
 
-The existing Builder must not need to understand that Kubrick was rewritten.
+Kubrick must not become responsible for CSV parsing, historical-results enrichment or account-history interpretation.
 
-Kubrick V2 must emit the same downstream `scene.json` contract expected by the existing Builder.
+## Canonical input decision
 
-The stable boundary remains:
-
-```text
-bettings.json
--> Kubrick V2
--> scene.json
--> existing Builder
--> recap HTML
-```
-
-## `bettings.json` decision
-
-Treat the current canonical `bettings.json` as locked except for two agreed removals:
+The canonical `bettings.json` contract is locked except for the already-completed removal of:
 
 ```text
-REMOVE: sceneType
-REMOVE: showReplay
+sceneType
+showReplay
 ```
 
-Keep the remaining factual and convenience fields, including:
+Fields retained include:
 
 ```text
 profitLoss
@@ -117,264 +116,355 @@ summary
 replayUrl
 ```
 
-Do not remove additional fields merely because they are derivable.
-
-### Replay semantics
-
-`replayUrl` stays.
-
-V2 semantics:
+Replay semantics:
 
 ```text
-valid replayUrl present -> replay media is available
-replayUrl absent/null/invalid -> replay unavailable
+valid HTTPS replayUrl -> replay available
+null/invalid replayUrl -> replay unavailable
 ```
 
-`showReplay` is removed because replay selection is a planner decision, not an input instruction.
+Kubrick decides whether available replay media is actually selected.
 
-## Kubrick V2 ownership model
-
-### Code owns structure
-
-The LLM does not decide the scene structure.
-
-Deterministic Kubrick code owns:
-
-- Scene 1 position
-- which bets receive Scene 2 treatment
-- replay selection
-- Scene 3 placement immediately after its matching Scene 2
-- Scene 4 placement
-- Scene 5 grouping policy
-- Scene 8 grouping/compression policy
-- chronological ordering
-- exact bet coverage
-- duration calculation
-- duration-target decisions
-- fixed ending structure
-- factual / derived / controlled fields
-
-### LLM owns copy only
-
-After deterministic structure is complete, Kubrick makes one LLM call for fields explicitly owned by the LLM, such as:
-
-- opening copy
-- headlines
-- comments
-- narrative/context lines
-- midpoint wording
-- verdict wording
-- share/final copy
-
-The LLM must not be asked to repair or invent structural decisions.
-
-## Target Kubrick flow
+## Current Kubrick V2 flow
 
 ```text
 bettings.json
-    |
-    v
-validate factual input
-    |
-    v
-derive planning facts
-    |
-    v
-DETERMINISTIC STRUCTURE ENGINE
-    |
-    +-- choose scene mix
-    +-- choose standout bets
-    +-- choose replays
-    +-- group routine bets
-    +-- place midpoint
-    +-- calculate duration
-    +-- guarantee chronology / coverage
-    |
-    v
-ordered scene skeleton
-    |
-    v
-ONE LLM CALL FOR COPY ONLY
-    |
-    v
-validate + expand FACT_PARTS_V2_2 fact/text parts against the shared chronological fact scope
-    |
-    v
-merge LLM copy into code-owned skeleton
-    |
-    v
-final contract validation
-    |
-    v
-scene.json
-    |
-    v
-EXISTING BUILDER
+  |
+  v
+schema + semantic input validation
+  |
+  v
+buildDeterministicScenePlan()
+  |
+  v
+deterministic-scene-plan.json
+  |
+  v
+buildLlmCopyInput()
+  |
+  v
+buildLlmModelPayload()
+  |
+  v
+FACT_PARTS_COMPACT_V1
+  |
+  v
+ONE Bedrock copy call
+  |
+  +--> valid response -> validate + merge
+  |
+  +--> copy-stage error -> deterministic fallback copy
+  |
+  v
+final scene.json planVersion 2.0
+  |
+  v
+existing Builder
 ```
 
-## Contracts
+There is no LLM structural repair loop and no second LLM call.
 
-Contracts remain the source of truth for the software, not promises that the LLM is expected to implement structurally.
+## Deterministic policy now implemented
 
-Mental model:
+### Duration
+
+Current target curve:
 
 ```text
-FACT / DERIVED / PLANNER_DERIVED / CONTROLLED -> software
-LLM                                              -> copy only
+1  -> 60s
+5  -> 80s
+10 -> 105s
+20 -> 145s
+40 -> 195s
+60 -> 240s
+75 -> 285s
 ```
 
-The key principle is:
+Tolerance setting: 12 seconds.
 
-> The LLM does not implement the contract. The software implements the contract.
+Runtime hard maximum: 300 seconds.
 
-Fresh Kubrick V2 copy uses a grounded-copy boundary: deterministic code compiles stable day/bet facts into one recap-wide catalog and computes the allowed fact IDs for every scene phase from chronology. The LLM and validator consume that same scope, so a fact seen elsewhere in the one-call recap can be reused only when it is valid at the target point in time. Scene-local aggregate atoms remain local. Short inline facts may compose with narrative text, while complete factual clauses stand as sentence segments. This adds no additional LLM calls and does not change the downstream Builder contract.
-
-## Scene policy still to define before coding
-
-Do not rush into implementation until the deterministic structure policy is documented clearly enough to explain without code.
-
-Still to lock:
-
-- bet-count bands
-- duration target policy by bet count
-- Scene 2 promotion/ranking policy
-- Scene 5 usage policy
-- Scene 8 packing/compression policy
-- replay count policy
-- replay ranking policy
-- Scene 4 midpoint algorithm details
-- deterministic adjustment policy when planned duration is below or above target
-
-The policy should be generic and fixture-independent.
-
-## Runtime timing baseline
-
-Current runtime-contract timings are the baseline unless intentionally changed later:
+### Midpoint
 
 ```text
-Scene 1: 14.0s
-Scene 2: 9.0s
-Scene 3 replay: 17.0s playback + 0.55s exit fade
-Scene 4: 8.0s
-Scene 5: 10.4s for 2 bets, 13.3s for 3 bets
-Scene 6: 9.5s
-Scene 7: untimed/permanent
-Scene 8: 5.0s / 6.5s / 8.0s / 9.5s for 2 / 3 / 4 / 5 bets
-Transition: 0.3s
+minimum bets = 6
+target coverage = 50%
 ```
 
-Current target bands:
+Scene 4 is placed after the legal primary-scene boundary nearest the target.
+
+### Replay count
 
 ```text
-<= 3 bets   -> 60s
-<= 15       -> 120s
-<= 40       -> 180s
-<= 70       -> 225s
-<= 100      -> 270s
-> 100       -> 285s
-hard max    -> 300s
+<=5   -> 1 desired
+<=10  -> 2 desired
+<=20  -> 3 desired
+<=40  -> 4 desired
+>40   -> 5 desired
+max   -> 5
 ```
 
-Coverage and factual correctness outrank exact duration targeting.
+For >40 bets, retain at least 3 when 3+ eligible replay bets exist.
 
-## Test and migration assets
-
-Retain the existing regression concepts around:
+Eligibility:
 
 ```text
-5 bets
-8 bets
-16 bets
-32 bets
-75 bets
+WIN + valid HTTPS replayUrl
 ```
 
-The current 75-bet fixture is not representative for replay testing because replay URLs are largely absent. V2 replay tests should include valid replay URLs for enough eligible races to exercise deterministic replay selection.
-
-## Migration acceptance criteria
-
-Kubrick V2 is not complete merely because it can generate a plan once.
-
-Acceptance requires:
-
-- canonical `bettings.json` accepted with only the agreed small schema changes
-- every bet covered exactly once by primary scenes
-- chronology preserved
-- code owns all structural decisions
-- selected replays are structurally legal
-- Scene 4 placement is deterministic
-- duration is computed deterministically
-- one LLM copy pass cannot alter structure
-- final `scene.json` passes the downstream contract
-- existing Builder works without redesign
-- existing Builder produces valid recap HTML
-- 5 / 8 / 16 / 32 / 75 scenarios pass repeatedly
-- repeated runs on the same input produce the same scene structure
-
-## Anti-complexity rules
-
-These rules exist specifically to prevent Kubrick V2 from becoming another collection of ad hoc fixes.
-
-1. No fixture-specific production logic.
-2. No special-case repair function for each possible LLM failure.
-3. No LLM structural repair loop.
-4. No hidden second planner inside the Builder.
-5. No downstream redesign to compensate for weak planner structure.
-6. No new production rule unless it can be described as a general planning rule.
-7. Prefer small modules with single responsibilities over another oversized planner file.
-8. Narrative semantics are prompt-owned, not validator-owned. Digits, names, money/odds wording, finishing-position wording, grammar issues and copy-length overshoots inside narrative text must not fail an otherwise structurally valid recap. Hard failures are reserved for objective response/fact-scope/contract violations.
-9. The validation boundary is frozen end-to-end: scene-plan schema and Builder must not reintroduce hard prose-length or semantic-copy gates. Harmless extra model fields/part metadata are ignored, and markup-like prose is escaped by Builder rendering rather than rejected.
-
-## Working method
-
-Use one controlled change/test at a time.
-
-For every significant change:
+### Scene 2 extras
 
 ```text
-inspect current state
--> make one change
--> run focused test
--> verify result
--> only then continue
+<=10 -> max 4 extra
+<=20 -> max 3 extra
+<=40 -> max 2 extra
+>40  -> max 1 extra
 ```
 
-Clearly distinguish:
+### Scene 8
+
+Enabled only for:
 
 ```text
-PROVEN
-IN PROGRESS
-NOT YET BUILT
+totalBets >= 17
 ```
 
-Do not infer that a GitHub change has deployed to AWS. Deployment remains a separate explicit step.
+### Grouping
 
-## Current migration state
+Below 17 bets:
 
-PROVEN:
+```text
+1 -> Scene 2
+2 -> Scene 5(2)
+4 -> Scene 5(2)+Scene 5(2)
+otherwise -> Scene 5(3) chunks
+```
 
-- `TabAPIvbeta2` repository established
-- vbeta1 working files copied as migration baseline
-- old `lambda/scene-planner` implementation intentionally excluded
-- obsolete Step 10 Kubrick troubleshooting documents removed
-- `KUBRICK-ARCHITECTURE-GUIDE.md` rewritten for the deterministic V2 model
-- CI updated so the migration baseline passes without requiring the deleted old planner
-- existing Builder/downstream code retained
-- minimal canonical `bettings.json` cleanup completed: `bets[].sceneType` and `bets[].showReplay` removed from live producers, consumers, schemas and test fixtures
+At 17+ bets:
 
-IN PROGRESS:
+```text
+1 -> Scene 2
+2-3 -> Scene 5
+4-5 -> Scene 8
+>5 -> Scene 8 groups of 5, avoiding a remainder of 1 by taking 4
+```
 
-- deterministic structure policy design
-- fresh Kubrick V2 implementation
+## Grounded copy design
 
-NOT YET BUILT:
+The rich internal copy input remains deterministic and is used for validation/merge.
 
-- new `lambda/scene-planner`
-- new planner tests
-- updated planner deployment packaging
-- cutover of v2 source to the existing AWS planner Lambda
+The Bedrock request is a compact projection:
 
+```text
+groundingProtocol = FACT_PARTS_COMPACT_V1
+modelPayloadVersion = 1.0
+```
 
-### Copy availability boundary
+This compaction was required because the earlier rich 75-bet payload exceeded the model input limit.
 
-The deterministic planner is the availability boundary. Kubrick makes at most one LLM copy call. If Bedrock fails, JSON is malformed, copy validation rejects the model response, or the model emits unusable/blank copy, the planner does not fail the recap and does not call the LLM again. It substitutes deterministic safe copy in code, preserves the deterministic scene structure exactly, then continues through final scene-plan validation and the existing Builder. Copy quality may degrade; recap availability must not.
+The compact payload sends only scene-relevant phase-scoped facts and requested copy rules.
+
+The model returns `fact` and `text` parts. Fact IDs are expanded deterministically.
+
+Narrative semantics are not reconstructed by JavaScript.
+
+## Copy availability boundary
+
+A structurally valid recap must survive copy-stage failure.
+
+The single copy call is wrapped so these failures use deterministic safe fallback copy:
+
+- Bedrock invocation failure;
+- malformed model output;
+- copy response validation failure;
+- unusable required copy.
+
+Fallback implementation:
+
+```text
+lambda/scene-planner/llm-copy-fallback.js
+```
+
+There is no repair call.
+
+Objective downstream failures still fail normally.
+
+## Validation boundary
+
+Hard failures are reserved for objective conditions such as:
+
+- invalid canonical input;
+- invalid deterministic scene structure;
+- missing/duplicate/out-of-order primary coverage;
+- illegal replay placement/eligibility;
+- malformed copy response;
+- missing required copy fields;
+- unknown/out-of-scope fact IDs;
+- invalid enums/cardinality;
+- invalid final scene contract;
+- storage/state/runtime errors.
+
+Do not hard-fail for:
+
+- awkward grammar;
+- capitalization;
+- repeated words;
+- prose length targets;
+- clumsy fact/text joins;
+- customer-unfriendly internal terminology;
+- semantic quality that cannot be safely verified mechanically.
+
+Do not reintroduce old semantic/grammar/copy-length validators.
+
+## Real-data fixture migration
+
+The fake large test data has been replaced for:
+
+```text
+bettings-5.json
+bettings-8.json
+bettings-32.json
+bettings-50.json
+bettings-75.json
+```
+
+These use one consistent 75-bet master dataset derived from recent real Australian thoroughbred historical results from 2026-09-16 and 2026-09-17.
+
+Race/runner/result/fixed-odds/Sky replay facts are historical.
+
+The simulated customer bet selections/stakes are test data.
+
+Smaller fixtures are exact prefixes of the 75-bet master:
+
+```text
+5  = first 5
+8  = first 8
+32 = first 32
+50 = first 50
+```
+
+`bettings-16.json` and `bettings-baseline.json` remain the older retained baseline fixture.
+
+The 75-bet fixture deliberately sets `replayUrl` to `null` for sequences 74 and 75.
+
+## Baseline format validation
+
+The new 5 / 8 / 32 / 50 / 75 fixtures have been compared directly with `bettings-baseline.json`.
+
+They match the canonical object, bet-field and summary-field shape.
+
+Semantic fixture checks also passed for:
+
+- contiguous sequence;
+- `profitLoss = return - stake`;
+- cumulative `runningPnl`;
+- summary totals;
+- win/loss counts;
+- meeting count;
+- biggest/highest sequence references;
+- valid HTTPS replay URLs when non-null.
+
+## Latest live direct planner proof
+
+On 2026-09-18, direct AWS planner tests reached `RENDERING` for:
+
+| Bets | Fixture | Scene count | Result |
+|---:|---|---:|---|
+| 5 | new real-data | 8 | PASS |
+| 8 | new real-data | 11 | PASS |
+| 16 | older retained fixture | 16 | PASS |
+| 32 | new real-data | 20 | PASS |
+| 50 | new real-data | 25 | PASS |
+| 75 | new real-data + 2 null replay URLs | 27 | PASS |
+
+This proves the current planner boundary across small, medium and large days.
+
+The 75-bet proof also confirms missing replay URLs do not break planning.
+
+## Current remaining issue
+
+The planner is structurally stable.
+
+The remaining visible issue is **copy quality**, for example:
+
+```text
+Both runners missed, The block lost $45.
+profit for the day day.
+Backed 8 backed runners won their races.
+delivered The bet made $2800 profit.
+```
+
+The internal word `block` should not leak into customer copy.
+
+This is not justification for architecture changes.
+
+The preferred next experiment is a very small prompt-only wording refinement, followed by 5- and 75-bet comparison tests.
+
+No new validator, repair loop or second model call should be added for copy polish.
+
+## Planned end-to-end product architecture
+
+The planner migration sits inside the larger intended pilot flow:
+
+```text
+pilot frontend
+  -> presigned CSV upload to private S3
+  -> Orchestrator creates/tracks job
+  -> one Python Normaliser Lambda (planned production shape)
+       -> Pass 1 CSV parse/normalise
+       -> Pass 2 historical enrichment
+       -> Pass 3 canonical bettings.json
+  -> planning SQS
+  -> Kubrick V2 Scene Planner
+  -> scene.json
+  -> rendering SQS
+  -> existing Builder
+  -> private recap.html
+  -> short-lived delivery URL
+  -> frontend polls job status and redirects/displays recap
+```
+
+The current repository proves the planner/Builder boundary and contains ongoing Normaliser work. The full browser upload/orchestration/status/delivery path remains planned rather than fully proven.
+
+## Working rules
+
+1. Inspect actual repo state before proposing changes.
+2. Work one controlled change/test at a time.
+3. Distinguish PROVEN / LOCKED / IN PROGRESS / PLANNED.
+4. Use Windows CMD for local user commands.
+5. Do not create fixture-specific production hacks.
+6. Do not add a structural repair loop.
+7. Do not add a second LLM call.
+8. Do not change deterministic planner structure without explicit approval.
+9. Copy quality must remain non-fatal.
+10. Do not claim GitHub source is deployed unless deployment is verified.
+
+## Current state
+
+### PROVEN
+
+- deterministic planner exists and is active source;
+- canonical input cleanup complete;
+- replay selection and missing-replay handling work;
+- deterministic midpoint/grouping/coverage work;
+- compact 75-bet model payload works;
+- one-call copy circuit breaker works;
+- Builder downstream contract remains compatible;
+- direct 5 / 8 / 16 / 32 / 50 / 75 planner tests pass.
+
+### LOCKED
+
+- LLM is copywriter only;
+- code owns structure;
+- one LLM copy call maximum;
+- no repair loop;
+- deterministic fallback on copy-stage failure;
+- existing AWS topology reused;
+- Builder not redesigned.
+
+### IN PROGRESS / PLANNED
+
+- optional prompt-only copy polish;
+- further rendered-HTML regression with the new real fixtures;
+- Normaliser integration into canonical `bettings.json`;
+- complete upload/orchestration/status/delivery product path.

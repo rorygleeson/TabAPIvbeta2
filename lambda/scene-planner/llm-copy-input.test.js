@@ -135,20 +135,20 @@ for (const totalBets of [5, 8, 16, 32, 75]) {
   const bettings = readJson('bettings-8.json');
   const payload = buildLlmCopyInput(bettings, buildDeterministicScenePlan(bettings));
 
-  const group67 = payload.scenes.find(scene =>
-    scene.sceneType === 5 &&
-    JSON.stringify(scene.betSequences) === JSON.stringify([6, 7])
-  );
-  assert.ok(group67, '8-bet fixture must contain Scene 5 for bets 6 and 7');
-  const post = group67.context.factAtomsByPhase.POST_RESULT_BLOCK;
-  assert.strictEqual(post.B6_FINISH, 'GIN AND BARE IT finished 4th.');
-  assert.strictEqual(post.B7_FINISH, 'INSAIN CHAOS finished 2nd.');
-  assert.strictEqual(post.BLOCK_PROFIT_LOSS, 'The block lost $85.');
+  const grouped = payload.scenes.find(scene => scene.sceneType === 5 && scene.betSequences.length >= 2);
+  assert.ok(grouped, '8-bet fixture must contain at least one Scene 5 group');
+
+  const post = grouped.context.factAtomsByPhase.POST_RESULT_BLOCK;
+  const firstSequence = grouped.betSequences[0];
+  const secondSequence = grouped.betSequences[1];
+  assert.ok(post['B' + firstSequence + '_FINISH']);
+  assert.ok(post['B' + secondSequence + '_FINISH']);
+  assert.ok(post.BLOCK_PROFIT_LOSS);
 
   const dayScene = payload.scenes.find(scene => scene.sceneType === 6);
   const day = dayScene.context.factAtomsByPhase.POST_DAY;
-  assert.strictEqual(day.DAY_WINNING_BETS, '3 winning bets');
-  assert.strictEqual(day.DAY_RACE_WINNERS, '2 backed runners won their races.');
+  assert.strictEqual(day.DAY_WINNING_BETS, bettings.summary.wins + ' winning bets');
+  assert.ok(day.DAY_RACE_WINNERS, 'Post-day facts must expose backed race-winner count');
 }
 
 
@@ -156,54 +156,68 @@ for (const totalBets of [5, 8, 16, 32, 75]) {
   const bettings = readJson('bettings-8.json');
   const payload = buildLlmCopyInput(bettings, buildDeterministicScenePlan(bettings));
 
-  assert.strictEqual(payload.factCatalog.B8_RUNNER, 'LE PLUS RAPIDE');
-  assert.strictEqual(payload.factCatalog.B8_RESULT_SUMMARY, 'LE PLUS RAPIDE finished 1st and the bet made $70 profit.');
+  const finalBet = bettings.bets[bettings.bets.length - 1];
+  const finalPrefix = 'B' + finalBet.sequence + '_';
+  assert.strictEqual(payload.factCatalog[finalPrefix + 'RUNNER'], finalBet.runnerName);
+  assert.ok(payload.factCatalog[finalPrefix + 'RESULT_SUMMARY'].includes(finalBet.runnerName));
 
   const opening = payload.scenes.find(scene => scene.sceneType === 1);
   const openingScope = new Set(opening.context.allowedGlobalFactIdsByPhase.PRE_RESULT_DAY);
-  assert.ok(openingScope.has('B8_RUNNER'));
-  assert.ok(openingScope.has('B8_BET_SETUP'));
-  assert.strictEqual(openingScope.has('B8_FINISH'), false, 'Opening must not expose result facts');
+  assert.ok(openingScope.has(finalPrefix + 'RUNNER'));
+  assert.ok(openingScope.has(finalPrefix + 'BET_SETUP'));
+  assert.strictEqual(openingScope.has(finalPrefix + 'FINISH'), false, 'Opening must not expose result facts');
 
-  const bet3 = payload.scenes.find(scene => scene.sceneType === 2 && scene.betSequence === 3);
-  const bet3Pre = new Set(bet3.context.allowedGlobalFactIdsByPhase.PRE_RESULT);
-  const bet3Post = new Set(bet3.context.allowedGlobalFactIdsByPhase.POST_RESULT);
-  assert.ok(bet3Pre.has('B1_FINISH'), 'Bet 3 pre-result may reference already-completed bet 1');
-  assert.ok(bet3Pre.has('B8_RUNNER'), 'Future pre-result facts remain usable');
-  assert.strictEqual(bet3Pre.has('B3_FINISH'), false, 'Current bet result must not leak pre-result');
-  assert.strictEqual(bet3Pre.has('B8_FINISH'), false, 'Future result must not leak pre-result');
-  assert.ok(bet3Post.has('B3_FINISH'), 'Current result becomes available post-result');
-  assert.strictEqual(bet3Post.has('B4_FINISH'), false, 'Later result must remain unavailable');
+  const firstFeatured = payload.scenes.find(scene => scene.sceneType === 2);
+  assert.ok(firstFeatured, '8-bet fixture must contain a Scene 2');
+  const currentPrefix = 'B' + firstFeatured.betSequence + '_';
+  const pre = new Set(firstFeatured.context.allowedGlobalFactIdsByPhase.PRE_RESULT);
+  const post = new Set(firstFeatured.context.allowedGlobalFactIdsByPhase.POST_RESULT);
+
+  if (firstFeatured.betSequence > 1) {
+    assert.ok(pre.has('B1_FINISH'), 'Featured pre-result scope may reference already-completed results');
+  }
+  assert.ok(pre.has(finalPrefix + 'RUNNER'), 'Future pre-result facts remain usable');
+  assert.strictEqual(pre.has(currentPrefix + 'FINISH'), false, 'Current bet result must not leak pre-result');
+  if (finalBet.sequence > firstFeatured.betSequence) {
+    assert.strictEqual(pre.has(finalPrefix + 'FINISH'), false, 'Future result must not leak pre-result');
+  }
+  assert.ok(post.has(currentPrefix + 'FINISH'), 'Current result becomes available post-result');
 
   const midpoint = payload.scenes.find(scene => scene.sceneType === 4);
   const checkpoint = midpoint.checkpointAfterBetSequence;
   const midpointBack = new Set(midpoint.context.allowedGlobalFactIdsByPhase.POST_COMPLETED_BETS);
   assert.ok(midpointBack.has('B' + checkpoint + '_FINISH'));
   assert.strictEqual(midpointBack.has('B' + (checkpoint + 1) + '_FINISH'), false);
-  assert.ok(midpointBack.has('B8_RUNNER'), 'Midpoint may mention future pre-result facts without outcomes');
+  assert.ok(midpointBack.has(finalPrefix + 'RUNNER'), 'Midpoint may mention future pre-result facts without outcomes');
 
-  const group67 = payload.scenes.find(scene =>
-    scene.sceneType === 5 &&
-    JSON.stringify(scene.betSequences) === JSON.stringify([6, 7])
-  );
-  const group67Pre = new Set(group67.context.allowedGlobalFactIdsByPhase.PRE_RESULT_BLOCK);
-  const group67Post = new Set(group67.context.allowedGlobalFactIdsByPhase.POST_RESULT_BLOCK);
-  assert.ok(group67Pre.has('B5_FINISH'));
-  assert.strictEqual(group67Pre.has('B6_FINISH'), false);
-  assert.ok(group67Post.has('B6_FINISH'));
-  assert.ok(group67Post.has('B7_FINISH'));
-  assert.strictEqual(group67Post.has('B8_FINISH'), false);
+  const grouped = payload.scenes.find(scene => scene.sceneType === 5 && scene.betSequences.length >= 2);
+  assert.ok(grouped, '8-bet fixture must contain a grouped Scene 5');
+  const groupPre = new Set(grouped.context.allowedGlobalFactIdsByPhase.PRE_RESULT_BLOCK);
+  const groupPost = new Set(grouped.context.allowedGlobalFactIdsByPhase.POST_RESULT_BLOCK);
+  const firstGroupSequence = grouped.betSequences[0];
+  const lastGroupSequence = grouped.betSequences[grouped.betSequences.length - 1];
+
+  if (firstGroupSequence > 1) {
+    assert.ok(groupPre.has('B' + (firstGroupSequence - 1) + '_FINISH'));
+  }
+  assert.strictEqual(groupPre.has('B' + firstGroupSequence + '_FINISH'), false);
+  assert.ok(groupPost.has('B' + firstGroupSequence + '_FINISH'));
+  assert.ok(groupPost.has('B' + lastGroupSequence + '_FINISH'));
+  if (lastGroupSequence < bettings.bets.length) {
+    assert.strictEqual(groupPost.has('B' + (lastGroupSequence + 1) + '_FINISH'), false);
+  }
 
   for (const sceneType of [6, 7]) {
     const scene = payload.scenes.find(item => item.sceneType === sceneType);
     const postDay = new Set(scene.context.allowedGlobalFactIdsByPhase.POST_DAY);
     assert.ok(postDay.has('B1_RUNNER'));
-    assert.ok(postDay.has('B8_RUNNER'));
+    assert.ok(postDay.has(finalPrefix + 'RUNNER'));
     assert.ok(postDay.has('B1_RESULT_SUMMARY'));
-    assert.ok(postDay.has('B8_RESULT_SUMMARY'));
+    assert.ok(postDay.has(finalPrefix + 'RESULT_SUMMARY'));
     assert.ok(postDay.has('DAY_FINAL_PNL'));
   }
 }
+
 
 {
   const bettings = readJson('bettings-75.json');

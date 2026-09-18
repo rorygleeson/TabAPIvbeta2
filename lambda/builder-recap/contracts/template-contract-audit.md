@@ -1,79 +1,262 @@
-# Pre-Builder Remediation Record
+# Template / Contract Audit — Kubrick V2
 
-Date: 2026-09-12
+Last updated: 2026-09-18
 
 ## Status
 
-**PLANNER CONTRACT BOUNDARY HARDENED. BUILDER STILL REQUIRES ITS NORMAL FORMAL REGRESSION GATE BEFORE STEP 12 IS DECLARED PROVEN.**
+**CURRENT V2 BOUNDARY DOCUMENT**
 
-This document does not self-certify production readiness merely because fixes were committed.
+This record replaces the earlier pre-Builder remediation notes that described the old LLM-plans-structure / repair-loop architecture.
 
-## Canonical machine contracts
+The current rule is:
 
-1. `contracts/bettings.schema.json` — factual input shape plus deterministic cross-field validation rules.
-2. `contracts/scene-plan.schema.json` — exact planner/LLM output envelope, non-blank text and hard character ceilings; current eight-scene plan version is `2.0`.
-3. `contracts/scene-contracts.json` v2.0.2 — eight scene data/ownership/resolution contracts, canonical word-count algorithm, grounded-numeric-prose policy, safe structural canonicalization and markup policy.
-4. `contracts/runtime-contract.json` v2.0.2 — production shell, activation, timing, formatting, FX, replay, audio, sharing, runtime-data transport, duration policy and template-extraction contract.
-5. `contracts/planner-prompt.md` v2.1 — canonical system prompt for generation and repair, including untrusted-data handling, factual grounding, strict Scene 8 grouping of 4–5 bets only, Scene 5 ownership of 2–3 bet grouped stories, preference for fuller 5-bet Scene 8 groups where natural, an explicit Scene 8 headline taxonomy, exact grouped-stake arithmetic, exact prior-block running-P&L context, cross-block angle-family diversity and whole-recap anti-repetition review.
+> deterministic code owns structure; the LLM owns copy only; the existing Builder consumes the final validated scene plan.
+
+## Canonical contracts
+
+Root contracts:
+
+1. `contracts/bettings.schema.json` — canonical factual input shape plus documented semantic validation rules.
+2. `contracts/deterministic-scene-plan.schema.json` — deterministic pre-copy scene skeleton artifact.
+3. `contracts/scene-plan.schema.json` — final downstream `scene.json` planVersion 2.0 contract.
+4. `contracts/scene-contracts.json` — scene ownership/data-resolution contract.
+5. `contracts/runtime-contract.json` — runtime timing, replay, transition, shell and rendering behaviour.
+6. `contracts/planner-prompt.md` — the current grounded copy prompt used by the one Bedrock copy call.
+
+Builder-bundled contract copies remain synchronized where the deploy package expects local copies.
+
+## Current ownership boundary
+
+### Canonical bettings input
+
+`bettings.json` supplies factual day/bet state.
+
+The planner input no longer contains:
+
+```text
+sceneType
+showReplay
+```
+
+Replay availability is represented only by `replayUrl`.
+
+### Deterministic Scene Planner
+
+Code owns:
+
+- scene order;
+- primary coverage;
+- Scene 2 promotion;
+- Scene 3 replay selection and placement;
+- Scene 4 midpoint;
+- Scene 5 grouping;
+- Scene 8 grouping;
+- duration candidate selection;
+- Scene 6/7 ending positions.
+
+The model cannot alter these decisions.
+
+### LLM copy layer
+
+One Bedrock call receives a compact grounded copy payload using:
+
+```text
+FACT_PARTS_COMPACT_V1
+modelPayloadVersion = 1.0
+```
+
+The model returns requested copy fields only.
+
+No structural repair call exists.
+
+No second model call exists.
+
+### Copy fallback
+
+Copy-stage failure is non-fatal to an otherwise valid recap.
+
+The planner uses:
+
+```text
+lambda/scene-planner/llm-copy-fallback.js
+```
+
+for deterministic safe copy when Bedrock/parsing/copy validation fails.
+
+The deterministic scene skeleton is preserved.
+
+### Existing Builder
+
+The Builder receives final validated `bettings.json` + `scene.json`.
+
+It does not:
+
+- plan scenes;
+- select replay bets;
+- move midpoint;
+- repair LLM structure;
+- interpret planner policy.
+
+It renders the supplied contract through the existing templates/runtime.
 
 ## Validation boundary
 
-### Planner gate
+Hard failures remain appropriate for objective machine-verifiable conditions:
 
-`validated bettings.json + planner prompt + scene-plan schema + scene contracts -> candidate plan`
+- invalid canonical bettings schema/semantics;
+- missing, duplicated or reordered primary coverage;
+- illegal Scene 3 placement or replay eligibility;
+- illegal grouped scene membership;
+- invalid deterministic midpoint;
+- hard runtime duration maximum;
+- malformed copy response;
+- missing required copy fields;
+- unknown/out-of-scope fact IDs;
+- invalid enums/cardinality;
+- invalid final `scene.json` contract;
+- S3/Dynamo/runtime failures.
 
-Before `scene.json` may be written, the scene-planner Lambda must:
+Narrative quality is intentionally not a hard availability gate.
 
-1. parse one complete JSON object;
-2. validate the scene-plan schema before any canonicalization attempt;
-3. apply only lossless, context-safe placement canonicalization to schema-valid candidates;
-4. never reorder Scene 2/5/8 primary chronology and never move Scene 4 to a different completed-bet checkpoint;
-5. validate deterministic ordering, coverage, grouping, replay placement/eligibility, midpoint placement and highlight eligibility;
-6. validate every LLM prose field against canonical word/character limits and reject markup;
-7. allow numeric prose only under the current planner-prompt factual-grounding and semantic-meaning rules;
-8. if validation fails, use at most one controlled extra LLM call;
-9. use field-scoped repair for prose-only violations so unrequested plan content is immutable;
-10. use whole-plan repair only for remaining schema/structural/eligibility failures;
-11. if the original model response cannot be parsed, use the same one-extra-call budget for one complete regeneration;
-12. run the full validation gate again after any repair/regeneration;
-13. fail the job if the repaired/regenerated result still fails.
+Do **not** hard-fail for:
 
-The planner logs parse regeneration requests, deterministic validation failures, safe canonicalization actions, repair requests and repair-validation failures without logging entire user plans as diagnostic payloads.
+- grammar;
+- capitalization;
+- repeated phrases;
+- prose-length target overshoot;
+- awkward fact/text joins;
+- internal terminology such as “block” leaking into copy;
+- semantic quality that deterministic JavaScript cannot safely prove.
 
-### Builder gate
+The Builder HTML-escapes display substitutions.
 
-The deterministic builder independently repeats schema and deterministic semantic validation before rendering. It uses synchronized contract copies and the same canonical word-count and markup rules. Numeric prose is permitted by the executable validator, while factual correctness and semantic meaning remain governed by prompt/contract instructions because arbitrary-English semantic verification is not claimed by deterministic code.
+## Scene/template expectations
 
-## Safe structural canonicalization
+### Scene 1
 
-The planner may correct only placement that cannot change chronological or checkpoint meaning:
+- always first;
+- opening copy only;
+- no primary bet coverage.
 
-- one existing Scene 1 may move to first;
-- one existing Scene 6 and one existing Scene 7 may move together to second-last/last;
-- one eligible unique Scene 3 may attach immediately after its matching Scene 2, but only when primary coverage is already canonical.
+### Scene 2
 
-The planner never automatically reorders Scene 2/5/8 primary chronology. A Scene 4 at the wrong completed-bet checkpoint remains a validation failure because its prose and builder-derived running state are checkpoint-sensitive. The midpoint helper used by validation is shared with the structural tests so there is only one midpoint algorithm.
+- one deterministic featured bet;
+- copy may provide tension/reaction.
 
-## Numeric factual ownership
+### Scene 3
 
-The deterministic builder owns factual numeric display fields. LLM prose may use grounded numeric facts when useful, but every factual number must come directly from validated `bettings.json` or be deterministically implied, and its semantic meaning must remain exact. A profit/loss value must never be described as a return. Scene 8 may use exact arithmetic over pre-result source fields for its grouped bets, including total stake, and may use the exact running P&L immediately before the block because that state is determined entirely by completed earlier bets. It must never use result-derived values from inside the upcoming Scene 8 block before those results are revealed.
+- optional replay;
+- only for a replay-eligible winning bet;
+- immediately follows matching Scene 2;
+- replay URL comes from canonical factual input.
 
-## Canonical word counting
+### Scene 4
 
-Planner and builder count words identically: trim, split on whitespace, and count only tokens containing at least one Unicode letter or digit. Standalone punctuation such as an em dash does not count as a word.
+- at most once;
+- omitted for recaps below the configured minimum;
+- checkpoint boundary supplied by deterministic planner.
 
-## Untrusted-data boundary
+### Scene 5
 
-All values inside `bettings.json` are data, never instructions. The planner prompt explicitly forbids following instructions embedded in names, race names, meeting names, URLs or any other factual value.
+- covers 2 or 3 consecutive primary bets;
+- grouping is structural;
+- customer copy should not expose internal planner vocabulary such as “block”.
 
-## Existing builder/template remediation retained
+### Scene 6
 
-The original remediation remains in force: strict planner schema, exact primary coverage, mathematical Scene 4 midpoint, runtime ownership, numeric scene IDs, shared shell geometry, production extraction markers, runtime-owned activation, recovered choreography/timing, FX separation, deterministic formatting/highlights/P&L, visual integrity, Scene 5 factual result semantics, standardized P&L sign classes, runtime-data transport, runtime FX delivery, Scene 7 resolved highlights and HTML-safe factual/derived text.
+- always second-last;
+- daily summary/standout wording only;
+- factual highlight identity remains controlled by contract/planner facts.
 
-## Next gate
+### Scene 7
 
-Complete the formal Step 10 planner resilience tests (SQS path, idempotency, recovery, expired lease, invalid input, missing job and DLQ) before moving to the rendering queue. The builder remains subject to its separate deterministic regression gate before Step 12 is declared proven.
+- always last;
+- final/share copy;
+- untimed/permanent ending in runtime.
 
-## Scene 8 and duration hardening
+### Scene 8
 
-Scene 8 is an optional rapid-fire 4–5 bet primary scene with strictly consecutive ascending coverage, one LLM comment per bet, compact mobile-first rows, sequential fast result reveals, lightweight zero-delay effects and deterministic per-result global running-P&L updates. Scene 8 must never contain 1, 2 or 3 bets. Scene 5 owns grouped 2–3 bet stories, while Scene 2 owns individual bets. On large days, the planner should prefer fuller 5-bet Scene 8 groups where a natural ordinary stretch allows it, using 4-bet groups to preserve standout moments, chronology, midpoint placement or natural boundaries. Scene 8 headlines are editorial copy rather than count labels and now use an explicit angle taxonomy: exposure, day position, position plus exposure, recovery/protection context, meeting/venue, bet-type mix, odds profile, stake pattern, race sequence/day stage, and runner/race hooks. The planner must diversify these families across long recaps, keep any one family to a minority when alternatives exist, prohibit exact duplicate headlines, allow exact prior-block running P&L as already-known context, and never leak outcome-derived facts from the upcoming block.
+- high-volume compression;
+- covers 4 or 5 consecutive primary bets;
+- one comment per covered bet;
+- grouping/order cannot be changed by copy.
+
+## Current runtime/template source
+
+Existing templates remain under:
+
+```text
+lambda/builder-recap/templates/
+```
+
+Runtime remains under:
+
+```text
+lambda/builder-recap/runtime/
+```
+
+The Kubrick V2 migration does not redesign them.
+
+## Current real-data regression state
+
+New real-race fixtures:
+
+```text
+bettings-5.json
+bettings-8.json
+bettings-32.json
+bettings-50.json
+bettings-75.json
+```
+
+Retained older fixture:
+
+```text
+bettings-16.json
+bettings-baseline.json
+```
+
+The 75-bet fixture intentionally contains two `null` replay URLs.
+
+Deployed direct planner tests on 2026-09-18 reached `RENDERING` for:
+
+```text
+5 bets  -> 8 scenes
+8 bets  -> 11 scenes
+16 bets -> 16 scenes
+32 bets -> 20 scenes
+50 bets -> 25 scenes
+75 bets -> 27 scenes
+```
+
+This proves the current planner-to-final-plan contract boundary at those sizes.
+
+## Current outstanding quality item
+
+Generated copy is structurally safe but can still be stylistically rough.
+
+Observed examples include:
+
+```text
+The block lost $45.
+profit for the day day.
+Backed 8 backed runners won their races.
+delivered The bet made $2800 profit.
+```
+
+The first remediation, if approved, should be prompt-only and should focus on natural sentence joining, avoiding duplicated phrases and keeping internal architecture vocabulary out of customer-facing copy.
+
+No contract or Builder redesign is justified by these examples.
+
+## Change control
+
+Before changing contracts/templates:
+
+1. inspect current repo state;
+2. identify whether the issue is factual, structural, copy-quality or rendering;
+3. change the owning layer only;
+4. make one controlled change;
+5. run focused regression;
+6. verify no downstream ownership moved accidentally.
+
+For copy-quality issues, do not “solve” them by adding hard validators, repair loops or extra model calls.

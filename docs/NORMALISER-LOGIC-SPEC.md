@@ -1,12 +1,20 @@
 # TAB CSV Normaliser Logic Specification
 
-Status: **LOCAL ONLY / v0.9 READY FOR RUN 2**  
-Repository: `rorygleeson/TabAPIvbeta1`  
+Last updated: 2026-09-18
+
+Status: **LOCAL-ONLY INTEGRATION DESIGN / v0.9 READY FOR RUN 2**  
+Repository: `rorygleeson/TabAPIvbeta2`  
 Canonical runnable script: `tests/normaliser/normaliser.py`
+
+> This is the current integrated Normaliser design for vbeta2. The component documents under `lambda/normaliser/` are retained as lower-level Pass 1 / Pass 2 design history and must not override this file where they differ.
 
 ## 1. Locked execution model
 
-The Normaliser is deliberately local-only for this phase and remains separate from the Step-10 scheduler/planner work.
+The Normaliser is deliberately local-only for this phase and remains separate from the Kubrick V2 planner runtime.
+
+The planned production shape is **one Python Normaliser Lambda** with separate internal Pass 1 / Pass 2 / Pass 3 stages/functions, not three independent Normaliser Lambdas. That production deployment is not yet treated as proven. The current integrated local script is the executable design/proving ground.
+
+Its downstream boundary is the canonical `bettings.json` contract consumed by Kubrick V2. Kubrick must not absorb CSV parsing or historical-results enrichment responsibilities.
 
 There is exactly one runnable Python script:
 
@@ -27,7 +35,7 @@ It must not:
 The local layout is:
 
 ```text
-C:\Dev\TabAPIvbeta1\TabNormaliserTest\
+C:\Dev\TabAPIvbeta2\TabNormaliserTest\
 ├─ normaliser.py
 ├─ meeting-resolution.json
 ├─ input\
@@ -622,14 +630,14 @@ Therefore:
 Typical run:
 
 ```cmd
-cd /d C:\Dev\TabAPIvbeta1\TabNormaliserTest
+cd /d C:\Dev\TabAPIvbeta2\TabNormaliserTest
 python normaliser.py --first-name Rory
 ```
 
 The default lookup file is:
 
 ```text
-C:\Dev\TabAPIvbeta1\TabNormaliserTest\meeting-resolution.json
+C:\Dev\TabAPIvbeta2\TabNormaliserTest\meeting-resolution.json
 ```
 
 An alternate local file can be supplied with:
@@ -647,7 +655,7 @@ No AWS arguments exist.
 Remove/rename any prior lookup file:
 
 ```cmd
-cd /d C:\Dev\TabAPIvbeta1\TabNormaliserTest
+cd /d C:\Dev\TabAPIvbeta2\TabNormaliserTest
 if exist meeting-resolution.json ren meeting-resolution.json meeting-resolution.before-test.json
 rmdir /s /q working
 mkdir working
@@ -738,12 +746,14 @@ The v0.9 cleanup also replaces deprecated `datetime.utcnow()` usage with timezon
 
 ## 23. Park point
 
-When Run 1 and Run 2 pass:
+When the current local regression runs pass:
 
 ```text
-NORMALISER = PARKED / LOCAL ONLY
+NORMALISER = PARKED / LOCAL PROVEN CANDIDATE
 ```
 
-Do not deploy it into the vbeta1 runtime yet.
+Do not silently deploy it into the existing AWS runtime.
 
-Return to Step 10 scheduler/planner work.
+Productionisation is a separate controlled step and should preserve the agreed target shape: one Python Normaliser Lambda with internal Pass 1 / Pass 2 / Pass 3 stages, producing canonical `bettings.json` for Kubrick V2.
+
+Until that productionisation step is explicitly started, the implemented Kubrick V2 planner remains independently testable from canonical fixtures.
