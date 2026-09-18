@@ -1,7 +1,7 @@
 # TAB CSV Normaliser Logic Specification
 
 Status: **LOCAL ONLY / v0.9 READY FOR RUN 2**  
-Repository: `rorygleeson/TabAPIvbeta1`  
+Repository: `rorygleeson/TabAPIvbeta2`  
 Canonical runnable script: `tests/normaliser/normaliser.py`
 
 ## 1. Locked execution model
@@ -27,7 +27,7 @@ It must not:
 The local layout is:
 
 ```text
-C:\Dev\TabAPIvbeta1\TabNormaliserTest\
+C:\Dev\TabAPIvbeta2\TabNormaliserTest\
 ├─ normaliser.py
 ├─ meeting-resolution.json
 ├─ input\
@@ -622,14 +622,14 @@ Therefore:
 Typical run:
 
 ```cmd
-cd /d C:\Dev\TabAPIvbeta1\TabNormaliserTest
+cd /d C:\Dev\TabAPIvbeta2\TabNormaliserTest
 python normaliser.py --first-name Rory
 ```
 
 The default lookup file is:
 
 ```text
-C:\Dev\TabAPIvbeta1\TabNormaliserTest\meeting-resolution.json
+C:\Dev\TabAPIvbeta2\TabNormaliserTest\meeting-resolution.json
 ```
 
 An alternate local file can be supplied with:
@@ -647,7 +647,7 @@ No AWS arguments exist.
 Remove/rename any prior lookup file:
 
 ```cmd
-cd /d C:\Dev\TabAPIvbeta1\TabNormaliserTest
+cd /d C:\Dev\TabAPIvbeta2\TabNormaliserTest
 if exist meeting-resolution.json ren meeting-resolution.json meeting-resolution.before-test.json
 rmdir /s /q working
 mkdir working
