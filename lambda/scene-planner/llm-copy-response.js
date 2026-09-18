@@ -62,7 +62,7 @@ function validateCopyResponse(copyInput, response) {
       if (!Object.prototype.hasOwnProperty.call(item, field)) {
         throw new Error('LLM copy scene ' + index + ' missing field ' + field + '.');
       }
-      const value = normalizeGroundedValue(item[field], rule, source, index, field);
+      const value = normalizeGroundedValue(item[field], rule, source, index, field, copyInput);
       validateField(value, rule, index, field);
       normalizedItem[field] = value;
     }
@@ -96,11 +96,11 @@ function validateCopyResponse(copyInput, response) {
   return normalized;
 }
 
-function normalizeGroundedValue(value, rule, source, sceneIndex, field) {
+function normalizeGroundedValue(value, rule, source, sceneIndex, field, copyInput) {
   if (rule.responseType === 'enum' || rule.enum) return clone(value);
 
   if (rule.responseType === 'parts') {
-    return composeParts(value, source, rule.phase, null, sceneIndex, field);
+    return composeParts(value, source, rule.phase, null, sceneIndex, field, copyInput);
   }
 
   if (rule.responseType === 'partsArray') {
@@ -108,20 +108,20 @@ function normalizeGroundedValue(value, rule, source, sceneIndex, field) {
       throw new Error('Scene ' + sceneIndex + ' field ' + field + ' must be an array of part arrays.');
     }
     return value.map((parts, itemIndex) =>
-      composeParts(parts, source, rule.phase, itemIndex, sceneIndex, field)
+      composeParts(parts, source, rule.phase, itemIndex, sceneIndex, field, copyInput)
     );
   }
 
   throw new Error('Scene ' + sceneIndex + ' field ' + field + ' has unsupported responseType.');
 }
 
-function composeParts(parts, source, phase, itemIndex, sceneIndex, field) {
+function composeParts(parts, source, phase, itemIndex, sceneIndex, field, copyInput) {
   const label = 'Scene ' + sceneIndex + ' field ' + field + (itemIndex === null ? '' : '[' + itemIndex + ']');
   if (!Array.isArray(parts) || parts.length === 0) {
     throw new Error(label + ' must be a non-empty array of text/fact parts.');
   }
 
-  const atomMap = atomsForPhase(source, phase, itemIndex);
+  const atomMap = atomsForPhase(source, phase, itemIndex, copyInput);
   const rendered = [];
 
   parts.forEach((part, partIndex) => {
@@ -153,7 +153,7 @@ function composeParts(parts, source, phase, itemIndex, sceneIndex, field) {
       if (typeof part.text !== 'string' || !part.text.length) {
         throw new Error(label + ' text part ' + partIndex + ' must contain non-empty text.');
       }
-      validateNarrativeText(part.text, source, label + ' text part ' + partIndex);
+      validateNarrativeText(part.text, source, label + ' text part ' + partIndex, copyInput);
       rendered.push({ kind: 'text', text: part.text, partIndex });
       return;
     }
@@ -205,25 +205,43 @@ function validateClauseBoundaries(rendered, label) {
   });
 }
 
-function atomsForPhase(source, phase, itemIndex) {
-  const scoped = source.context?.factAtomsByPhase?.[phase];
-  if (Array.isArray(scoped)) {
-    if (!Number.isInteger(itemIndex) || !scoped[itemIndex] || typeof scoped[itemIndex] !== 'object') {
-      return {};
+function atomsForPhase(source, phase, itemIndex, copyInput) {
+  const localScoped = source.context?.factAtomsByPhase?.[phase];
+  let localAtoms = {};
+  if (Array.isArray(localScoped)) {
+    if (Number.isInteger(itemIndex) && localScoped[itemIndex] && typeof localScoped[itemIndex] === 'object') {
+      localAtoms = localScoped[itemIndex];
     }
-    return scoped[itemIndex];
+  } else if (localScoped && typeof localScoped === 'object') {
+    localAtoms = localScoped;
   }
-  return scoped && typeof scoped === 'object' ? scoped : {};
+
+  const allowedScoped = source.context?.allowedGlobalFactIdsByPhase?.[phase];
+  let allowedIds = [];
+  if (Array.isArray(allowedScoped) && allowedScoped.length > 0 && Array.isArray(allowedScoped[0])) {
+    allowedIds = Number.isInteger(itemIndex) ? (allowedScoped[itemIndex] || []) : [];
+  } else if (Array.isArray(allowedScoped)) {
+    allowedIds = allowedScoped;
+  }
+
+  const catalog = copyInput?.factCatalog || {};
+  const globalAtoms = {};
+  for (const id of allowedIds) {
+    if (Object.prototype.hasOwnProperty.call(catalog, id)) globalAtoms[id] = catalog[id];
+  }
+
+  return { ...globalAtoms, ...localAtoms };
 }
 
-function validateNarrativeText(rawText, source, label) {
+function validateNarrativeText(rawText, source, label, copyInput) {
   const text = String(rawText || '');
   if (RAW_CONCRETE_PATTERN.test(text) || POSITION_CLAIM_PATTERN.test(text)) {
     throw new Error(label + ' contains raw concrete factual wording; use a fact part instead.');
   }
 
   const lower = text.toLocaleLowerCase('en-AU');
-  for (const term of source.context?.protectedTerms || []) {
+  const protectedTerms = [...new Set([...(copyInput?.protectedTerms || []), ...(source.context?.protectedTerms || [])])];
+  for (const term of protectedTerms) {
     const normalized = String(term || '').trim().toLocaleLowerCase('en-AU');
     if (normalized && containsProtectedTerm(lower, normalized)) {
       throw new Error(label + ' contains protected factual text; use a fact part instead: ' + term + '.');

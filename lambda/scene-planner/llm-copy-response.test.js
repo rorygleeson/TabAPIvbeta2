@@ -33,8 +33,8 @@ function goodResponse() {
   };
 }
 
-assert.strictEqual(input.copyInputVersion, '2.2');
-assert.strictEqual(input.groundingProtocol, 'FACT_PARTS_V2_1');
+assert.strictEqual(input.copyInputVersion, '2.3');
+assert.strictEqual(input.groundingProtocol, 'FACT_PARTS_V2_2');
 
 const parsed = parseJsonObject(JSON.stringify(goodResponse()));
 const normalized = validateCopyResponse(input, parsed);
@@ -177,6 +177,31 @@ wrongPhaseAtom.scenes[bet3SceneIndex].tensionLine = [
 ];
 assert.throws(() => validateCopyResponse(input, wrongPhaseAtom), /unknown or wrong-phase fact atom B3_FINISH/);
 
+const finalSceneIndex = input.scenes.findIndex(scene => scene.sceneType === 7);
+assert.ok(finalSceneIndex >= 0);
+
+const crossSceneFinalFact = goodResponse();
+crossSceneFinalFact.scenes[finalSceneIndex].shareCaption = [
+  fact('B8_RUNNER'),
+  textPart(' closed the day with the final flourish.'),
+  fact('B8_RESULT_SUMMARY')
+];
+const crossSceneFinalNormalized = validateCopyResponse(input, crossSceneFinalFact);
+assert.ok(crossSceneFinalNormalized.scenes[finalSceneIndex].shareCaption.includes('LE PLUS RAPIDE'));
+assert.ok(crossSceneFinalNormalized.scenes[finalSceneIndex].shareCaption.includes('finished 1st'));
+
+const futureResultLeak = goodResponse();
+futureResultLeak.scenes[bet3SceneIndex].tensionLine = [
+  fact('B8_FINISH')
+];
+assert.throws(() => validateCopyResponse(input, futureResultLeak), /unknown or wrong-phase fact atom B8_FINISH/);
+
+const unknownGlobalFact = goodResponse();
+unknownGlobalFact.scenes[finalSceneIndex].shareCaption = [
+  fact('B999_RUNNER')
+];
+assert.throws(() => validateCopyResponse(input, unknownGlobalFact), /unknown or wrong-phase fact atom B999_RUNNER/);
+
 const legacyPlaceholder = goodResponse();
 legacyPlaceholder.scenes[bet3SceneIndex].tensionLine = '{{B3_RUNNER}} is ready';
 assert.throws(() => validateCopyResponse(input, legacyPlaceholder), /non-empty array of text\/fact parts/);
@@ -193,4 +218,4 @@ assert.strictEqual(require('./llm-copy-response').__test.containsProtectedTerm('
 assert.strictEqual(require('./llm-copy-response').__test.containsProtectedTerm('al is next', 'al'), true);
 assert.strictEqual(require('./llm-copy-response').__test.containsProtectedTerm('back at te aroha today', 'te aroha'), true);
 
-console.log('FACT_PARTS_V2_1 LLM copy response validation tests passed.');
+console.log('FACT_PARTS_V2_2 LLM copy response validation tests passed.');

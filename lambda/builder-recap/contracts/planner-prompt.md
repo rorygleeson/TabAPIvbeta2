@@ -8,11 +8,11 @@ You receive one JSON object named `copyInput`. It contains every scene for the r
 
 ## Grounded Copy Protocol
 
-`copyInput.groundingProtocol` is `FACT_PARTS_V2_1`.
+`copyInput.groundingProtocol` is `FACT_PARTS_V2_2`.
 
-Concrete facts are supplied as deterministic fact atoms inside each scene's:
+Stable day/bet facts are supplied once in the recap-wide `copyInput.factCatalog`. Each scene/phase also supplies `context.allowedGlobalFactIdsByPhase`, which is the deterministic allow-list for that moment in the chronology. Scene-specific aggregate facts remain in `context.factAtomsByPhase`.
 
-`context.factAtomsByPhase`
+Use only fact IDs allowed by the current field phase. The same scope is enforced by code after generation.
 
 Fact atoms now have two practical shapes:
 
@@ -133,7 +133,7 @@ Use only fact atoms from that exact phase.
 - `PRE_FUTURE_RESULTS`: future bets may be mentioned only through pre-result atoms.
 - `POST_DAY`: completed-day facts may be discussed.
 
-Never use a fact ID from another phase.
+Never use a fact ID that is absent from the current field's allowed scope. Chronology is deterministic: pre-result phases cannot use result atoms that have not happened yet, while `POST_DAY` can use stable facts from any completed bet.
 
 ## Input
 
@@ -146,7 +146,8 @@ Each item in `copyInput.scenes` contains:
   - `parts`: return one array of text/fact parts;
   - `partsArray`: return an array whose items are arrays of text/fact parts;
   - `enum`: return the enum value or enum array directly;
-- `context.factAtomsByPhase`: approved deterministic fact atoms;
+- `context.factAtomsByPhase`: scene-local aggregate fact atoms;
+- `context.allowedGlobalFactIdsByPhase`: deterministic IDs from `copyInput.factCatalog` allowed for each phase;
 - optional selection context such as `standoutOptions` or `availableFinalHighlights`;
 - `protectedTerms`: factual names/phrases that belong in fact parts rather than text parts.
 
