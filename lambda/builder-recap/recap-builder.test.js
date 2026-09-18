@@ -27,6 +27,10 @@ assert.match(template,/\.s8-bet\.is-resolved \.s8-result\{opacity:1;visibility:v
 assert.match(template,/\.s8-horse\{[^}]*white-space:normal;[^}]*text-overflow:clip/);
 assert.match(template,/NEXT \{\{betCount\}\}/);
 const runtime=fs.readFileSync(path.resolve(__dirname,'runtime/recap-runtime.js'),'utf8');
+const soundtrackCorsIndex=runtime.indexOf("audio.crossOrigin='anonymous';");
+const soundtrackSrcIndex=runtime.indexOf('audio.src=CONTRACT.soundtrack;');
+assert.ok(soundtrackCorsIndex>=0,'Soundtrack audio must opt into anonymous CORS mode.');
+assert.ok(soundtrackSrcIndex>soundtrackCorsIndex,'Soundtrack crossOrigin must be set before soundtrack src.');
 assert.doesNotMatch(runtime,/durations=\{2:5000,3:6500,4:8000,5:9500\}/);
 assert.doesNotMatch(runtime,/marks=\[900,2200,3500,4800,6100\]/);
 assert.match(runtime,/root\.dataset\.resultRevealMs/);

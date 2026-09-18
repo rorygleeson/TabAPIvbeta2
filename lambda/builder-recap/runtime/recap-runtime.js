@@ -9,6 +9,7 @@ let manifest={manifestVersion:'1.0',sceneRuntimeData:{}};try{manifest=JSON.parse
 let index=0,paused=false,timers=[],timeline=null,replayVideo=null,replayState=null,replayGeneration=0,audioFade=null,audioUnlocked=false,replayMediaPrimed=false,lastReplayStyle='',lastReplayCelebration='';
 let audioCtx=null,soundtrackSource=null,soundtrackGain=null;
 
+audio.crossOrigin='anonymous';
 audio.src=CONTRACT.soundtrack;
 audio.volume=CONTRACT.normalVolume;
 
