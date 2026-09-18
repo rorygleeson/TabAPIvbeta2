@@ -42,7 +42,10 @@ assert.strictEqual(normalized.scenes.length, input.scenes.length);
 
 const unexpected = goodResponse();
 unexpected.scenes[0].sceneType = 1;
-assert.throws(() => validateCopyResponse(input, unexpected), /unexpected field sceneType/);
+unexpected.debugNote = 'harmless model metadata';
+assert.doesNotThrow(() => validateCopyResponse(input, unexpected));
+const unexpectedNormalized = validateCopyResponse(input, unexpected);
+assert.strictEqual(Object.prototype.hasOwnProperty.call(unexpectedNormalized.scenes[0], 'sceneType'), false);
 
 const missing = goodResponse();
 delete missing.scenes[0].openingTeaser;
@@ -172,6 +175,11 @@ groundedRunner.scenes[bet3SceneIndex].tensionLine = [
 const groundedRunnerNormalized = validateCopyResponse(input, groundedRunner);
 assert.strictEqual(groundedRunnerNormalized.scenes[bet3SceneIndex].tensionLine, 'ROCEM is ready to go');
 
+const textPartWithExtraMetadata = goodResponse();
+textPartWithExtraMetadata.scenes[bet3SceneIndex].tensionLine = [{ type: 'text', text: '<b>ROCEM</b> at $5 is still just display text.', note: 'ignore me' }];
+const textMetadataNormalized = validateCopyResponse(input, textPartWithExtraMetadata);
+assert.strictEqual(textMetadataNormalized.scenes[bet3SceneIndex].tensionLine, '<b>ROCEM</b> at $5 is still just display text.');
+
 const wrongPhaseAtom = goodResponse();
 wrongPhaseAtom.scenes[bet3SceneIndex].tensionLine = [
   fact('B3_FINISH'),
@@ -208,9 +216,10 @@ const legacyPlaceholder = goodResponse();
 legacyPlaceholder.scenes[bet3SceneIndex].tensionLine = '{{B3_RUNNER}} is ready';
 assert.throws(() => validateCopyResponse(input, legacyPlaceholder), /non-empty array of text\/fact parts/);
 
-const malformedFactPart = goodResponse();
-malformedFactPart.scenes[bet3SceneIndex].tensionLine = [{ type: 'fact', id: 'B3_RUNNER', text: 'bad' }];
-assert.throws(() => validateCopyResponse(input, malformedFactPart), /must contain only type and id/);
+const factPartWithExtraMetadata = goodResponse();
+factPartWithExtraMetadata.scenes[bet3SceneIndex].tensionLine = [{ type: 'fact', id: 'B3_RUNNER', note: 'harmless metadata' }];
+const extraMetadataNormalized = validateCopyResponse(input, factPartWithExtraMetadata);
+assert.strictEqual(extraMetadataNormalized.scenes[bet3SceneIndex].tensionLine, 'ROCEM');
 
 
 
