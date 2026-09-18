@@ -54,7 +54,7 @@ function mockCopyFromInput(copyInput) {
           break;
         case 7:
           item.selectedFinalHighlights = ['totalBets', 'wins', 'finalPnl'];
-          item.finalSummary = '<DAY_FINAL_PNL> when it was all done.';
+          item.finalSummary = 'The racing day is complete.';
           item.shareCaption = text('My full racing-day recap, from the opening move to the closing chapter.');
           break;
         case 8:
@@ -91,8 +91,8 @@ for (const totalBets of [5, 8, 16, 32, 75]) {
   const validatedCopy = validateCopyResponse(copyInput, copyResponse);
   const finalPlan = mergeCopyIntoPlan(deterministicPlan, validatedCopy);
 
-  assert.strictEqual(copyInput.copyInputVersion, '3.0');
-  assert.strictEqual(copyInput.groundingProtocol, 'FACT_TEMPLATES_V3_0');
+  assert.strictEqual(copyInput.copyInputVersion, '4.0');
+  assert.strictEqual(copyInput.groundingProtocol, 'FACT_SEMANTICS_V4_0');
   assert.strictEqual(finalPlan.planVersion, '2.0');
   assert.deepStrictEqual(
     structuralProjection(finalPlan),
@@ -102,7 +102,7 @@ for (const totalBets of [5, 8, 16, 32, 75]) {
 
   assert.strictEqual('artifactType' in finalPlan, false);
   assert.strictEqual('artifactVersion' in finalPlan, false);
-  assert.strictEqual(JSON.stringify(finalPlan).includes('FACT_TEMPLATES_V3_0'), false, 'Final scene plan must not contain copy-stage protocol metadata');
+  assert.strictEqual(JSON.stringify(finalPlan).includes('FACT_SEMANTICS_V4_0'), false, 'Final scene plan must not contain copy-stage protocol metadata');
   assert.strictEqual(JSON.stringify(finalPlan).includes('<DAY_'), false, 'Final scene plan must not contain unresolved fact placeholders');
 
   const result = buildRecap({ bettings, scenePlan: finalPlan });
@@ -168,4 +168,4 @@ for (const totalBets of [5, 8, 16, 32, 75]) {
   );
 }
 
-console.log('FACT_TEMPLATES_V3_0 merge, deterministic fallback and Builder compatibility tests passed.');
+console.log('FACT_SEMANTICS_V4_0 merge, deterministic fallback and Builder compatibility tests passed.');
