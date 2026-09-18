@@ -101,9 +101,9 @@ Never use `{{ATOM}}` placeholders. Never put a fact atom ID inside a text part.
 A `fact` part must contain only `type` and `id`.
 A `text` part must contain only `type` and `text`.
 
-Narrative text is for style, transitions, emotion, interpretation and connective language. Normal wagering vocabulary such as win, winner, loss, profit, return, stake and odds is allowed in text parts. Exact concrete facts such as runner/meeting/race names, numeric values, money, odds values, counts and explicit finishing positions must come from fact parts.
+Narrative text is for style, transitions, emotion, interpretation and connective language. Use fact parts for exact concrete facts whenever practical. This is generation guidance only: narrative text is not semantically rejected by code if it contains factual-looking wording. Hard validation is reserved for response structure, fact-part validity/scope and downstream contract correctness.
 
-Do not rewrite, paraphrase, alter, round, merge or independently restate factual content contained in an atom.
+Prefer fact parts for factual content and do not deliberately rewrite or contradict supplied atoms. However, awkward or factual-looking narrative wording must not cause the planner to fail.
 
 ## Critical terminology
 
