@@ -29,6 +29,63 @@ function buildLlmCopyInput(bettings, deterministicPlan, contracts = sceneContrac
   };
 }
 
+function buildLlmModelPayload(copyInput) {
+  if (!copyInput || !Array.isArray(copyInput.scenes)) {
+    throw new TypeError('copyInput.scenes must be an array.');
+  }
+
+  return {
+    modelPayloadVersion: '1.0',
+    groundingProtocol: 'FACT_PARTS_COMPACT_V1',
+    scenes: copyInput.scenes.map(scene => {
+      const item = {
+        sceneIndex: scene.sceneIndex,
+        sceneType: scene.sceneType,
+        requiredFields: compactRequiredFields(scene.requiredFields),
+        context: {
+          factAtomsByPhase: cloneJson(scene.context?.factAtomsByPhase || {})
+        }
+      };
+
+      if (scene.betSequence !== undefined) item.betSequence = scene.betSequence;
+      if (scene.betSequences !== undefined) item.betSequences = [...scene.betSequences];
+      if (scene.checkpointAfterBetSequence !== undefined) {
+        item.checkpointAfterBetSequence = scene.checkpointAfterBetSequence;
+      }
+
+      if (Array.isArray(scene.context?.standoutOptions)) {
+        item.context.standoutOptions = scene.context.standoutOptions.map(option => ({ type: option.type }));
+      }
+      if (Array.isArray(scene.context?.availableFinalHighlights)) {
+        item.context.availableFinalHighlights = scene.context.availableFinalHighlights.map(option => ({ type: option.type }));
+      }
+
+      return item;
+    })
+  };
+}
+
+function compactRequiredFields(requiredFields) {
+  const compact = {};
+  for (const [field, rule] of Object.entries(requiredFields || {})) {
+    const out = {
+      phase: rule.phase,
+      responseType: rule.responseType
+    };
+    if (Array.isArray(rule.enum)) out.enum = [...rule.enum];
+    if (rule.minItems !== undefined) out.minItems = rule.minItems;
+    if (rule.maxItems !== undefined) out.maxItems = rule.maxItems;
+    if (rule.maxWords !== undefined) out.maxWords = rule.maxWords;
+    if (rule.itemMaxWords !== undefined) out.itemMaxWords = rule.itemMaxWords;
+    compact[field] = out;
+  }
+  return compact;
+}
+
+function cloneJson(value) {
+  return JSON.parse(JSON.stringify(value));
+}
+
 function validateInputs(bettings, deterministicPlan, contracts) {
   if (!bettings || !Array.isArray(bettings.bets) || bettings.bets.length === 0) {
     throw new TypeError('bettings.bets must be a non-empty array.');
@@ -569,6 +626,7 @@ function sum(values) {
 
 module.exports = {
   buildLlmCopyInput,
+  buildLlmModelPayload,
   requiredLlmFields,
   __test: {
     preBetAtoms,

@@ -4,7 +4,7 @@ const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
 const { buildDeterministicScenePlan } = require('./scene-planner');
-const { buildLlmCopyInput } = require('./llm-copy-input');
+const { buildLlmCopyInput, buildLlmModelPayload } = require('./llm-copy-input');
 
 const ROOT = path.join(__dirname, '..', '..');
 const FIXTURE_DIR = path.join(ROOT, 'tests', 'fixtures');
@@ -88,8 +88,14 @@ for (const totalBets of [5, 8, 16, 32, 75]) {
   const bettings = readJson('bettings-' + totalBets + '.json');
   const deterministicPlan = buildDeterministicScenePlan(bettings);
   const payload = buildLlmCopyInput(bettings, deterministicPlan);
+  const modelPayload = buildLlmModelPayload(payload);
 
   assert.strictEqual(payload.copyInputVersion, '2.3');
+  assert.strictEqual(modelPayload.modelPayloadVersion, '1.0');
+  assert.strictEqual(modelPayload.groundingProtocol, 'FACT_PARTS_COMPACT_V1');
+  assert.strictEqual(modelPayload.scenes.length, deterministicPlan.scenes.length);
+  assert.strictEqual(Object.prototype.hasOwnProperty.call(modelPayload, 'factCatalog'), false);
+  assert.strictEqual(Object.prototype.hasOwnProperty.call(modelPayload, 'protectedTerms'), false);
   assert.strictEqual(payload.groundingProtocol, 'FACT_PARTS_V2_2');
   assert.strictEqual(payload.scenes.length, deterministicPlan.scenes.length);
   assert.ok(payload.factCatalog && typeof payload.factCatalog === 'object');
@@ -97,8 +103,14 @@ for (const totalBets of [5, 8, 16, 32, 75]) {
   assertNoForbiddenFields(payload);
   assertGroundingScopes(payload);
   for (const scene of payload.scenes) {
-    assert.ok(scene.context.allowedGlobalFactIdsByPhase, 'Every scene must carry deterministic allowed global fact scopes');
+    assert.ok(scene.context.allowedGlobalFactIdsByPhase, 'Local validation input keeps deterministic global scopes');
   }
+  for (const scene of modelPayload.scenes) {
+    assert.ok(scene.context.factAtomsByPhase, 'Model payload keeps only scene-local phase facts');
+    assert.strictEqual(Object.prototype.hasOwnProperty.call(scene.context, 'allowedGlobalFactIdsByPhase'), false);
+    assert.strictEqual(Object.prototype.hasOwnProperty.call(scene.context, 'protectedTerms'), false);
+  }
+  assertNoForbiddenFields(modelPayload);
 
   payload.scenes.forEach((scene, index) => {
     assert.strictEqual(scene.sceneIndex, index);
@@ -196,6 +208,11 @@ for (const totalBets of [5, 8, 16, 32, 75]) {
 {
   const bettings = readJson('bettings-75.json');
   const payload = buildLlmCopyInput(bettings, buildDeterministicScenePlan(bettings));
+  const modelPayload = buildLlmModelPayload(payload);
+  const richBytes = Buffer.byteLength(JSON.stringify(payload), 'utf8');
+  const compactBytes = Buffer.byteLength(JSON.stringify(modelPayload), 'utf8');
+  assert.ok(compactBytes < richBytes * 0.5, '75-bet model payload must be less than half the rich validation input');
+  assert.ok(compactBytes < richBytes, 'Compact model payload must be smaller than rich validation input');
   const finalScene = payload.scenes.find(scene => scene.sceneType === 7);
   const postDay = new Set(finalScene.context.allowedGlobalFactIdsByPhase.POST_DAY);
   assert.ok(postDay.has('B1_RUNNER'));
@@ -203,6 +220,9 @@ for (const totalBets of [5, 8, 16, 32, 75]) {
   assert.ok(postDay.has('B75_RUNNER'));
   assert.ok(postDay.has('B75_RESULT_SUMMARY'));
   assert.ok(payload.factCatalog.B75_RUNNER, '75-bet catalog must include final bet');
+  assert.strictEqual(Object.prototype.hasOwnProperty.call(modelPayload, 'factCatalog'), false);
+  assert.strictEqual(Object.prototype.hasOwnProperty.call(modelPayload.scenes[0].context, 'allowedGlobalFactIdsByPhase'), false);
+  console.log('75-bet payload bytes: rich=' + richBytes + ' compact=' + compactBytes);
 }
 
-console.log('FACT_PARTS_V2_2 LLM copy input regression tests passed.');
+console.log('FACT_PARTS_V2_2 local validation input + FACT_PARTS_COMPACT_V1 Bedrock payload regression tests passed.');
