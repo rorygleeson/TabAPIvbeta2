@@ -1,14 +1,6 @@
 'use strict';
 
 const ATOM_ID_PATTERN = /^[A-Z][A-Z0-9_]*$/u;
-const RAW_CONCRETE_PATTERN = /[$%@]|\d/u;
-const POSITION_WORD = '(?:first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|eleventh|twelfth|thirteenth|fourteenth|fifteenth|sixteenth|seventeenth|eighteenth|nineteenth|twentieth)';
-const POSITION_CLAIM_PATTERN = new RegExp(
-  '\\b(?:finished|finishing|ran|placed|came)\\s+' + POSITION_WORD + '\\b' +
-  '|\\b(?:both|all)\\s+(?:(?:the\\s+)?(?:runners?|horses?)\\s+)?(?:finished\\s+|ran\\s+|placed\\s+|came\\s+)?' + POSITION_WORD + '\\b',
-  'iu'
-);
-
 function parseJsonObject(text) {
   const source = String(text || '').trim();
   if (!source) throw new Error('LLM returned no text content.');
@@ -214,28 +206,11 @@ function atomsForPhase(source, phase, itemIndex, copyInput) {
 
 function validateNarrativeText(rawText, source, label, copyInput) {
   const text = String(rawText || '');
-  if (RAW_CONCRETE_PATTERN.test(text) || POSITION_CLAIM_PATTERN.test(text)) {
-    throw new Error(label + ' contains raw concrete factual wording; use a fact part instead.');
-  }
-
-  const lower = text.toLocaleLowerCase('en-AU');
-  const protectedTerms = [...new Set([...(copyInput?.protectedTerms || []), ...(source.context?.protectedTerms || [])])];
-  for (const term of protectedTerms) {
-    const normalized = String(term || '').trim().toLocaleLowerCase('en-AU');
-    if (normalized && containsProtectedTerm(lower, normalized)) {
-      throw new Error(label + ' contains protected factual text; use a fact part instead: ' + term + '.');
-    }
+  if (!text.trim()) {
+    throw new Error(label + ' must contain non-empty text.');
   }
 }
 
-function containsProtectedTerm(lowerText, normalizedTerm) {
-  const escaped = normalizedTerm.replace(/[.*+?^$\{\}()|[\]\\]/gu, '\\$&');
-  const startsWord = /[\p{L}\p{N}]/u.test(normalizedTerm[0] || '');
-  const endsWord = /[\p{L}\p{N}]/u.test(normalizedTerm[normalizedTerm.length - 1] || '');
-  const left = startsWord ? '(?<![\\p{L}\\p{N}])' : '';
-  const right = endsWord ? '(?![\\p{L}\\p{N}])' : '';
-  return new RegExp(left + escaped + right, 'iu').test(lowerText);
-}
 function hardCharLimit(target) {
   const n = Number(target);
   if (!Number.isFinite(n) || n <= 0) return null;
@@ -292,7 +267,6 @@ module.exports = {
     atomsForPhase,
     composeParts,
     isClauseAtom,
-    validateNarrativeText,
-    containsProtectedTerm
+    validateNarrativeText
   }
 };
