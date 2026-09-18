@@ -61,7 +61,6 @@ function assertTypedPnlAtom(id, value) {
 function assertGroundingScopes(payload) {
   for (const scene of payload.scenes) {
     assert.ok(scene.context.factAtomsByPhase);
-    assert.ok(scene.context.semanticContextByPhase);
     assert.ok(Array.isArray(scene.context.protectedTerms));
 
     if (scene.sceneType === 2) {
@@ -72,33 +71,33 @@ function assertGroundingScopes(payload) {
       assert.ok(pre[prefix + 'DECIMAL_ODDS']);
       assert.strictEqual(prefix + 'FINISH' in pre, false);
       assert.ok(post[prefix + 'FINISH']);
-      assert.strictEqual(scene.context.semanticContextByPhase.PRE_RESULT.currentResultAvailable, false);
-      assert.strictEqual(scene.context.semanticContextByPhase.POST_RESULT.currentResultAvailable, true);
-      assert.strictEqual(scene.context.semanticContextByPhase.POST_RESULT.oddsFormat, 'DECIMAL');
-      assert.strictEqual(scene.context.semanticContextByPhase.POST_RESULT.raceActionEvidence, 'NONE');
+      assert.strictEqual(
+        scene.context.semanticContextByPhase.POST_RESULT.raceWinner,
+        Number(payload.factCatalog[prefix + 'FINISH']?.replace(/\D+/gu, '')) === 1
+      );
     }
 
     if (scene.sceneType === 3) {
-      assert.strictEqual(scene.context.semanticContextByPhase.POST_RESULT.replayEvidence, 'RESULT_FACTS_ONLY');
-      assert.strictEqual(scene.context.semanticContextByPhase.POST_RESULT.raceActionEvidence, 'NONE');
+      assert.ok(scene.context.semanticContextByPhase.POST_RESULT);
+      assert.strictEqual(typeof scene.context.semanticContextByPhase.POST_RESULT.raceWinner, 'boolean');
     }
 
     if (scene.sceneType === 5) {
       const pre = scene.context.factAtomsByPhase.PRE_RESULT_BLOCK;
-      const sem = scene.context.semanticContextByPhase.PRE_RESULT_BLOCK;
+      const sem = scene.context.semanticContextByPhase.PRE_RESULT_BLOCK.groupPosition;
       assert.ok(pre.BLOCK_TOTAL_STAKE);
       assert.ok(pre.BLOCK_START_BET);
       assert.ok(pre.BLOCK_END_BET);
-      assert.strictEqual(sem.currentGroupResultsAvailable, false);
-      assert.strictEqual(sem.raceActionEvidence, 'NONE');
+      assert.strictEqual(typeof sem.isFirstGroup, 'boolean');
+      assert.strictEqual(typeof sem.isFinalGroup, 'boolean');
     }
 
     if (scene.sceneType === 8) {
       const pre = scene.context.factAtomsByPhase.PRE_RESULT_BLOCK;
       const byBet = scene.context.factAtomsByPhase.POST_RESULT_BY_BET;
-      const sem = scene.context.semanticContextByPhase.PRE_RESULT_BLOCK;
+      const sem = scene.context.semanticContextByPhase.PRE_RESULT_BLOCK.groupPosition;
       assert.ok(pre.BLOCK_TOTAL_STAKE);
-      assert.strictEqual(sem.currentGroupResultsAvailable, false);
+      assert.strictEqual(typeof sem.isFinalGroup, 'boolean');
       assert.ok(Array.isArray(byBet));
       assert.strictEqual(byBet.length, scene.betSequences.length);
       byBet.forEach((atoms, index) => {
@@ -120,6 +119,11 @@ for (const totalBets of [5, 8, 16, 32, 75]) {
   assert.strictEqual(payload.groundingProtocol, 'FACT_SEMANTICS_V4_0');
   assert.strictEqual(modelPayload.modelPayloadVersion, '1.0');
   assert.strictEqual(modelPayload.groundingProtocol, 'FACT_SEMANTIC_TEMPLATE_V1');
+  assert.deepStrictEqual(payload.semanticPolicy, {
+    raceActionEvidence: 'NONE',
+    replayEvidence: 'RESULT_FACTS_ONLY'
+  });
+  assert.deepStrictEqual(modelPayload.semanticPolicy, payload.semanticPolicy);
   assert.strictEqual(modelPayload.scenes.length, deterministicPlan.scenes.length);
   assert.strictEqual(Object.prototype.hasOwnProperty.call(modelPayload, 'factCatalog'), false);
   assert.strictEqual(Object.prototype.hasOwnProperty.call(modelPayload, 'protectedTerms'), false);
@@ -134,7 +138,6 @@ for (const totalBets of [5, 8, 16, 32, 75]) {
   }
   for (const scene of modelPayload.scenes) {
     assert.ok(scene.context.factAtomsByPhase, 'Model payload keeps scene-local facts');
-    assert.ok(scene.context.semanticContextByPhase, 'Model payload keeps deterministic semantic context');
     assert.strictEqual(Object.prototype.hasOwnProperty.call(scene.context, 'allowedGlobalFactIdsByPhase'), false);
     assert.strictEqual(Object.prototype.hasOwnProperty.call(scene.context, 'protectedTerms'), false);
   }
@@ -167,7 +170,8 @@ for (const totalBets of [5, 8, 16, 32, 75]) {
   const scene3 = payload.scenes.find(scene => scene.sceneType === 3 && scene.betSequence === 3);
   assert.ok(scene3);
   assert.strictEqual(scene3.context.semanticContextByPhase.POST_RESULT.raceWinner, true);
-  assert.strictEqual(scene3.context.semanticContextByPhase.POST_RESULT.replayEvidence, 'RESULT_FACTS_ONLY');
+  assert.strictEqual(payload.semanticPolicy.replayEvidence, 'RESULT_FACTS_ONLY');
+  assert.strictEqual(payload.semanticPolicy.raceActionEvidence, 'NONE');
 
   const dayScene = payload.scenes.find(scene => scene.sceneType === 6);
   const options = dayScene.context.standoutOptions;
@@ -193,11 +197,16 @@ for (const totalBets of [5, 8, 16, 32, 75]) {
   );
   assert.ok(middle, 'Expected Scene 5 for bets 36-38');
   const middleSem = middle.context.semanticContextByPhase.PRE_RESULT_BLOCK.groupPosition;
+  const middleFacts = middle.context.factAtomsByPhase.PRE_RESULT_BLOCK;
   assert.deepStrictEqual(
-    { start: middleSem.startSequence, end: middleSem.endSequence, remaining: middleSem.remainingAfter, final: middleSem.isFinalGroup },
+    {
+      start: Number(middleFacts.BLOCK_START_BET),
+      end: Number(middleFacts.BLOCK_END_BET),
+      remaining: Number(middleFacts.BLOCK_BETS_REMAINING_AFTER),
+      final: middleSem.isFinalGroup
+    },
     { start: 36, end: 38, remaining: 37, final: false }
   );
-  assert.strictEqual(middle.context.factAtomsByPhase.PRE_RESULT_BLOCK.BLOCK_BETS_REMAINING_AFTER, '37');
 
   const finalGroup = payload.scenes.find(scene =>
     scene.sceneType === 5 &&
@@ -206,7 +215,7 @@ for (const totalBets of [5, 8, 16, 32, 75]) {
   );
   assert.ok(finalGroup, 'Expected final Scene 5 for bets 74-75');
   const finalSem = finalGroup.context.semanticContextByPhase.PRE_RESULT_BLOCK.groupPosition;
-  assert.strictEqual(finalSem.remainingAfter, 0);
+  assert.strictEqual(finalGroup.context.factAtomsByPhase.PRE_RESULT_BLOCK.BLOCK_BETS_REMAINING_AFTER, '0');
   assert.strictEqual(finalSem.isFinalGroup, true);
 
   const day = payload.scenes.find(scene => scene.sceneType === 6).context.factAtomsByPhase.POST_DAY;
@@ -220,10 +229,11 @@ for (const totalBets of [5, 8, 16, 32, 75]) {
   const payload = buildLlmCopyInput(bettings, buildDeterministicScenePlan(bettings));
   const replayScenes = payload.scenes.filter(scene => scene.sceneType === 3);
   assert.ok(replayScenes.length > 0);
+  assert.strictEqual(payload.semanticPolicy.replayEvidence, 'RESULT_FACTS_ONLY');
+  assert.strictEqual(payload.semanticPolicy.raceActionEvidence, 'NONE');
   for (const scene of replayScenes) {
     const sem = scene.context.semanticContextByPhase.POST_RESULT;
-    assert.strictEqual(sem.replayEvidence, 'RESULT_FACTS_ONLY');
-    assert.strictEqual(sem.raceActionEvidence, 'NONE');
+    assert.strictEqual(typeof sem.raceWinner, 'boolean');
   }
 }
 
