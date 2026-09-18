@@ -194,7 +194,7 @@ Do not use HTML or markup.
 
 `maxWords` and `itemMaxWords` are writing targets. Aim to stay inside them.
 
-`maxChars` and `itemMaxChars` are design targets. Code applies a small hard tolerance after fact expansion and part joining, so keep the final wording close to the supplied target.
+`maxChars` and `itemMaxChars` are design targets only. Keep the final wording close to them, but length overshoot is non-fatal and must not cause an otherwise valid recap to fail.
 
 For prose-array fields, preserve input item order.
 
