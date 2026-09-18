@@ -17,6 +17,10 @@ function readJson(name) {
   return JSON.parse(fs.readFileSync(path.join(FIXTURE_DIR, name), 'utf8'));
 }
 
+const text = value => [{ type: 'text', text: value }];
+const fact = id => ({ type: 'fact', id });
+const textPart = value => ({ type: 'text', text: value });
+
 function mockCopyFromInput(copyInput) {
   return {
     scenes: copyInput.scenes.map(scene => {
@@ -24,40 +28,40 @@ function mockCopyFromInput(copyInput) {
 
       switch (scene.sceneType) {
         case 1:
-          item.openingTeaser = 'A full racing day is ready to unfold.';
+          item.openingTeaser = text('A full racing day is ready to unfold.');
           break;
         case 2:
-          item.tensionLine = 'This one had the day leaning on it.';
-          item.reactionLine = 'That result shifted the running story.';
+          item.tensionLine = text('This one had the day leaning on it.');
+          item.reactionLine = text('That result shifted the running story.');
           break;
         case 3:
-          item.replayLabel = 'WATCH IT AGAIN';
-          item.replayComments = ['Here we go', 'Get there'];
+          item.replayLabel = text('WATCH IT AGAIN');
+          item.replayComments = [text('Here we go'), text('Get there')];
           break;
         case 4:
-          item.lookingBackStory = 'The early stretch delivered enough movement to shape the day.';
-          item.lookingAheadTeaser = 'Plenty remained on the card before the final result.';
+          item.lookingBackStory = text('The early stretch delivered enough movement to shape the day.');
+          item.lookingAheadTeaser = text('Plenty remained on the card before the closing chapter.');
           break;
         case 5:
-          item.setupKicker = 'NEXT BLOCK';
-          item.setupHeadline = 'A few more chances';
-          item.payoffHeadline = 'The block is settled';
-          item.contextLine = 'Those races moved the running position again.';
+          item.setupKicker = text('NEXT BLOCK');
+          item.setupHeadline = text('A few more chances');
+          item.payoffHeadline = text('The block is settled');
+          item.contextLine = text('Those races moved the running position again.');
           break;
         case 6:
-          item.dayVerdict = '{{DAY_WINNING_BETS}} shaped a day with several swings.';
+          item.dayVerdict = [fact('DAY_WINNING_BETS'), textPart(' shaped a day with several swings.')];
           item.standoutHighlightType = 'totalReturned';
-          item.standoutCopy = 'That was the clearest single turning point of the day.';
+          item.standoutCopy = text('That was the clearest single turning point of the day.');
           break;
         case 7:
           item.selectedFinalHighlights = ['totalBets', 'wins', 'finalPnl'];
-          item.finalSummary = '{{DAY_FINAL_PNL}} when it was all done.';
-          item.shareCaption = 'My full racing-day recap, from the opening move to the closing chapter.';
+          item.finalSummary = [fact('DAY_FINAL_PNL'), textPart(' when it was all done.')];
+          item.shareCaption = text('My full racing-day recap, from the opening move to the closing chapter.');
           break;
         case 8:
-          item.headline = 'THE NEXT RUN OF BETS';
+          item.headline = text('THE NEXT RUN OF BETS');
           item.headlineCategory = 'RACE_SEQUENCE_OR_DAY_STAGE';
-          item.comments = scene.betSequences.map(() => 'Result locked in');
+          item.comments = scene.betSequences.map(() => text('Result locked in'));
           break;
         default:
           throw new Error('Unsupported scene type ' + scene.sceneType);
@@ -88,6 +92,8 @@ for (const totalBets of [5, 8, 16, 32, 75]) {
   const validatedCopy = validateCopyResponse(copyInput, copyResponse);
   const finalPlan = mergeCopyIntoPlan(deterministicPlan, validatedCopy);
 
+  assert.strictEqual(copyInput.copyInputVersion, '2.1');
+  assert.strictEqual(copyInput.groundingProtocol, 'FACT_PARTS_V2');
   assert.strictEqual(finalPlan.planVersion, '2.0');
   assert.deepStrictEqual(
     structuralProjection(finalPlan),
@@ -97,7 +103,8 @@ for (const totalBets of [5, 8, 16, 32, 75]) {
 
   assert.strictEqual('artifactType' in finalPlan, false);
   assert.strictEqual('artifactVersion' in finalPlan, false);
-  assert.strictEqual(JSON.stringify(finalPlan).includes('{{'), false, 'Final scene plan must not contain fact atom placeholders');
+  assert.strictEqual(JSON.stringify(finalPlan).includes('FACT_PARTS_V2'), false, 'Final scene plan must not contain copy-stage protocol metadata');
+  assert.strictEqual(JSON.stringify(finalPlan).includes('"type":"fact"'), false, 'Final scene plan must not contain fact parts');
 
   const result = buildRecap({ bettings, scenePlan: finalPlan });
   assert.ok(result.html.includes('data-scene-type='));
@@ -115,7 +122,7 @@ for (const totalBets of [5, 8, 16, 32, 75]) {
   const bettings = readJson('bettings-5.json');
   const deterministicPlan = buildDeterministicScenePlan(bettings);
   const copyInput = buildLlmCopyInput(bettings, deterministicPlan);
-  const good = mockCopyFromInput(copyInput);
+  const good = validateCopyResponse(copyInput, mockCopyFromInput(copyInput));
 
   const structuralAttempt = JSON.parse(JSON.stringify(good));
   structuralAttempt.scenes[0].sceneType = 8;
@@ -139,4 +146,4 @@ for (const totalBets of [5, 8, 16, 32, 75]) {
   );
 }
 
-console.log('Final scene-plan merge and Builder compatibility tests passed.');
+console.log('FACT_PARTS_V2 final scene-plan merge and Builder compatibility tests passed.');
