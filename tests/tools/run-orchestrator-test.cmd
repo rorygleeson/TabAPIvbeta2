@@ -11,11 +11,7 @@ if "%~1"=="" (
   exit /b 1
 )
 
-if "%TAB_RECAP_API_URL%"=="" (
-  echo ERROR: TAB_RECAP_API_URL is not set.
-  echo Example: set TAB_RECAP_API_URL=https://abc123.execute-api.ap-southeast-2.amazonaws.com/poc
-  exit /b 1
-)
+set "APIURL=https://fbhuqhy5cf.execute-api.ap-southeast-2.amazonaws.com/poc"
 
 if "%TAB_RECAP_API_KEY%"=="" (
   echo ERROR: TAB_RECAP_API_KEY is not set.
@@ -32,9 +28,6 @@ if not exist "%FIXTURE%" (
   echo %FIXTURE%
   exit /b 1
 )
-
-set "APIURL=%TAB_RECAP_API_URL%"
-if "%APIURL:~-1%"=="/" set "APIURL=%APIURL:~0,-1%"
 
 for /f %%i in ('node -p "\"test-api-%SIZE%-\" + new Date().toISOString().replace(/[-:TZ.]/g,\"\").slice(0,14)"') do set "RUNID=%%i"
 set "OUTDIR=%ROOT%\tests\results\%RUNID%"
