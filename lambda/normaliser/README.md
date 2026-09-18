@@ -1,5 +1,8 @@
 # TAB CSV Normaliser Logic Specification
 
+> **Component-level Pass 1 reference.** Current integrated Normaliser authority is `docs/NORMALISER-LOGIC-SPEC.md` using `tests/normaliser/normaliser.py`. This file is retained for detailed Pass 1 rules/history and must not be read as saying Pass 2/Pass 3 are absent from the current vbeta2 integrated prototype.
+
+
 > Component/reference specification for the standalone Pass-1 harness. The current integrated local Normaliser direction is documented in `docs/NORMALISER-LOGIC-SPEC.md` and implemented in `tests/normaliser/normaliser.py`. Keep this file for Pass-1 provenance; do not treat it as the end-to-end Normaliser status document.
 
 Status: **PASS 1 v1.7 HARDENED CANDIDATE**  
