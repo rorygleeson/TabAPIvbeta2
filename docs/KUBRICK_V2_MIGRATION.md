@@ -1,6 +1,6 @@
 # Kubrick V2 Migration
 
-Last updated: 2026-09-18
+Last updated: 2026-09-19
 
 ## Objective
 
@@ -17,7 +17,7 @@ TabAPIvbeta1
 + minimal canonical bettings.json cleanup
 ```
 
-The existing Builder, templates, runtime, S3/SQS/DynamoDB topology and vbeta1-named AWS resources remain intentionally reused.
+The existing Builder, templates, runtime, S3/SQS/DynamoDB topology and vbeta1-named AWS resources remain intentionally reused. The POC now adds an Orchestrator Lambda and API Gateway REST API while leaving the proven Planner/Builder contracts unchanged.
 
 ## Repositories
 
@@ -62,6 +62,8 @@ tab-recap-vbeta1-rendering
 tab-recap-vbeta1-rendering-dlq
 tab-recap-vbeta1-scene-planner
 tab-recap-vbeta1-builder-recap
+tab-recap-vbeta1-orchestrator
+tab-recap-vbeta1-api
 ```
 
 No parallel vbeta2 AWS environment should be created unless explicitly approved.
@@ -386,7 +388,7 @@ Semantic fixture checks also passed for:
 - biggest/highest sequence references;
 - valid HTTPS replay URLs when non-null.
 
-## Latest live direct planner proof
+## Latest live backend proof
 
 On 2026-09-18, direct AWS planner tests reached `RENDERING` for:
 
@@ -401,7 +403,15 @@ On 2026-09-18, direct AWS planner tests reached `RENDERING` for:
 
 This proves the current planner boundary across small, medium and large days.
 
-The 75-bet proof also confirms missing replay URLs do not break planning.
+The automatic downstream handoff is also live-proven at 5, 50 and 75 bets:
+
+```text
+Planner -> rendering SQS -> Builder -> READY -> recap.html
+```
+
+The 50-bet end-to-end run exposed a missing Scene 4 future-count atom. `CHECKPOINT_BETS_REMAINING` was added to `PRE_FUTURE_RESULTS`; the rerun used real LLM copy and completed successfully.
+
+The 75-bet proof confirms both the full Planner/Builder path and that missing replay URLs do not break planning.
 
 ## Current remaining issue
 
@@ -424,29 +434,49 @@ The preferred next experiment is a very small prompt-only wording refinement, fo
 
 No new validator, repair loop or second model call should be added for copy polish.
 
-## Planned end-to-end product architecture
+## POC Orchestrator / API architecture
 
-The planner migration sits inside the larger intended pilot flow:
+The Normaliser remains decoupled. For the POC, any client may submit already-canonical `bettings.json` to the public API.
+
+Locked API:
 
 ```text
-pilot frontend
-  -> presigned CSV upload to private S3
-  -> Orchestrator creates/tracks job
-  -> one Python Normaliser Lambda (planned production shape)
-       -> Pass 1 CSV parse/normalise
-       -> Pass 2 historical enrichment
-       -> Pass 3 canonical bettings.json
-  -> planning SQS
+POST /jobs
+GET  /jobs/{jobId}
+```
+
+Both methods require the API Gateway `x-api-key` header. This is a shared POC key, not user authentication. The key value is never stored in GitHub or repository documentation; it is created manually in the AWS Console and attached to the deployed usage plan.
+
+`POST /jobs`:
+
+```text
+canonical bettings.json
+  -> API Gateway
+  -> Orchestrator
+       -> random UUID jobId
+       -> working/<jobId>/bettings.json
+       -> DynamoDB RECEIVED
+       -> planning SQS
+  -> returns jobId
+```
+
+The existing downstream path remains unchanged:
+
+```text
+planning SQS
   -> Kubrick V2 Scene Planner
   -> scene.json
   -> rendering SQS
   -> existing Builder
-  -> private recap.html
-  -> short-lived delivery URL
-  -> frontend polls job status and redirects/displays recap
+  -> recaps/<jobId>/recap.html
+  -> DynamoDB READY + recapS3Key
 ```
 
-The current repository proves the planner/Builder boundary and contains ongoing Normaliser work. The full browser upload/orchestration/status/delivery path remains planned rather than fully proven.
+`GET /jobs/{jobId}` reads current DynamoDB state. When the job is `READY`, the Orchestrator generates a fresh short-lived S3 pre-signed URL from `recapS3Key` and returns it as `recapUrl`.
+
+The pre-signed URL is never persisted in DynamoDB.
+
+Source/IaC now exists for the Orchestrator/API, plus `tests/tools/run-orchestrator-test.cmd` for 5 / 8 / 16 / 32 / 50 / 75 fixtures. This boundary remains **IN PROGRESS** until deployed, the API key is manually configured, and a live API test reaches `READY`.
 
 ## Working rules
 
@@ -472,7 +502,9 @@ The current repository proves the planner/Builder boundary and contains ongoing 
 - compact 75-bet model payload works;
 - one-call copy circuit breaker works;
 - Builder downstream contract remains compatible;
-- direct 5 / 8 / 16 / 32 / 50 / 75 planner tests pass.
+- direct 5 / 8 / 16 / 32 / 50 / 75 planner tests pass;
+- Planner automatically sends rendering SQS messages;
+- end-to-end Planner -> rendering SQS -> Builder -> READY is live-proven at 5, 50 and 75 bets.
 
 ### LOCKED
 
@@ -481,15 +513,21 @@ The current repository proves the planner/Builder boundary and contains ongoing 
 - one LLM copy call maximum;
 - no repair loop;
 - deterministic fallback on copy-stage failure;
-- existing AWS topology reused;
-- Builder not redesigned.
+- existing vbeta1-named backend topology reused;
+- Builder not redesigned;
+- Orchestrator generates UUID job IDs;
+- API surface is POST /jobs and GET /jobs/{jobId};
+- both methods require API Gateway x-api-key;
+- actual API key value is manually configured in AWS and never committed;
+- Normaliser remains decoupled;
+- recapS3Key is persisted; pre-signed recap URL is generated fresh on READY.
 
 ### IN PROGRESS / PLANNED
 
-- optional prompt-only copy polish;
-- further rendered-HTML regression with the new real fixtures;
-- Normaliser integration into canonical `bettings.json`;
-- complete upload/orchestration/status/delivery product path.
+- deploy the Orchestrator/API CloudFormation stack;
+- manually create and attach the POC API key;
+- run the new API-level fixture harness and prove READY + recapUrl;
+- Normaliser integration remains a separate upstream concern.
 
 ### TECH DEBT / CLEANUP
 
