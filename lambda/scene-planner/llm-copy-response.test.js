@@ -69,7 +69,7 @@ const groupedFirst = groupedScene.betSequences[0];
 const groupedSecond = groupedScene.betSequences[1];
 
 const groupedPnlId = Object.keys(groupedPostAtoms).find(id =>
-  /^BLOCK_(?:PROFIT_AMOUNT|LOSS_AMOUNT|BREAK_EVEN_AMOUNT)$/u.test(id)
+  /^BLOCK_(?:PROFIT_TEXT|LOSS_TEXT|BREAK_EVEN_TEXT)$/u.test(id)
 );
 assert.ok(groupedPnlId);
 const groundedGroup = goodResponse();
@@ -122,7 +122,7 @@ const finalSceneIndex = input.scenes.findIndex(scene => scene.sceneType === 7);
 assert.ok(finalSceneIndex >= 0);
 
 const b8PnlId = Object.keys(input.factCatalog).find(id =>
-  /^B8_(?:PROFIT_AMOUNT|LOSS_AMOUNT|BREAK_EVEN_AMOUNT)$/u.test(id)
+  /^B8_(?:PROFIT_TEXT|LOSS_TEXT|BREAK_EVEN_TEXT)$/u.test(id)
 );
 assert.ok(b8PnlId);
 const crossSceneFinalFact = goodResponse();

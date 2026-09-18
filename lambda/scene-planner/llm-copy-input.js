@@ -23,7 +23,8 @@ function buildLlmCopyInput(bettings, deterministicPlan, contracts = sceneContrac
     groundingProtocol: 'FACT_SEMANTICS_V4_0',
     semanticPolicy: {
       raceActionEvidence: 'NONE',
-      replayEvidence: 'RESULT_FACTS_ONLY'
+      replayEvidence: 'RESULT_FACTS_ONLY',
+      oddsClassificationEvidence: 'NONE'
     },
     factCatalog,
     protectedTerms: protectedTerms(bettings, bettings.bets),
@@ -389,7 +390,7 @@ function postBetAtoms(bet) {
   return mergeAtoms({
     [prefix + 'FINISH']: ordinal(bet.finishingPosition),
     [prefix + 'BET_RESULT']: bet.result,
-    [prefix + 'RETURN_AMOUNT']: money(bet.return)
+    [prefix + 'RETURN_TEXT']: money(bet.return) + ' returned'
   },
   typedPnlAtoms('B' + bet.sequence, bet.profitLoss),
   typedPnlAtoms('B' + bet.sequence + '_RUNNING', bet.runningPnl));
@@ -560,9 +561,9 @@ function strongestFinish(bets) {
 
 function typedPnlAtoms(prefix, value) {
   const n = Number(value);
-  if (n > 0) return { [prefix + '_PROFIT_AMOUNT']: money(n) };
-  if (n < 0) return { [prefix + '_LOSS_AMOUNT']: money(Math.abs(n)) };
-  return { [prefix + '_BREAK_EVEN_AMOUNT']: '$0' };
+  if (n > 0) return { [prefix + '_PROFIT_TEXT']: money(n) + ' profit' };
+  if (n < 0) return { [prefix + '_LOSS_TEXT']: money(Math.abs(n)) + ' loss' };
+  return { [prefix + '_BREAK_EVEN_TEXT']: '$0 break-even' };
 }
 
 function groupPositionSemantics(bettings, bets) {

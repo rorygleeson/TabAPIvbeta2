@@ -42,7 +42,8 @@ function assertNoLegacySemanticAtoms(payload) {
     /^BLOCK_PROFIT_LOSS$/u,
     /^BLOCK_RUNNING_PNL_/u,
     /^CHECKPOINT_RUNNING_PNL$/u,
-    /^STANDOUT_STRONGEST_FINISH_(?:START_BET|END_BET|PNL)$/u
+    /^STANDOUT_STRONGEST_FINISH_(?:START_BET|END_BET|PNL)$/u,
+    /_(?:RETURN_AMOUNT|PROFIT_AMOUNT|LOSS_AMOUNT|BREAK_EVEN_AMOUNT)$/u
   ];
   for (const id of Object.keys(payload.factCatalog || {})) {
     for (const pattern of legacy) {
@@ -51,11 +52,11 @@ function assertNoLegacySemanticAtoms(payload) {
   }
 }
 
-function assertTypedPnlAtom(id, value) {
-  assert.match(id, /_(?:PROFIT_AMOUNT|LOSS_AMOUNT|BREAK_EVEN_AMOUNT)$/u);
-  assert.match(String(value), /^\$\d+(?:\.\d+)?$/u);
-  assert.strictEqual(String(value).startsWith('+$'), false);
-  assert.strictEqual(String(value).startsWith('-$'), false);
+function assertTypedMoneyText(id, value) {
+  assert.match(id, /_(?:PROFIT_TEXT|LOSS_TEXT|BREAK_EVEN_TEXT)$/u);
+  assert.match(String(value), /^\$\d+(?:\.\d+)? (?:profit|loss|break-even)$/u);
+  assert.strictEqual(String(value).startsWith('+\$'), false);
+  assert.strictEqual(String(value).startsWith('-\$'), false);
 }
 
 function assertGroundingScopes(payload) {
@@ -121,7 +122,8 @@ for (const totalBets of [5, 8, 16, 32, 75]) {
   assert.strictEqual(modelPayload.groundingProtocol, 'FACT_SEMANTIC_TEMPLATE_V1');
   assert.deepStrictEqual(payload.semanticPolicy, {
     raceActionEvidence: 'NONE',
-    replayEvidence: 'RESULT_FACTS_ONLY'
+    replayEvidence: 'RESULT_FACTS_ONLY',
+    oddsClassificationEvidence: 'NONE'
   });
   assert.deepStrictEqual(modelPayload.semanticPolicy, payload.semanticPolicy);
   assert.strictEqual(modelPayload.scenes.length, deterministicPlan.scenes.length);
@@ -160,9 +162,10 @@ for (const totalBets of [5, 8, 16, 32, 75]) {
   const payload = buildLlmCopyInput(bettings, buildDeterministicScenePlan(bettings));
 
   assert.strictEqual(payload.factCatalog.B3_DECIMAL_ODDS, '4.2');
-  assert.strictEqual(payload.factCatalog.B3_PROFIT_AMOUNT, '$96');
-  assert.strictEqual(payload.factCatalog.B4_LOSS_AMOUNT, '$35');
-  assert.strictEqual(payload.factCatalog.B5_PROFIT_AMOUNT, '$38');
+  assert.strictEqual(payload.factCatalog.B3_PROFIT_TEXT, '$96 profit');
+  assert.strictEqual(payload.factCatalog.B4_LOSS_TEXT, '$35 loss');
+  assert.strictEqual(payload.factCatalog.B5_PROFIT_TEXT, '$38 profit');
+  assert.strictEqual(payload.factCatalog.B3_RETURN_TEXT, '$126 returned');
   assert.strictEqual(Object.prototype.hasOwnProperty.call(payload.factCatalog, 'B3_ODDS'), false);
   assert.strictEqual(Object.prototype.hasOwnProperty.call(payload.factCatalog, 'B3_PROFIT_LOSS'), false);
   assert.strictEqual(Object.prototype.hasOwnProperty.call(payload.factCatalog, 'B3_RACE_WIN'), false);
@@ -172,6 +175,7 @@ for (const totalBets of [5, 8, 16, 32, 75]) {
   assert.strictEqual(scene3.context.semanticContextByPhase.POST_RESULT.raceWinner, true);
   assert.strictEqual(payload.semanticPolicy.replayEvidence, 'RESULT_FACTS_ONLY');
   assert.strictEqual(payload.semanticPolicy.raceActionEvidence, 'NONE');
+  assert.strictEqual(payload.semanticPolicy.oddsClassificationEvidence, 'NONE');
 
   const dayScene = payload.scenes.find(scene => scene.sceneType === 6);
   const options = dayScene.context.standoutOptions;
@@ -180,7 +184,7 @@ for (const totalBets of [5, 8, 16, 32, 75]) {
   const postDay = dayScene.context.factAtomsByPhase.POST_DAY;
   assert.strictEqual(postDay.STANDOUT_STRONGEST_FINISH_BET_RANGE, '3-5');
   assert.strictEqual(postDay.STANDOUT_STRONGEST_FINISH_BET_COUNT, '3');
-  assert.strictEqual(postDay.STANDOUT_STRONGEST_FINISH_PROFIT_AMOUNT, '$99');
+  assert.strictEqual(postDay.STANDOUT_STRONGEST_FINISH_PROFIT_TEXT, '$99 profit');
   assert.ok(strongest.factAtomIds.includes('STANDOUT_STRONGEST_FINISH_BET_COUNT'));
 }
 
@@ -219,7 +223,7 @@ for (const totalBets of [5, 8, 16, 32, 75]) {
   assert.strictEqual(finalSem.isFinalGroup, true);
 
   const day = payload.scenes.find(scene => scene.sceneType === 6).context.factAtomsByPhase.POST_DAY;
-  assert.strictEqual(day.DAY_PROFIT_AMOUNT, '$3813.65');
+  assert.strictEqual(day.DAY_PROFIT_TEXT, '$3813.65 profit');
   assert.strictEqual(Object.prototype.hasOwnProperty.call(day, 'DAY_FINAL_PNL'), false);
 }
 
@@ -237,13 +241,18 @@ for (const totalBets of [5, 8, 16, 32, 75]) {
   }
 }
 
-// Every typed P&L atom exposed to the model is unsigned and semantically named.
+// Every typed P&L atom exposed to the model carries its semantic noun.
 {
   const bettings = readJson('bettings-75.json');
   const payload = buildLlmCopyInput(bettings, buildDeterministicScenePlan(bettings));
   for (const [id, value] of Object.entries(payload.factCatalog)) {
-    if (/(?:PROFIT_AMOUNT|LOSS_AMOUNT|BREAK_EVEN_AMOUNT)$/u.test(id)) {
-      assertTypedPnlAtom(id, value);
+    if (/(?:PROFIT_TEXT|LOSS_TEXT|BREAK_EVEN_TEXT)$/u.test(id)) {
+      assertTypedMoneyText(id, value);
+    }
+  }
+  for (const [id, value] of Object.entries(payload.factCatalog)) {
+    if (/_RETURN_TEXT$/u.test(id)) {
+      assert.match(String(value), /^\$\d+(?:\.\d+)? returned$/u);
     }
   }
 }
@@ -256,7 +265,7 @@ for (const totalBets of [5, 8, 16, 32, 75]) {
   const compactBytes = Buffer.byteLength(JSON.stringify(modelPayload), 'utf8');
   console.log('75-bet semantic V4 payload bytes: rich=' + richBytes + ' compact=' + compactBytes);
   assert.ok(compactBytes < richBytes * 0.6, '75-bet model payload must remain substantially smaller than rich validation input');
-  assert.ok(compactBytes < 75000, 'Semantic V4 model payload should remain compact enough for current architecture: ' + compactBytes + ' bytes');
+  assert.ok(compactBytes < 69000, 'Final V4 model payload must stay within ~6% of the 64,991-byte baseline: ' + compactBytes + ' bytes');
 }
 
 console.log('FACT_SEMANTICS_V4_0 semantic atom and historical-failure regression tests passed.');
