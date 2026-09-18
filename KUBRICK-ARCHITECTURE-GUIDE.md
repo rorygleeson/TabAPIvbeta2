@@ -404,18 +404,18 @@ The actual Bedrock request uses a compact projection so 75-bet recaps remain com
 Current rich internal grounding protocol:
 
 ```text
-FACT_TEMPLATES_V3_0
-copyInputVersion = 3.0
+FACT_SEMANTICS_V4_0
+copyInputVersion = 4.0
 ```
 
 Current compact Bedrock payload protocol remains:
 
 ```text
-FACT_TEMPLATE_COMPACT_V1
+FACT_SEMANTIC_TEMPLATE_V1
 modelPayloadVersion = 1.0
 ```
 
-Each scene receives only its relevant phase-scoped fact atoms and requested field rules.
+Each scene receives only its relevant phase-scoped fact atoms and requested field rules. V4 also carries compact deterministic semantics: a single recap-wide evidence policy plus only the scene-local semantic classifications that cannot be represented safely as renderable values.
 
 The model returns normal grounded strings containing compact fact references:
 
@@ -429,9 +429,11 @@ The atom ownership rule is now explicit:
 
 > **Code owns exact factual values and eligibility. The LLM owns grammar and storytelling.**
 
-Model-facing fact atoms are exact values or small factual units, not pre-written customer sentences. Counts are counts, stakes/returns are exact money values, P&L values are signed, odds remain exact supplied decimal odds, finishing positions remain exact ordinals, and race-win wording is exposed only when the runner actually won.
+Model-facing fact atoms are exact typed values, not pre-written customer sentences. Counts are counts; stakes and returns are exact money values; P&L is exposed as unsigned typed atoms such as `*_PROFIT_AMOUNT` or `*_LOSS_AMOUNT`; odds use explicit `*_DECIMAL_ODDS` names; finishing positions remain exact ordinals. Prose-fragment atoms such as `*_RACE_WIN = "won the race"` are not exposed.
 
-Redundant prose-shaped composite atoms such as per-bet setup/result-summary sentences are not exposed.
+Deterministic semantic context carries meaning that should not be rendered directly. The global policy states that race-action evidence is unavailable and replay copy is limited to supplied result facts. Scene-local semantics are intentionally small: for example `raceWinner` after a completed result, and `isFirstGroup/isFinalGroup` for grouped day-position wording. Exact group start/end/remaining values remain renderable fact atoms.
+
+Standout sequence ranges are represented explicitly as `*_BET_RANGE` plus `*_BET_COUNT`, avoiding the earlier ambiguity where an end sequence could be mistaken for a count.
 
 Every `<ATOM_ID>` reference is validated against the field's deterministic chronology scope and then substituted with the exact fact value. Unknown, wrong-phase or malformed placeholders reject the single copy response to deterministic fallback. JavaScript does not rewrite grammar or facts.
 
@@ -710,7 +712,9 @@ The model-facing catalog now prefers atomic values/small factual units. Live tes
 
 This is a copy-interface change only. It does not alter deterministic scene planning, grouping, replay policy, midpoint policy, Builder inputs or the one-call/fallback architecture.
 
-The compact grounded-string protocol must still be deployed and live-tested, especially at 50 and 75 bets, before scale/cost improvement is marked proven. Do not raise the output ceiling as the first response to protocol bloat, and do not add grammar validators, repair loops or a second model call if individual stylistic imperfections remain.
+The compact grounded-string protocol is now live-proven at 75 bets: the previous response hit the 8,000-token ceiling and truncated, while the compact response completed naturally at 3,982 output tokens with `stopReason=end_turn`, `fallbackUsed=false`, and 27 scenes reaching RENDERING. The next source hardening is semantic V4, which must be live-tested before its copy-quality impact is marked proven.
+
+Semantic V4 regression backfeeding covers the historical failure classes: signed P&L wording, return-versus-profit confusion, race-win fragment atoms, strongest-finish range/count ambiguity, false final-group language, decimal-odds meaning and unsupported race-action storytelling.
 
 ---
 
@@ -744,7 +748,8 @@ These rules are mandatory:
 - duration candidate selection implemented;
 - compact one-call copy payload implemented;
 - atomic fact-value copy interface implemented in source;
-- compact grounded-string response protocol implemented in source/CI;
+- compact grounded-string response protocol live-proven at 75 bets;
+- semantic V4 typed atom/capability interface implemented and CI-proven;
 - deterministic copy fallback implemented;
 - existing Builder compatibility retained;
 - direct live planner tests pass at 5 / 8 / 16 / 32 / 50 / 75;
@@ -764,7 +769,7 @@ These rules are mandatory:
 
 ### REMAINING / PLANNED
 
-- deploy and live-test the compact grounded-string copy protocol, with token/cost comparison at 32 / 50 / 75 bets;
+- deploy and live-test semantic V4 across representative 5 / 16 / 32 / 75-bet fixtures and compare copy quality/token usage against the recorded V3 runs;
 - continue Builder/rendered-HTML regression proof with the new real fixtures where useful;
 - continue Normaliser integration toward canonical `bettings.json`;
 - complete the full upload/orchestration/status/delivery product path when that work is resumed.

@@ -146,7 +146,7 @@ buildLlmCopyInput()
 buildLlmModelPayload()
   |
   v
-FACT_TEMPLATE_COMPACT_V1
+FACT_SEMANTIC_TEMPLATE_V1
   |
   v
 ONE Bedrock copy call
@@ -256,14 +256,14 @@ The rich internal copy input remains deterministic and is used for validation/me
 Current rich protocol:
 
 ```text
-groundingProtocol = FACT_TEMPLATES_V3_0
-copyInputVersion = 3.0
+groundingProtocol = FACT_SEMANTICS_V4_0
+copyInputVersion = 4.0
 ```
 
 The Bedrock request remains a compact projection:
 
 ```text
-groundingProtocol = FACT_TEMPLATE_COMPACT_V1
+groundingProtocol = FACT_SEMANTIC_TEMPLATE_V1
 modelPayloadVersion = 1.0
 ```
 
@@ -271,7 +271,7 @@ This compaction was required because the earlier rich 75-bet payload exceeded th
 
 The compact payload sends only scene-relevant phase-scoped facts and requested copy rules.
 
-The earlier fact/text-part response encoding was itself too verbose at scale. Live evidence showed 32 bets completing at 5,706 output tokens, 50 bets completing generation at 7,614 tokens but falling back after an invented `BLOCK_MEETING_COUNT` atom reference, and 75 bets stopping at the configured 8,000-token ceiling. The response wire format is therefore now `FACT_TEMPLATE_COMPACT_V1`: normal strings with validated `<ATOM_ID>` references instead of arrays of `{"type":"text"}` / `{"type":"fact"}` objects.
+The earlier fact/text-part response encoding was itself too verbose at scale. Live evidence showed 32 bets completing at 5,706 output tokens, 50 bets completing generation at 7,614 tokens but falling back after an invented `BLOCK_MEETING_COUNT` atom reference, and 75 bets stopping at the configured 8,000-token ceiling. Compact grounded strings then reduced the live 75-bet response to 3,982 output tokens with `stopReason=end_turn` and no fallback. Semantic V4 keeps that grounded-string wire format while improving the meaning of the supplied atoms.
 
 The model returns compact grounded strings such as `"<B3_RUNNER> finished <B3_FINISH>."`. Every `<ATOM_ID>` is validated against the deterministic phase scope and then substituted with the exact fact value.
 
@@ -282,11 +282,13 @@ code owns exact factual values + chronology + eligibility
 LLM owns grammar + sentence construction + narrative colour
 ```
 
-Model-facing atoms are atomic values or small factual units rather than complete customer sentences. Counts no longer include their nouns, stake/return atoms contain only exact money values, P&L atoms use exact signed values, odds remain supplied decimal odds, and result facts are decomposed rather than duplicated into prose-shaped summary atoms.
+Model-facing atoms are typed exact values rather than complete customer sentences. P&L no longer uses signed scalar atoms: code exposes mutually exclusive unsigned `*_PROFIT_AMOUNT`, `*_LOSS_AMOUNT` or `*_BREAK_EVEN_AMOUNT` atoms. Returns use `*_RETURN_AMOUNT`; odds use `*_DECIMAL_ODDS`; prose-fragment `*_RACE_WIN` atoms are removed.
 
-The response assembler no longer classifies fact atoms as sentence clauses. It preserves model punctuation/spacing and inserts only a mechanical safe space when adjacent parts would otherwise collapse together.
+A compact deterministic semantic layer now accompanies the atoms. One recap-wide `semanticPolicy` states that race-action evidence is unavailable and replay narration is limited to supplied result facts. Scene-local semantic context is deliberately minimal and only carries meaning such as `raceWinner` and grouped `isFirstGroup/isFinalGroup`. Exact group start/end/remaining values remain fact atoms.
 
-Narrative semantics are not reconstructed or repaired by JavaScript.
+Historical-failure backfeed regression tests prove that the old ambiguous atoms are absent, bets 36-38 of the 75-bet fixture are explicitly non-final with 37 remaining, bets 74-75 are explicitly final, the 5-bet strongest-finish range is 3-5 with count 3 and $99 profit, and replay scenes carry the global result-facts-only evidence boundary.
+
+JavaScript still does not repair prose. It validates placeholders, owns semantic classification and substitutes exact values.
 
 ## Copy availability boundary
 

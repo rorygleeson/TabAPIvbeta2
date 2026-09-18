@@ -1,5 +1,5 @@
 {
-  "contractVersion": "2.0.21",
+  "contractVersion": "2.0.22",
   "companionContracts": [
     "contracts/bettings.schema.json",
     "contracts/scene-plan.schema.json",
@@ -45,15 +45,15 @@
       "hardCharacterTolerance": "Validation fails only above target + min(ceil(target * 0.10), 12 characters), applied uniformly to every LLM-owned string and string-array item."
     },
     "groundedCopyProtocol": {
-      "version": "FACT_TEMPLATES_V3_0",
-      "copyInputVersion": "3.0",
+      "version": "FACT_SEMANTICS_V4_0",
+      "copyInputVersion": "4.0",
       "modelCallPolicy": "One LLM copy call per recap. No verifier, repair loop or per-scene model calls.",
-      "rule": "Stable day/bet facts are supplied once in a recap-wide factCatalog. Each scene phase carries a deterministic allowedGlobalFactIdsByPhase scope derived from chronology, while scene-specific aggregates remain local factAtomsByPhase. The model may use only fact IDs allowed by the current phase. Model-facing fact atoms are exact factual values or small factual units rather than pre-written customer sentences. Prose fields are compact grounded strings that reference exact facts as <ATOM_ID>; the LLM owns all surrounding grammar, punctuation and narrative phrasing.",
-      "scopePolicy": "PRE_RESULT_DAY exposes pre-result facts only; PRE_RESULT and PRE_RESULT_BLOCK expose all pre-result facts plus outcomes already completed before that point; POST_RESULT and POST_RESULT_BLOCK add outcomes through the completed bet/block; POST_COMPLETED_BETS and PRE_FUTURE_RESULTS expose outcomes only through the deterministic checkpoint; POST_RESULT_BY_BET advances row-by-row; POST_DAY exposes all stable facts from the completed day.",
-      "semanticDistinction": "A winning bet is not necessarily a race-winning runner. Race-win wording requires finishingPosition=1; bet-result wording follows the wager result.",
+      "rule": "Stable day/bet facts are supplied once in a recap-wide factCatalog. Each scene phase carries deterministic allowedGlobalFactIdsByPhase scope plus semanticContextByPhase. factAtomsByPhase contains exact renderable values referenced as <ATOM_ID>; semanticContextByPhase contains non-renderable deterministic meaning/capabilities. Typed atom names distinguish profit from loss, return from profit, decimal odds from other odds representations, and range values from counts. The LLM owns surrounding grammar and narrative phrasing only.",
+      "scopePolicy": "PRE_RESULT_DAY exposes pre-result facts only; PRE_RESULT and PRE_RESULT_BLOCK expose all pre-result facts plus outcomes already completed before that point; POST_RESULT and POST_RESULT_BLOCK add outcomes through the completed bet/block; POST_COMPLETED_BETS and PRE_FUTURE_RESULTS expose outcomes only through the deterministic checkpoint; POST_RESULT_BY_BET advances row-by-row; POST_DAY exposes all stable facts from the completed day. semanticContextByPhase follows the same phase boundary and may state result availability, group position, P&L direction, decimal-odds format and race-action evidence capability.",
+      "semanticDistinction": "A winning bet is not necessarily a race-winning runner. raceWinner is deterministic semantic metadata derived from finishingPosition=1; wagerOutcome follows the wager result. Model-facing P&L atoms are unsigned typed amounts such as *_PROFIT_AMOUNT or *_LOSS_AMOUNT; prose fragment atoms such as *_RACE_WIN are not exposed.",
       "validation": "LLM copy validation rejects malformed model output, malformed placeholder syntax, unknown or wrong-phase <ATOM_ID> references, missing required fields and illegal enum/cardinality. Those copy-stage errors are availability-nonfatal: the planner falls back once to deterministic safe copy. Objective deterministic plan/schema/runtime violations remain fatal.",
       "finalPlan": "Fact placeholders, factCatalog and grounding metadata are copy-stage-only. Every valid <ATOM_ID> is deterministically substituted before scene.json, so the Builder interface remains unchanged.",
-      "prosePolicy": "Validated <ATOM_ID> placeholders are the required path for exact factual values and are strongly scoped by chronology. The LLM owns grammar around those values; JavaScript performs only deterministic placeholder validation and exact fact substitution, not semantic rewriting or grammar repair. Narrative text is treated as untrusted display text and Builder rendering HTML-escapes template substitutions."
+      "prosePolicy": "Validated <ATOM_ID> placeholders are the required path for exact factual values and are strongly scoped by chronology. semanticContextByPhase is read-only guidance and never substituted into output. JavaScript performs deterministic semantic classification, placeholder validation and exact fact substitution, not prose rewriting or grammar repair. Narrative text remains untrusted display text and Builder rendering HTML-escapes template substitutions."
     },
     "copyAvailabilityBoundary": "The deterministic scene plan is authoritative and must remain renderable even when the LLM copy call fails or returns unusable copy. Kubrick makes at most one LLM copy call. Any Bedrock/copy parsing/copy validation failure degrades to deterministic safe copy generated in code; there is no LLM repair call and the job continues to final scene-plan validation and Builder rendering."
   },
