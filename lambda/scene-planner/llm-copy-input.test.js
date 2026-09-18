@@ -145,6 +145,14 @@ for (const totalBets of [5, 8, 16, 32, 75]) {
   assert.ok(post['B' + secondSequence + '_FINISH']);
   assert.ok(post.BLOCK_PROFIT_LOSS);
 
+  for (const atoms of [grouped.context.factAtomsByPhase.PRE_RESULT_BLOCK, post]) {
+    for (const [id, value] of Object.entries(atoms)) {
+      if (id.startsWith('BLOCK_')) {
+        assert.strictEqual(/\\bblock\\b/iu.test(String(value)), false, id + ' must not leak internal block terminology');
+      }
+    }
+  }
+
   const dayScene = payload.scenes.find(scene => scene.sceneType === 6);
   const day = dayScene.context.factAtomsByPhase.POST_DAY;
   assert.strictEqual(day.DAY_WINNING_BETS, bettings.summary.wins + ' winning bets');
