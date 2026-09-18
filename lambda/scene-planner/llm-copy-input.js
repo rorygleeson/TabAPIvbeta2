@@ -16,10 +16,13 @@ const FIELD_PHASES = {
 
 function buildLlmCopyInput(bettings, deterministicPlan, contracts = sceneContracts) {
   validateInputs(bettings, deterministicPlan, contracts);
+  const factCatalog = buildGlobalFactCatalog(bettings);
   return {
-    copyInputVersion: '2.2',
+    copyInputVersion: '2.3',
     contractVersion: contracts.contractVersion,
-    groundingProtocol: 'FACT_PARTS_V2_1',
+    groundingProtocol: 'FACT_PARTS_V2_2',
+    factCatalog,
+    protectedTerms: protectedTerms(bettings, bettings.bets),
     scenes: deterministicPlan.scenes.map((scene, sceneIndex) =>
       buildSceneCopyInput(scene, sceneIndex, bettings, contracts)
     )
@@ -53,6 +56,7 @@ function buildSceneCopyInput(scene, sceneIndex, bettings, contracts) {
   }
 
   item.context = buildSceneContext(scene, bettings);
+  item.context.allowedGlobalFactIdsByPhase = buildAllowedGlobalFactIdsByPhase(scene, bettings);
   return item;
 }
 
@@ -87,6 +91,82 @@ function buildSceneContext(scene, bettings) {
     case 7: return scene7Context(bettings);
     case 8: return groupedContext(bettings, scene.betSequences, true);
     default: throw new Error('Unsupported sceneType ' + scene.sceneType + '.');
+  }
+}
+
+function buildGlobalFactCatalog(bettings) {
+  return mergeAtoms(
+    postDayAtoms(bettings),
+    ...bettings.bets.map(bet => mergeAtoms(preBetAtoms(bet), postBetAtoms(bet)))
+  );
+}
+
+function buildAllowedGlobalFactIdsByPhase(scene, bettings) {
+  const dayPreIds = Object.keys(preDayAtoms(bettings));
+  const dayPostIds = Object.keys(postDayAtoms(bettings));
+  const allPreIds = bettings.bets.flatMap(bet => Object.keys(preBetAtoms(bet)));
+
+  const postIdsThrough = sequence => bettings.bets
+    .filter(bet => bet.sequence <= sequence)
+    .flatMap(bet => Object.keys(postBetAtoms(bet)));
+
+  const chronologyScope = sequence => unique([
+    ...dayPreIds,
+    ...allPreIds,
+    ...postIdsThrough(sequence)
+  ]);
+
+  const preDayScope = unique([...dayPreIds, ...allPreIds]);
+  const postDayScope = unique([
+    ...dayPostIds,
+    ...allPreIds,
+    ...postIdsThrough(bettings.bets.length)
+  ]);
+
+  switch (scene.sceneType) {
+    case 1:
+      return { PRE_RESULT_DAY: preDayScope };
+
+    case 2:
+      return {
+        PRE_RESULT: chronologyScope(scene.betSequence - 1),
+        POST_RESULT: chronologyScope(scene.betSequence)
+      };
+
+    case 3:
+      return {
+        POST_RESULT: chronologyScope(scene.betSequence)
+      };
+
+    case 4:
+      return {
+        POST_COMPLETED_BETS: chronologyScope(scene.checkpointAfterBetSequence),
+        PRE_FUTURE_RESULTS: chronologyScope(scene.checkpointAfterBetSequence)
+      };
+
+    case 5: {
+      const first = Math.min(...scene.betSequences);
+      const last = Math.max(...scene.betSequences);
+      return {
+        PRE_RESULT_BLOCK: chronologyScope(first - 1),
+        POST_RESULT_BLOCK: chronologyScope(last)
+      };
+    }
+
+    case 6:
+    case 7:
+      return { POST_DAY: postDayScope };
+
+    case 8: {
+      const first = Math.min(...scene.betSequences);
+      return {
+        PRE_RESULT_BLOCK: chronologyScope(first - 1),
+        POST_RESULT_BY_BET: scene.betSequences.map(sequence => chronologyScope(sequence))
+      };
+    }
+
+    default:
+      throw new Error('Unsupported sceneType ' + scene.sceneType + ' for fact scope.');
   }
 }
 
@@ -494,6 +574,8 @@ module.exports = {
     preBetAtoms,
     postBetAtoms,
     postDayAtoms,
-    groupPostAtoms
+    groupPostAtoms,
+    buildGlobalFactCatalog,
+    buildAllowedGlobalFactIdsByPhase
   }
 };
