@@ -1,7 +1,7 @@
 'use strict';
 
-const ATOM_PATTERN = /\{\{([A-Z][A-Z0-9_]*)\}\}/g;
-const SENSITIVE_RAW_PATTERN = /(?:[$%@]|\d|\b(?:win|wins|winner|winners|winning|won|loss|losses|lost|lose|losing|profit|profits|return|returns|returned|stake|staked|odds)\b)/iu;
+const ATOM_ID_PATTERN = /^[A-Z][A-Z0-9_]*$/u;
+const SENSITIVE_NARRATIVE_PATTERN = /(?:[$%@]|\d|\b(?:win|wins|winner|winners|winning|won|loss|losses|lost|lose|losing|profit|profits|return|returns|returned|stake|staked|odds)\b)/iu;
 const POSITION_WORD = '(?:first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|eleventh|twelfth|thirteenth|fourteenth|fifteenth|sixteenth|seventeenth|eighteenth|nineteenth|twentieth)';
 const POSITION_CLAIM_PATTERN = new RegExp(
   '\\b(?:finished|finishing|ran|placed|came)\\s+' + POSITION_WORD + '\\b' +
@@ -97,43 +97,71 @@ function validateCopyResponse(copyInput, response) {
 }
 
 function normalizeGroundedValue(value, rule, source, sceneIndex, field) {
-  if (rule.enum) return clone(value);
+  if (rule.responseType === 'enum' || rule.enum) return clone(value);
 
-  if (typeof value === 'string') {
-    return expandGroundedString(value, source, rule.phase, null, sceneIndex, field);
+  if (rule.responseType === 'parts') {
+    return composeParts(value, source, rule.phase, null, sceneIndex, field);
   }
 
-  if (Array.isArray(value)) {
-    return value.map((item, itemIndex) => {
-      if (typeof item !== 'string') return item;
-      return expandGroundedString(item, source, rule.phase, itemIndex, sceneIndex, field);
-    });
+  if (rule.responseType === 'partsArray') {
+    if (!Array.isArray(value)) {
+      throw new Error('Scene ' + sceneIndex + ' field ' + field + ' must be an array of part arrays.');
+    }
+    return value.map((parts, itemIndex) =>
+      composeParts(parts, source, rule.phase, itemIndex, sceneIndex, field)
+    );
   }
 
-  return value;
+  throw new Error('Scene ' + sceneIndex + ' field ' + field + ' has unsupported responseType.');
 }
 
-function expandGroundedString(rawValue, source, phase, itemIndex, sceneIndex, field) {
-  const raw = String(rawValue);
+function composeParts(parts, source, phase, itemIndex, sceneIndex, field) {
   const label = 'Scene ' + sceneIndex + ' field ' + field + (itemIndex === null ? '' : '[' + itemIndex + ']');
-  const atomMap = atomsForPhase(source, phase, itemIndex);
-  const referenced = [];
-
-  const withoutAtoms = raw.replace(ATOM_PATTERN, (_, id) => {
-    referenced.push(id);
-    if (!Object.prototype.hasOwnProperty.call(atomMap, id)) {
-      throw new Error(label + ' references unknown or wrong-phase fact atom ' + id + '.');
-    }
-    return ' ';
-  });
-
-  if (/[{}]/u.test(withoutAtoms)) {
-    throw new Error(label + ' contains malformed fact atom syntax.');
+  if (!Array.isArray(parts) || parts.length === 0) {
+    throw new Error(label + ' must be a non-empty array of text/fact parts.');
   }
 
-  validateUngroundedRawText(withoutAtoms, source, label);
+  const atomMap = atomsForPhase(source, phase, itemIndex);
+  let output = '';
 
-  return raw.replace(ATOM_PATTERN, (_, id) => String(atomMap[id]));
+  parts.forEach((part, partIndex) => {
+    if (!part || typeof part !== 'object' || Array.isArray(part)) {
+      throw new Error(label + ' part ' + partIndex + ' must be an object.');
+    }
+
+    if (part.type === 'fact') {
+      const keys = Object.keys(part);
+      if (keys.length !== 2 || !keys.includes('type') || !keys.includes('id')) {
+        throw new Error(label + ' fact part ' + partIndex + ' must contain only type and id.');
+      }
+      if (typeof part.id !== 'string' || !ATOM_ID_PATTERN.test(part.id)) {
+        throw new Error(label + ' fact part ' + partIndex + ' has invalid atom id.');
+      }
+      if (!Object.prototype.hasOwnProperty.call(atomMap, part.id)) {
+        throw new Error(label + ' references unknown or wrong-phase fact atom ' + part.id + '.');
+      }
+      output += String(atomMap[part.id]);
+      return;
+    }
+
+    if (part.type === 'text') {
+      const keys = Object.keys(part);
+      if (keys.length !== 2 || !keys.includes('type') || !keys.includes('text')) {
+        throw new Error(label + ' text part ' + partIndex + ' must contain only type and text.');
+      }
+      if (typeof part.text !== 'string' || !part.text.length) {
+        throw new Error(label + ' text part ' + partIndex + ' must contain non-empty text.');
+      }
+      validateNarrativeText(part.text, source, label + ' text part ' + partIndex);
+      output += part.text;
+      return;
+    }
+
+    throw new Error(label + ' part ' + partIndex + ' has unsupported type.');
+  });
+
+  if (!output.trim()) throw new Error(label + ' must not resolve to empty text.');
+  return output;
 }
 
 function atomsForPhase(source, phase, itemIndex) {
@@ -147,21 +175,29 @@ function atomsForPhase(source, phase, itemIndex) {
   return scoped && typeof scoped === 'object' ? scoped : {};
 }
 
-function validateUngroundedRawText(rawText, source, label) {
+function validateNarrativeText(rawText, source, label) {
   const text = String(rawText || '');
-  if (SENSITIVE_RAW_PATTERN.test(text) || POSITION_CLAIM_PATTERN.test(text)) {
-    throw new Error(label + ' contains a concrete fact outside a fact atom.');
+  if (SENSITIVE_NARRATIVE_PATTERN.test(text) || POSITION_CLAIM_PATTERN.test(text)) {
+    throw new Error(label + ' contains concrete factual wording; use a fact part instead.');
   }
 
   const lower = text.toLocaleLowerCase('en-AU');
   for (const term of source.context?.protectedTerms || []) {
     const normalized = String(term || '').trim().toLocaleLowerCase('en-AU');
-    if (normalized && lower.includes(normalized)) {
-      throw new Error(label + ' contains protected factual text outside a fact atom: ' + term + '.');
+    if (normalized && containsProtectedTerm(lower, normalized)) {
+      throw new Error(label + ' contains protected factual text; use a fact part instead: ' + term + '.');
     }
   }
 }
 
+function containsProtectedTerm(lowerText, normalizedTerm) {
+  const escaped = normalizedTerm.replace(/[.*+?^$\{\}()|[\]\\]/gu, '\\$&');
+  const startsWord = /[\p{L}\p{N}]/u.test(normalizedTerm[0] || '');
+  const endsWord = /[\p{L}\p{N}]/u.test(normalizedTerm[normalizedTerm.length - 1] || '');
+  const left = startsWord ? '(?<![\\p{L}\\p{N}])' : '';
+  const right = endsWord ? '(?![\\p{L}\\p{N}])' : '';
+  return new RegExp(left + escaped + right, 'iu').test(lowerText);
+}
 function hardCharLimit(target) {
   const n = Number(target);
   if (!Number.isFinite(n) || n <= 0) return null;
@@ -220,7 +256,8 @@ module.exports = {
   hardCharLimit,
   __test: {
     atomsForPhase,
-    expandGroundedString,
-    validateUngroundedRawText
+    composeParts,
+    validateNarrativeText,
+    containsProtectedTerm
   }
 };

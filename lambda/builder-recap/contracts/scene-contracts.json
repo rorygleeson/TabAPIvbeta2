@@ -1,5 +1,5 @@
 {
-  "contractVersion": "2.0.11",
+  "contractVersion": "2.0.12",
   "companionContracts": [
     "contracts/bettings.schema.json",
     "contracts/scene-plan.schema.json",
@@ -45,13 +45,13 @@
       "hardCharacterTolerance": "Validation fails only above target + min(ceil(target * 0.10), 12 characters), applied uniformly to every LLM-owned string and string-array item."
     },
     "groundedCopyProtocol": {
-      "version": "FACT_ATOMS_V1",
-      "copyInputVersion": "2.0",
-      "modelCallPolicy": "One LLM copy call per recap. Fact atoms do not add verifier, repair or per-scene model calls.",
-      "rule": "Concrete factual wording in fresh LLM copy must be expressed through deterministic phase-scoped fact atom placeholders. Free text outside atoms is narrative/connective only.",
+      "version": "FACT_PARTS_V2",
+      "copyInputVersion": "2.1",
+      "modelCallPolicy": "One LLM copy call per recap. Structured fact/text parts add no verifier, repair or per-scene model calls.",
+      "rule": "Fresh LLM prose is composed from only two part types: fact parts referencing deterministic phase-scoped fact atoms, and text parts containing narrative/connective language only. The model never reconstructs factual wording inside text.",
       "semanticDistinction": "A winning bet is not necessarily a race-winning runner. Race-win wording requires finishingPosition=1; bet-result wording follows the wager result.",
-      "validation": "Planner rejects unknown or wrong-phase atom placeholders, malformed placeholders, protected factual literals typed outside atoms, and raw sensitive numeric/outcome wording outside atoms. Valid atoms are expanded before final scene-plan merge.",
-      "finalPlan": "Fact atom IDs and grounding metadata are copy-stage-only and are stripped before scene.json. Builder interface remains unchanged."
+      "validation": "Planner rejects malformed parts, unknown or wrong-phase fact IDs, extra part fields, protected factual literals inside text parts, and sensitive numeric/outcome wording inside text parts. Valid fact parts are expanded and all parts joined before final scene-plan merge.",
+      "finalPlan": "Fact IDs, part objects and grounding metadata are copy-stage-only and are stripped before scene.json. Builder interface remains unchanged."
     }
   },
   "fieldSources": {
