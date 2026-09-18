@@ -18,9 +18,9 @@ function buildLlmCopyInput(bettings, deterministicPlan, contracts = sceneContrac
   validateInputs(bettings, deterministicPlan, contracts);
   const factCatalog = buildGlobalFactCatalog(bettings);
   return {
-    copyInputVersion: '3.0',
+    copyInputVersion: '4.0',
     contractVersion: contracts.contractVersion,
-    groundingProtocol: 'FACT_TEMPLATES_V3_0',
+    groundingProtocol: 'FACT_SEMANTICS_V4_0',
     factCatalog,
     protectedTerms: protectedTerms(bettings, bettings.bets),
     scenes: deterministicPlan.scenes.map((scene, sceneIndex) =>
@@ -36,14 +36,15 @@ function buildLlmModelPayload(copyInput) {
 
   return {
     modelPayloadVersion: '1.0',
-    groundingProtocol: 'FACT_TEMPLATE_COMPACT_V1',
+    groundingProtocol: 'FACT_SEMANTIC_TEMPLATE_V1',
     scenes: copyInput.scenes.map(scene => {
       const item = {
         sceneIndex: scene.sceneIndex,
         sceneType: scene.sceneType,
         requiredFields: compactRequiredFields(scene.requiredFields),
         context: {
-          factAtomsByPhase: cloneJson(scene.context?.factAtomsByPhase || {})
+          factAtomsByPhase: cloneJson(scene.context?.factAtomsByPhase || {}),
+          semanticContextByPhase: cloneJson(scene.context?.semanticContextByPhase || {})
         }
       };
 
@@ -232,6 +233,13 @@ function scene1Context(bettings) {
     factAtomsByPhase: {
       PRE_RESULT_DAY: preDayAtoms(bettings)
     },
+    semanticContextByPhase: {
+      PRE_RESULT_DAY: {
+        dayComplete: false,
+        currentResultsAvailable: false,
+        raceActionEvidence: 'NONE'
+      }
+    },
     protectedTerms: protectedTerms(bettings, bettings.bets)
   };
 }
@@ -244,6 +252,10 @@ function scene2Context(bettings, sequence) {
       PRE_RESULT: pre,
       POST_RESULT: mergeAtoms(pre, postBetAtoms(bet))
     },
+    semanticContextByPhase: {
+      PRE_RESULT: betSemanticContext(bet, false),
+      POST_RESULT: betSemanticContext(bet, true)
+    },
     protectedTerms: protectedTerms(bettings, [bet])
   };
 }
@@ -254,6 +266,12 @@ function scene3Context(bettings, sequence) {
     factAtomsByPhase: {
       POST_RESULT: mergeAtoms(preBetAtoms(bet), postBetAtoms(bet))
     },
+    semanticContextByPhase: {
+      POST_RESULT: {
+        ...betSemanticContext(bet, true),
+        replayEvidence: 'RESULT_FACTS_ONLY'
+      }
+    },
     protectedTerms: protectedTerms(bettings, [bet])
   };
 }
@@ -261,10 +279,27 @@ function scene3Context(bettings, sequence) {
 function scene4Context(bettings, checkpoint) {
   const completed = bettings.bets.filter(bet => bet.sequence <= checkpoint);
   const future = bettings.bets.filter(bet => bet.sequence > checkpoint).slice(0, 3);
+  const remaining = Math.max(0, bettings.bets.length - completed.length);
   return {
     factAtomsByPhase: {
       POST_COMPLETED_BETS: checkpointAtoms(bettings, completed),
       PRE_FUTURE_RESULTS: mergeAtoms(...future.map(preBetAtoms))
+    },
+    semanticContextByPhase: {
+      POST_COMPLETED_BETS: {
+        completedBets: completed.length,
+        totalBets: bettings.bets.length,
+        remainingBets: remaining,
+        runningPnlDirection: completed.length ? pnlDirection(completed[completed.length - 1].runningPnl) : 'BREAK_EVEN',
+        raceActionEvidence: 'NONE'
+      },
+      PRE_FUTURE_RESULTS: {
+        currentResultsAvailable: false,
+        futureResultsAvailable: false,
+        completedBets: completed.length,
+        remainingBets: remaining,
+        raceActionEvidence: 'NONE'
+      }
     },
     protectedTerms: protectedTerms(bettings, [...completed, ...future])
   };
@@ -274,12 +309,30 @@ function groupedContext(bettings, sequences, scene8) {
   const bets = sequences.map(sequence => betBySequence(bettings, sequence));
   const preBlock = mergeAtoms(groupPreAtoms(bettings, bets), ...bets.map(preBetAtoms));
   const postBlock = mergeAtoms(preBlock, groupPostAtoms(bets), ...bets.map(postBetAtoms));
+  const position = groupPositionSemantics(bettings, bets);
+  const before = previousRunningPnl(bettings, bets[0].sequence);
+  const blockPnl = sum(bets.map(bet => bet.profitLoss));
+  const after = bets[bets.length - 1].runningPnl;
+
+  const preSemantics = {
+    groupPosition: position,
+    currentGroupResultsAvailable: false,
+    runningPnlBeforeDirection: pnlDirection(before),
+    raceActionEvidence: 'NONE'
+  };
 
   if (scene8) {
     return {
       factAtomsByPhase: {
         PRE_RESULT_BLOCK: preBlock,
         POST_RESULT_BY_BET: bets.map(bet => mergeAtoms(preBetAtoms(bet), postBetAtoms(bet)))
+      },
+      semanticContextByPhase: {
+        PRE_RESULT_BLOCK: preSemantics,
+        POST_RESULT_BY_BET: bets.map(bet => ({
+          ...betSemanticContext(bet, true),
+          groupPosition: position
+        }))
       },
       protectedTerms: protectedTerms(bettings, bets)
     };
@@ -289,6 +342,16 @@ function groupedContext(bettings, sequences, scene8) {
     factAtomsByPhase: {
       PRE_RESULT_BLOCK: preBlock,
       POST_RESULT_BLOCK: postBlock
+    },
+    semanticContextByPhase: {
+      PRE_RESULT_BLOCK: preSemantics,
+      POST_RESULT_BLOCK: {
+        groupPosition: position,
+        currentGroupResultsAvailable: true,
+        blockPnlDirection: pnlDirection(blockPnl),
+        runningPnlAfterDirection: pnlDirection(after),
+        raceActionEvidence: 'NONE'
+      }
     },
     protectedTerms: protectedTerms(bettings, bets)
   };
@@ -301,6 +364,13 @@ function scene6Context(bettings) {
     factAtomsByPhase: {
       POST_DAY: mergeAtoms(postDayAtoms(bettings), ...optionAtoms)
     },
+    semanticContextByPhase: {
+      POST_DAY: {
+        dayComplete: true,
+        finalPnlDirection: pnlDirection(bettings.summary?.finalPnl || 0),
+        raceActionEvidence: 'NONE'
+      }
+    },
     standoutOptions: options.map(({ type, atoms }) => ({ type, factAtomIds: Object.keys(atoms || {}) })),
     protectedTerms: protectedTerms(bettings, betsForStandoutOptions(bettings, options))
   };
@@ -312,6 +382,13 @@ function scene7Context(bettings) {
   return {
     factAtomsByPhase: {
       POST_DAY: mergeAtoms(postDayAtoms(bettings), ...highlightAtoms)
+    },
+    semanticContextByPhase: {
+      POST_DAY: {
+        dayComplete: true,
+        finalPnlDirection: pnlDirection(bettings.summary?.finalPnl || 0),
+        raceActionEvidence: 'NONE'
+      }
     },
     availableFinalHighlights: highlights.map(({ type, atoms }) => ({ type, factAtomIds: Object.keys(atoms || {}) })),
     protectedTerms: protectedTerms(bettings, betsForFinalHighlights(bettings))
@@ -336,9 +413,8 @@ function postDayAtoms(bettings) {
     DAY_WINNING_BETS: String(Number(summary.wins || 0)),
     DAY_LOSING_BETS: String(Number(summary.losses || 0)),
     DAY_RACE_WINNERS: String(raceWinners),
-    DAY_TOTAL_RETURNED: money(summary.totalReturned || 0),
-    DAY_FINAL_PNL: signedMoney(summary.finalPnl || 0)
-  });
+    DAY_TOTAL_RETURNED: money(summary.totalReturned || 0)
+  }, typedPnlAtoms('DAY', summary.finalPnl || 0));
 }
 
 function preBetAtoms(bet) {
@@ -350,46 +426,46 @@ function preBetAtoms(bet) {
     [prefix + 'RACE_NAME']: bet.raceName,
     [prefix + 'BET_TYPE']: bet.betType,
     [prefix + 'STAKE']: money(bet.stake),
-    [prefix + 'ODDS']: formatNumber(bet.odds)
+    [prefix + 'DECIMAL_ODDS']: formatNumber(bet.odds)
   };
 }
 
 function postBetAtoms(bet) {
   const prefix = 'B' + bet.sequence + '_';
-  const atoms = {
+  return mergeAtoms({
     [prefix + 'FINISH']: ordinal(bet.finishingPosition),
     [prefix + 'BET_RESULT']: bet.result,
-    [prefix + 'RETURN']: money(bet.return),
-    [prefix + 'PROFIT_LOSS']: signedMoney(bet.profitLoss),
-    [prefix + 'RUNNING_PNL']: signedMoney(bet.runningPnl)
-  };
-  if (Number(bet.finishingPosition) === 1) {
-    atoms[prefix + 'RACE_WIN'] = 'won the race';
-  }
-  return atoms;
+    [prefix + 'RETURN_AMOUNT']: money(bet.return)
+  },
+  typedPnlAtoms('B' + bet.sequence, bet.profitLoss),
+  typedPnlAtoms('B' + bet.sequence + '_RUNNING', bet.runningPnl));
 }
 
 function groupPreAtoms(bettings, bets) {
   const before = previousRunningPnl(bettings, bets[0].sequence);
   const meetings = unique(bets.map(bet => bet.meeting));
-  return {
+  const last = bets[bets.length - 1].sequence;
+  return mergeAtoms({
     BLOCK_BET_COUNT: String(bets.length),
+    BLOCK_START_BET: String(bets[0].sequence),
+    BLOCK_END_BET: String(last),
+    BLOCK_TOTAL_DAY_BETS: String(bettings.bets.length),
+    BLOCK_BETS_REMAINING_AFTER: String(Math.max(0, bettings.bets.length - last)),
     BLOCK_TOTAL_STAKE: money(sum(bets.map(bet => bet.stake))),
-    BLOCK_RUNNING_PNL_BEFORE: signedMoney(before),
     BLOCK_MEETINGS: joinNatural(meetings)
-  };
+  }, typedPnlAtoms('BLOCK_RUNNING_BEFORE', before));
 }
 
 function groupPostAtoms(bets) {
   const pl = sum(bets.map(bet => bet.profitLoss));
   const winningBets = bets.filter(bet => bet.result === 'WIN').length;
   const raceWinners = bets.filter(bet => Number(bet.finishingPosition) === 1).length;
-  return {
-    BLOCK_PROFIT_LOSS: signedMoney(pl),
-    BLOCK_RUNNING_PNL_AFTER: signedMoney(bets[bets.length - 1].runningPnl),
+  return mergeAtoms({
     BLOCK_WINNING_BETS: String(winningBets),
     BLOCK_RACE_WINNERS: String(raceWinners)
-  };
+  },
+  typedPnlAtoms('BLOCK', pl),
+  typedPnlAtoms('BLOCK_RUNNING_AFTER', bets[bets.length - 1].runningPnl));
 }
 
 function checkpointAtoms(bettings, completed) {
@@ -400,9 +476,8 @@ function checkpointAtoms(bettings, completed) {
   Object.assign(atoms, {
     CHECKPOINT_BETS_COMPLETED: String(completed.length),
     CHECKPOINT_WINNING_BETS: String(winningBets),
-    CHECKPOINT_RACE_WINNERS: String(raceWinners),
-    CHECKPOINT_RUNNING_PNL: signedMoney(completed[completed.length - 1].runningPnl)
-  });
+    CHECKPOINT_RACE_WINNERS: String(raceWinners)
+  }, typedPnlAtoms('CHECKPOINT_RUNNING', completed[completed.length - 1].runningPnl));
   const best = bestPositiveWin(completed);
   if (best) Object.assign(atoms, preBetAtoms(best), postBetAtoms(best));
   return atoms;
@@ -429,20 +504,18 @@ function buildStandoutOptions(bettings) {
     options.push({
       type: 'longestLosingStreak',
       atoms: {
-        STANDOUT_LONGEST_LOSING_STREAK_COUNT: String(streak.length),
-        STANDOUT_LONGEST_LOSING_STREAK_START_BET: String(streak.startSequence),
-        STANDOUT_LONGEST_LOSING_STREAK_END_BET: String(streak.endSequence)
+        STANDOUT_LONGEST_LOSING_STREAK_BET_COUNT: String(streak.length),
+        STANDOUT_LONGEST_LOSING_STREAK_BET_RANGE: rangeValue(streak.startSequence, streak.endSequence)
       }
     });
   }
   const finish = strongestFinish(bets);
   options.push({
     type: 'strongestFinish',
-    atoms: {
-      STANDOUT_STRONGEST_FINISH_START_BET: String(finish.startSequence),
-      STANDOUT_STRONGEST_FINISH_END_BET: String(finish.endSequence),
-      STANDOUT_STRONGEST_FINISH_PNL: signedMoney(finish.netGain)
-    }
+    atoms: mergeAtoms({
+      STANDOUT_STRONGEST_FINISH_BET_RANGE: rangeValue(finish.startSequence, finish.endSequence),
+      STANDOUT_STRONGEST_FINISH_BET_COUNT: String(finish.endSequence - finish.startSequence + 1)
+    }, typedPnlAtoms('STANDOUT_STRONGEST_FINISH', finish.netGain))
   });
   options.push({
     type: 'totalReturned',
@@ -459,7 +532,7 @@ function buildFinalHighlights(bettings) {
     { type: 'losses', atoms: { DAY_LOSING_BETS: String(Number(summary.losses || 0)) } },
     { type: 'totalStaked', atoms: { DAY_TOTAL_STAKED: money(summary.totalStaked || 0) } },
     { type: 'totalReturned', atoms: { DAY_TOTAL_RETURNED: money(summary.totalReturned || 0) } },
-    { type: 'finalPnl', atoms: { DAY_FINAL_PNL: signedMoney(summary.finalPnl || 0) } }
+    { type: 'finalPnl', atoms: typedPnlAtoms('DAY', summary.finalPnl || 0) }
   ];
   const biggestWin = sequenceBet(bettings, summary.biggestWinSequence);
   if (biggestWin && biggestWin.profitLoss > 0) {
@@ -529,6 +602,54 @@ function strongestFinish(bets) {
     }
   }
   return { startSequence: bets[bestStart].sequence, endSequence: bets[bets.length - 1].sequence, netGain: bestGain };
+}
+
+function typedPnlAtoms(prefix, value) {
+  const n = Number(value);
+  if (n > 0) return { [prefix + '_PROFIT_AMOUNT']: money(n) };
+  if (n < 0) return { [prefix + '_LOSS_AMOUNT']: money(Math.abs(n)) };
+  return { [prefix + '_BREAK_EVEN_AMOUNT']: '$0' };
+}
+
+function pnlDirection(value) {
+  const n = Number(value);
+  if (n > 0) return 'PROFIT';
+  if (n < 0) return 'LOSS';
+  return 'BREAK_EVEN';
+}
+
+function betSemanticContext(bet, includeResult) {
+  const semantic = {
+    sequence: bet.sequence,
+    oddsFormat: 'DECIMAL',
+    currentResultAvailable: Boolean(includeResult),
+    raceActionEvidence: 'NONE'
+  };
+  if (includeResult) {
+    semantic.wagerOutcome = bet.result;
+    semantic.raceWinner = Number(bet.finishingPosition) === 1;
+    semantic.pnlDirection = pnlDirection(bet.profitLoss);
+    semantic.runningPnlDirection = pnlDirection(bet.runningPnl);
+  }
+  return semantic;
+}
+
+function groupPositionSemantics(bettings, bets) {
+  const startSequence = bets[0].sequence;
+  const endSequence = bets[bets.length - 1].sequence;
+  return {
+    startSequence,
+    endSequence,
+    betCount: bets.length,
+    totalBets: bettings.bets.length,
+    remainingAfter: Math.max(0, bettings.bets.length - endSequence),
+    isFirstGroup: startSequence === 1,
+    isFinalGroup: endSequence === bettings.bets.length
+  };
+}
+
+function rangeValue(start, end) {
+  return start === end ? String(start) : String(start) + '-' + String(end);
 }
 
 function signedMoney(value) {
@@ -603,6 +724,9 @@ module.exports = {
     postDayAtoms,
     groupPostAtoms,
     buildGlobalFactCatalog,
-    buildAllowedGlobalFactIdsByPhase
+    buildAllowedGlobalFactIdsByPhase,
+    typedPnlAtoms,
+    pnlDirection,
+    groupPositionSemantics
   }
 };
