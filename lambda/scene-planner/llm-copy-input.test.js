@@ -89,11 +89,16 @@ for (const totalBets of [5, 8, 16, 32, 75]) {
   const deterministicPlan = buildDeterministicScenePlan(bettings);
   const payload = buildLlmCopyInput(bettings, deterministicPlan);
 
-  assert.strictEqual(payload.copyInputVersion, '2.2');
-  assert.strictEqual(payload.groundingProtocol, 'FACT_PARTS_V2_1');
+  assert.strictEqual(payload.copyInputVersion, '2.3');
+  assert.strictEqual(payload.groundingProtocol, 'FACT_PARTS_V2_2');
   assert.strictEqual(payload.scenes.length, deterministicPlan.scenes.length);
+  assert.ok(payload.factCatalog && typeof payload.factCatalog === 'object');
+  assert.ok(Array.isArray(payload.protectedTerms));
   assertNoForbiddenFields(payload);
   assertGroundingScopes(payload);
+  for (const scene of payload.scenes) {
+    assert.ok(scene.context.allowedGlobalFactIdsByPhase, 'Every scene must carry deterministic allowed global fact scopes');
+  }
 
   payload.scenes.forEach((scene, index) => {
     assert.strictEqual(scene.sceneIndex, index);
@@ -134,4 +139,70 @@ for (const totalBets of [5, 8, 16, 32, 75]) {
   assert.strictEqual(day.DAY_RACE_WINNERS, '2 backed runners won their races.');
 }
 
-console.log('FACT_PARTS_V2_1 LLM copy input regression tests passed.');
+
+{
+  const bettings = readJson('bettings-8.json');
+  const payload = buildLlmCopyInput(bettings, buildDeterministicScenePlan(bettings));
+
+  assert.strictEqual(payload.factCatalog.B8_RUNNER, 'LE PLUS RAPIDE');
+  assert.strictEqual(payload.factCatalog.B8_RESULT_SUMMARY, 'LE PLUS RAPIDE finished 1st and the bet made $70 profit.');
+
+  const opening = payload.scenes.find(scene => scene.sceneType === 1);
+  const openingScope = new Set(opening.context.allowedGlobalFactIdsByPhase.PRE_RESULT_DAY);
+  assert.ok(openingScope.has('B8_RUNNER'));
+  assert.ok(openingScope.has('B8_BET_SETUP'));
+  assert.strictEqual(openingScope.has('B8_FINISH'), false, 'Opening must not expose result facts');
+
+  const bet3 = payload.scenes.find(scene => scene.sceneType === 2 && scene.betSequence === 3);
+  const bet3Pre = new Set(bet3.context.allowedGlobalFactIdsByPhase.PRE_RESULT);
+  const bet3Post = new Set(bet3.context.allowedGlobalFactIdsByPhase.POST_RESULT);
+  assert.ok(bet3Pre.has('B1_FINISH'), 'Bet 3 pre-result may reference already-completed bet 1');
+  assert.ok(bet3Pre.has('B8_RUNNER'), 'Future pre-result facts remain usable');
+  assert.strictEqual(bet3Pre.has('B3_FINISH'), false, 'Current bet result must not leak pre-result');
+  assert.strictEqual(bet3Pre.has('B8_FINISH'), false, 'Future result must not leak pre-result');
+  assert.ok(bet3Post.has('B3_FINISH'), 'Current result becomes available post-result');
+  assert.strictEqual(bet3Post.has('B4_FINISH'), false, 'Later result must remain unavailable');
+
+  const midpoint = payload.scenes.find(scene => scene.sceneType === 4);
+  const checkpoint = midpoint.checkpointAfterBetSequence;
+  const midpointBack = new Set(midpoint.context.allowedGlobalFactIdsByPhase.POST_COMPLETED_BETS);
+  assert.ok(midpointBack.has('B' + checkpoint + '_FINISH'));
+  assert.strictEqual(midpointBack.has('B' + (checkpoint + 1) + '_FINISH'), false);
+  assert.ok(midpointBack.has('B8_RUNNER'), 'Midpoint may mention future pre-result facts without outcomes');
+
+  const group67 = payload.scenes.find(scene =>
+    scene.sceneType === 5 &&
+    JSON.stringify(scene.betSequences) === JSON.stringify([6, 7])
+  );
+  const group67Pre = new Set(group67.context.allowedGlobalFactIdsByPhase.PRE_RESULT_BLOCK);
+  const group67Post = new Set(group67.context.allowedGlobalFactIdsByPhase.POST_RESULT_BLOCK);
+  assert.ok(group67Pre.has('B5_FINISH'));
+  assert.strictEqual(group67Pre.has('B6_FINISH'), false);
+  assert.ok(group67Post.has('B6_FINISH'));
+  assert.ok(group67Post.has('B7_FINISH'));
+  assert.strictEqual(group67Post.has('B8_FINISH'), false);
+
+  for (const sceneType of [6, 7]) {
+    const scene = payload.scenes.find(item => item.sceneType === sceneType);
+    const postDay = new Set(scene.context.allowedGlobalFactIdsByPhase.POST_DAY);
+    assert.ok(postDay.has('B1_RUNNER'));
+    assert.ok(postDay.has('B8_RUNNER'));
+    assert.ok(postDay.has('B1_RESULT_SUMMARY'));
+    assert.ok(postDay.has('B8_RESULT_SUMMARY'));
+    assert.ok(postDay.has('DAY_FINAL_PNL'));
+  }
+}
+
+{
+  const bettings = readJson('bettings-75.json');
+  const payload = buildLlmCopyInput(bettings, buildDeterministicScenePlan(bettings));
+  const finalScene = payload.scenes.find(scene => scene.sceneType === 7);
+  const postDay = new Set(finalScene.context.allowedGlobalFactIdsByPhase.POST_DAY);
+  assert.ok(postDay.has('B1_RUNNER'));
+  assert.ok(postDay.has('B38_RESULT_SUMMARY'));
+  assert.ok(postDay.has('B75_RUNNER'));
+  assert.ok(postDay.has('B75_RESULT_SUMMARY'));
+  assert.ok(payload.factCatalog.B75_RUNNER, '75-bet catalog must include final bet');
+}
+
+console.log('FACT_PARTS_V2_2 LLM copy input regression tests passed.');
