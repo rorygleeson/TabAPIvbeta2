@@ -1,5 +1,5 @@
 {
-  "contractVersion": "2.0.19",
+  "contractVersion": "2.0.20",
   "companionContracts": [
     "contracts/bettings.schema.json",
     "contracts/scene-plan.schema.json",
@@ -51,10 +51,11 @@
       "rule": "Stable day/bet facts are supplied once in a recap-wide factCatalog. Each scene phase carries a deterministic allowedGlobalFactIdsByPhase scope derived from chronology, while scene-specific aggregates remain local factAtomsByPhase. The model may use only fact IDs allowed by the current phase. Fact atoms ending in sentence punctuation are complete clause atoms and must stand as sentence segments; short inline atoms may compose naturally with text.",
       "scopePolicy": "PRE_RESULT_DAY exposes pre-result facts only; PRE_RESULT and PRE_RESULT_BLOCK expose all pre-result facts plus outcomes already completed before that point; POST_RESULT and POST_RESULT_BLOCK add outcomes through the completed bet/block; POST_COMPLETED_BETS and PRE_FUTURE_RESULTS expose outcomes only through the deterministic checkpoint; POST_RESULT_BY_BET advances row-by-row; POST_DAY exposes all stable facts from the completed day.",
       "semanticDistinction": "A winning bet is not necessarily a race-winning runner. Race-win wording requires finishingPosition=1; bet-result wording follows the wager result.",
-      "validation": "Planner hard-fails only on objective machine-verifiable correctness: missing/invalid scenes, missing required fields, invalid required enums/cardinality, malformed required fact references, unknown or chronologically out-of-scope fact IDs, and downstream deterministic structure/contract violations. Harmless extra response fields/part metadata are ignored. Narrative semantics, grammar, capitalization, factual-looking wording, markup characters and copy-length targets are non-fatal.",
+      "validation": "LLM copy validation may reject malformed model output internally, but those copy-stage errors are availability-nonfatal: the planner falls back once to deterministic safe copy. Objective deterministic plan/schema/runtime violations remain fatal. Blank narrative sub-parts are ignored.",
       "finalPlan": "Fact IDs, part objects, factCatalog and grounding metadata are copy-stage-only and are stripped before scene.json. Builder interface remains unchanged.",
       "prosePolicy": "Fact parts remain the preferred path for exact factual content and are strongly scoped by chronology. Narrative text is treated as untrusted display text, not semantically interpreted by JavaScript. Builder rendering HTML-escapes template substitutions, so markup-like characters in prose are rendered as text rather than executed or used as a reason to fail the recap."
-    }
+    },
+    "copyAvailabilityBoundary": "The deterministic scene plan is authoritative and must remain renderable even when the LLM copy call fails or returns unusable copy. Kubrick makes at most one LLM copy call. Any Bedrock/copy parsing/copy validation failure degrades to deterministic safe copy generated in code; there is no LLM repair call and the job continues to final scene-plan validation and Builder rendering."
   },
   "fieldSources": {
     "FACT": "Read from validated bettings.json; display variants are DERIVED.",
