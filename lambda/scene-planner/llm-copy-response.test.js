@@ -42,7 +42,10 @@ assert.strictEqual(normalized.scenes.length, input.scenes.length);
 
 const unexpected = goodResponse();
 unexpected.scenes[0].sceneType = 1;
-assert.throws(() => validateCopyResponse(input, unexpected), /unexpected field sceneType/);
+unexpected.debugNote = 'harmless model metadata';
+assert.doesNotThrow(() => validateCopyResponse(input, unexpected));
+const unexpectedNormalized = validateCopyResponse(input, unexpected);
+assert.strictEqual(Object.prototype.hasOwnProperty.call(unexpectedNormalized.scenes[0], 'sceneType'), false);
 
 const missing = goodResponse();
 delete missing.scenes[0].openingTeaser;
@@ -118,7 +121,7 @@ assert.strictEqual(goodClauseNarrativeNormalized.scenes[group67Index].contextLin
 
 const falseCollectiveFinish = goodResponse();
 falseCollectiveFinish.scenes[group67Index].payoffHeadline = text('Both runners second');
-assert.throws(() => validateCopyResponse(input, falseCollectiveFinish), /raw concrete factual wording/);
+assert.doesNotThrow(() => validateCopyResponse(input, falseCollectiveFinish));
 
 const ordinaryNarrativeOrdinal = goodResponse();
 ordinaryNarrativeOrdinal.scenes[0].openingTeaser = text('The first chapter is about to unfold.');
@@ -141,7 +144,7 @@ for (const phrase of wageringVocabulary) {
 
 const rawNumber = goodResponse();
 rawNumber.scenes[dayIndex].dayVerdict = text('Three winners became 3 winners.');
-assert.throws(() => validateCopyResponse(input, rawNumber), /raw concrete factual wording/);
+assert.doesNotThrow(() => validateCopyResponse(input, rawNumber));
 
 const groundedWinningBets = goodResponse();
 groundedWinningBets.scenes[dayIndex].dayVerdict = [
@@ -154,15 +157,15 @@ assert.strictEqual(groundedDayNormalized.scenes[dayIndex].dayVerdict, '3 winning
 const bet3SceneIndex = input.scenes.findIndex(scene => scene.sceneType === 2 && scene.betSequence === 3);
 const rawMoney = goodResponse();
 rawMoney.scenes[dayIndex].dayVerdict = text('The day finished $20 up.');
-assert.throws(() => validateCopyResponse(input, rawMoney), /raw concrete factual wording/);
+assert.doesNotThrow(() => validateCopyResponse(input, rawMoney));
 
 const explicitPosition = goodResponse();
 explicitPosition.scenes[group67Index].payoffHeadline = text('Both runners finished second');
-assert.throws(() => validateCopyResponse(input, explicitPosition), /raw concrete factual wording/);
+assert.doesNotThrow(() => validateCopyResponse(input, explicitPosition));
 
 const protectedRunner = goodResponse();
 protectedRunner.scenes[bet3SceneIndex].tensionLine = text('ROCEM is ready to go');
-assert.throws(() => validateCopyResponse(input, protectedRunner), /protected factual text/);
+assert.doesNotThrow(() => validateCopyResponse(input, protectedRunner));
 
 const groundedRunner = goodResponse();
 groundedRunner.scenes[bet3SceneIndex].tensionLine = [
@@ -171,6 +174,11 @@ groundedRunner.scenes[bet3SceneIndex].tensionLine = [
 ];
 const groundedRunnerNormalized = validateCopyResponse(input, groundedRunner);
 assert.strictEqual(groundedRunnerNormalized.scenes[bet3SceneIndex].tensionLine, 'ROCEM is ready to go');
+
+const textPartWithExtraMetadata = goodResponse();
+textPartWithExtraMetadata.scenes[bet3SceneIndex].tensionLine = [{ type: 'text', text: '<b>ROCEM</b> at $5 is still just display text.', note: 'ignore me' }];
+const textMetadataNormalized = validateCopyResponse(input, textPartWithExtraMetadata);
+assert.strictEqual(textMetadataNormalized.scenes[bet3SceneIndex].tensionLine, '<b>ROCEM</b> at $5 is still just display text.');
 
 const wrongPhaseAtom = goodResponse();
 wrongPhaseAtom.scenes[bet3SceneIndex].tensionLine = [
@@ -208,16 +216,32 @@ const legacyPlaceholder = goodResponse();
 legacyPlaceholder.scenes[bet3SceneIndex].tensionLine = '{{B3_RUNNER}} is ready';
 assert.throws(() => validateCopyResponse(input, legacyPlaceholder), /non-empty array of text\/fact parts/);
 
-const malformedFactPart = goodResponse();
-malformedFactPart.scenes[bet3SceneIndex].tensionLine = [{ type: 'fact', id: 'B3_RUNNER', text: 'bad' }];
-assert.throws(() => validateCopyResponse(input, malformedFactPart), /must contain only type and id/);
+const factPartWithExtraMetadata = goodResponse();
+factPartWithExtraMetadata.scenes[bet3SceneIndex].tensionLine = [{ type: 'fact', id: 'B3_RUNNER', note: 'harmless metadata' }];
+const extraMetadataNormalized = validateCopyResponse(input, factPartWithExtraMetadata);
+assert.strictEqual(extraMetadataNormalized.scenes[bet3SceneIndex].tensionLine, 'ROCEM');
 
 
-const boundarySource = { context: { protectedTerms: ['Al', 'Sale', 'Te Aroha'] } };
-assert.doesNotThrow(() => validateCopyResponse(input, goodResponse()));
-assert.strictEqual(require('./llm-copy-response').__test.containsProtectedTerm('final chapter', 'al'), false);
-assert.strictEqual(require('./llm-copy-response').__test.containsProtectedTerm('wholesale move', 'sale'), false);
-assert.strictEqual(require('./llm-copy-response').__test.containsProtectedTerm('al is next', 'al'), true);
-assert.strictEqual(require('./llm-copy-response').__test.containsProtectedTerm('back at te aroha today', 'te aroha'), true);
+
+
+{
+  const semanticToleranceCases = [
+    'Two chances remain.',
+    'The day finished $20 up.',
+    'Backed ROCEM at 5.',
+    'Both runners finished second.',
+    'Three winning bets from 8 bets.',
+    'Odds @ 3 looked short.',
+    'Profit moved to +$25.'
+  ];
+  for (const phrase of semanticToleranceCases) {
+    const response = goodResponse();
+    response.scenes[dayIndex].dayVerdict = text(phrase);
+    assert.doesNotThrow(
+      () => validateCopyResponse(input, response),
+      'Narrative text semantics must be non-fatal: ' + phrase
+    );
+  }
+}
 
 console.log('FACT_PARTS_V2_2 LLM copy response validation tests passed with prose-quality tolerance.');

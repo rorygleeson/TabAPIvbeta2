@@ -1,14 +1,6 @@
 'use strict';
 
 const ATOM_ID_PATTERN = /^[A-Z][A-Z0-9_]*$/u;
-const RAW_CONCRETE_PATTERN = /[$%@]|\d/u;
-const POSITION_WORD = '(?:first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|eleventh|twelfth|thirteenth|fourteenth|fifteenth|sixteenth|seventeenth|eighteenth|nineteenth|twentieth)';
-const POSITION_CLAIM_PATTERN = new RegExp(
-  '\\b(?:finished|finishing|ran|placed|came)\\s+' + POSITION_WORD + '\\b' +
-  '|\\b(?:both|all)\\s+(?:(?:the\\s+)?(?:runners?|horses?)\\s+)?(?:finished\\s+|ran\\s+|placed\\s+|came\\s+)?' + POSITION_WORD + '\\b',
-  'iu'
-);
-
 function parseJsonObject(text) {
   const source = String(text || '').trim();
   if (!source) throw new Error('LLM returned no text content.');
@@ -31,9 +23,8 @@ function validateCopyResponse(copyInput, response) {
   if (!response || typeof response !== 'object' || Array.isArray(response)) {
     throw new Error('LLM copy response must be an object.');
   }
-  const topKeys = Object.keys(response);
-  if (topKeys.length !== 1 || topKeys[0] !== 'scenes' || !Array.isArray(response.scenes)) {
-    throw new Error('LLM copy response must contain only a scenes array.');
+  if (!Array.isArray(response.scenes)) {
+    throw new Error('LLM copy response must contain a scenes array.');
   }
   if (response.scenes.length !== copyInput.scenes.length) {
     throw new Error('LLM copy response scene count does not match copy input.');
@@ -51,11 +42,6 @@ function validateCopyResponse(copyInput, response) {
     }
 
     const fieldRules = source.requiredFields || {};
-    const allowed = new Set(['sceneIndex', ...Object.keys(fieldRules)]);
-    for (const key of Object.keys(item)) {
-      if (!allowed.has(key)) throw new Error('LLM copy scene ' + index + ' returned unexpected field ' + key + '.');
-    }
-
     const normalizedItem = { sceneIndex: index };
 
     for (const [field, rule] of Object.entries(fieldRules)) {
@@ -130,10 +116,6 @@ function composeParts(parts, source, phase, itemIndex, sceneIndex, field, copyIn
     }
 
     if (part.type === 'fact') {
-      const keys = Object.keys(part);
-      if (keys.length !== 2 || !keys.includes('type') || !keys.includes('id')) {
-        throw new Error(label + ' fact part ' + partIndex + ' must contain only type and id.');
-      }
       if (typeof part.id !== 'string' || !ATOM_ID_PATTERN.test(part.id)) {
         throw new Error(label + ' fact part ' + partIndex + ' has invalid atom id.');
       }
@@ -146,10 +128,6 @@ function composeParts(parts, source, phase, itemIndex, sceneIndex, field, copyIn
     }
 
     if (part.type === 'text') {
-      const keys = Object.keys(part);
-      if (keys.length !== 2 || !keys.includes('type') || !keys.includes('text')) {
-        throw new Error(label + ' text part ' + partIndex + ' must contain only type and text.');
-      }
       if (typeof part.text !== 'string' || !part.text.length) {
         throw new Error(label + ' text part ' + partIndex + ' must contain non-empty text.');
       }
@@ -214,28 +192,11 @@ function atomsForPhase(source, phase, itemIndex, copyInput) {
 
 function validateNarrativeText(rawText, source, label, copyInput) {
   const text = String(rawText || '');
-  if (RAW_CONCRETE_PATTERN.test(text) || POSITION_CLAIM_PATTERN.test(text)) {
-    throw new Error(label + ' contains raw concrete factual wording; use a fact part instead.');
-  }
-
-  const lower = text.toLocaleLowerCase('en-AU');
-  const protectedTerms = [...new Set([...(copyInput?.protectedTerms || []), ...(source.context?.protectedTerms || [])])];
-  for (const term of protectedTerms) {
-    const normalized = String(term || '').trim().toLocaleLowerCase('en-AU');
-    if (normalized && containsProtectedTerm(lower, normalized)) {
-      throw new Error(label + ' contains protected factual text; use a fact part instead: ' + term + '.');
-    }
+  if (!text.trim()) {
+    throw new Error(label + ' must contain non-empty text.');
   }
 }
 
-function containsProtectedTerm(lowerText, normalizedTerm) {
-  const escaped = normalizedTerm.replace(/[.*+?^$\{\}()|[\]\\]/gu, '\\$&');
-  const startsWord = /[\p{L}\p{N}]/u.test(normalizedTerm[0] || '');
-  const endsWord = /[\p{L}\p{N}]/u.test(normalizedTerm[normalizedTerm.length - 1] || '');
-  const left = startsWord ? '(?<![\\p{L}\\p{N}])' : '';
-  const right = endsWord ? '(?![\\p{L}\\p{N}])' : '';
-  return new RegExp(left + escaped + right, 'iu').test(lowerText);
-}
 function hardCharLimit(target) {
   const n = Number(target);
   if (!Number.isFinite(n) || n <= 0) return null;
@@ -257,7 +218,6 @@ function validateField(value, rule, sceneIndex, field) {
 
   if (typeof value === 'string') {
     if (!value.trim()) throw new Error(label + ' must not be empty.');
-    if (/[<>]/u.test(value)) throw new Error(label + ' contains forbidden markup.');
     return;
   }
 
@@ -266,7 +226,6 @@ function validateField(value, rule, sceneIndex, field) {
     if (rule.maxItems !== undefined && value.length > rule.maxItems) throw new Error(label + ' has too many items.');
     for (const item of value) {
       if (typeof item !== 'string' || !item.trim()) throw new Error(label + ' items must be non-empty strings.');
-      if (/[<>]/u.test(item)) throw new Error(label + ' item contains forbidden markup.');
     }
     return;
   }
@@ -292,7 +251,6 @@ module.exports = {
     atomsForPhase,
     composeParts,
     isClauseAtom,
-    validateNarrativeText,
-    containsProtectedTerm
+    validateNarrativeText
   }
 };

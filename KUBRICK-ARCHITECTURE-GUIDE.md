@@ -352,9 +352,11 @@ The LLM remains free to control rhythm, transitions, emphasis and narrative colo
 
 There is still exactly one LLM copy call per recap. There is no second verifier model, no per-scene model fan-out and no structural/copy repair loop.
 
-Planner validation resolves facts from the same recap-wide catalog and chronological allow-list sent to the model, plus scene-local aggregates. It hard-rejects only machine-verifiable correctness failures such as unknown/out-of-scope IDs, malformed parts, raw concrete factual literals, invalid enums/cardinality, forbidden markup and downstream contract violations. Grammar, sentence flow, capitalization and copy-length targets are deliberately non-fatal. Pre-result phases cannot access later result facts; `POST_DAY` can access all completed-day facts. Part metadata never reaches final `scene.json`, so the existing Builder interface remains unchanged.
+Planner validation resolves fact parts from the same recap-wide catalog and chronological allow-list sent to the model, plus scene-local aggregates. It hard-rejects only objective machine-verifiable failures such as malformed response/parts, missing required fields, unknown or out-of-scope fact IDs, invalid enums/cardinality, forbidden markup and downstream contract violations. Narrative text is deliberately not semantically interpreted by JavaScript: digits, money/odds symbols, runner/meeting wording, finishing-position wording, grammar, capitalization and copy-length targets are non-fatal. Pre-result fact parts cannot access later result facts; `POST_DAY` fact parts can access all completed-day facts. Part metadata never reaches final `scene.json`, so the existing Builder interface remains unchanged.
 
 Soft stylistic imperfections, awkward joins and length overshoots should not fail an otherwise factually and structurally valid recap.
+
+Frozen validation boundary: hard failures are limited to objective response/structure/fact-scope/enum-cardinality/downstream-contract correctness. Harmless extra model fields/part metadata are ignored. Prose length, grammar, factual-looking wording and markup-like characters are non-fatal; Builder HTML-escapes display substitutions.
 
 ---
 
