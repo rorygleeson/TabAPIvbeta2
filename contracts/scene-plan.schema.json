@@ -59,8 +59,7 @@
         },
         "openingTeaser": {
           "type": "string",
-          "pattern": "\\S",
-          "maxLength": 172
+          "pattern": "\\S"
         }
       }
     },
@@ -83,13 +82,11 @@
         },
         "tensionLine": {
           "type": "string",
-          "pattern": "\\S",
-          "maxLength": 132
+          "pattern": "\\S"
         },
         "reactionLine": {
           "type": "string",
-          "pattern": "\\S",
-          "maxLength": 132
+          "pattern": "\\S"
         }
       }
     },
@@ -112,8 +109,7 @@
         },
         "replayLabel": {
           "type": "string",
-          "pattern": "\\S",
-          "maxLength": 71
+          "pattern": "\\S"
         },
         "replayComments": {
           "type": "array",
@@ -121,8 +117,7 @@
           "maxItems": 4,
           "items": {
             "type": "string",
-            "pattern": "\\S",
-            "maxLength": 71
+            "pattern": "\\S"
           }
         }
       }
@@ -145,13 +140,11 @@
         },
         "lookingBackStory": {
           "type": "string",
-          "pattern": "\\S",
-          "maxLength": 232
+          "pattern": "\\S"
         },
         "lookingAheadTeaser": {
           "type": "string",
-          "pattern": "\\S",
-          "maxLength": 232
+          "pattern": "\\S"
         }
       }
     },
@@ -182,23 +175,19 @@
         },
         "setupKicker": {
           "type": "string",
-          "pattern": "\\S",
-          "maxLength": 110
+          "pattern": "\\S"
         },
         "setupHeadline": {
           "type": "string",
-          "pattern": "\\S",
-          "maxLength": 110
+          "pattern": "\\S"
         },
         "payoffHeadline": {
           "type": "string",
-          "pattern": "\\S",
-          "maxLength": 121
+          "pattern": "\\S"
         },
         "contextLine": {
           "type": "string",
-          "pattern": "\\S",
-          "maxLength": 232
+          "pattern": "\\S"
         }
       }
     },
@@ -217,8 +206,7 @@
         },
         "dayVerdict": {
           "type": "string",
-          "pattern": "\\S",
-          "maxLength": 232
+          "pattern": "\\S"
         },
         "standoutHighlightType": {
           "enum": [
@@ -232,8 +220,7 @@
         },
         "standoutCopy": {
           "type": "string",
-          "pattern": "\\S",
-          "maxLength": 232
+          "pattern": "\\S"
         }
       }
     },
@@ -270,13 +257,11 @@
         },
         "finalSummary": {
           "type": "string",
-          "pattern": "\\S",
-          "maxLength": 252
+          "pattern": "\\S"
         },
         "shareCaption": {
           "type": "string",
-          "pattern": "\\S",
-          "maxLength": 292
+          "pattern": "\\S"
         }
       }
     },
@@ -305,8 +290,7 @@
         },
         "headline": {
           "type": "string",
-          "pattern": "\\S",
-          "maxLength": 88
+          "pattern": "\\S"
         },
         "headlineCategory": {
           "description": "Fresh Kubrick V2 LLM copy generation emits this for every Scene 8. It remains schema-optional only for compatibility with previously stored plans. Category meaning, eligibility and diversity policy are owned by scene-contracts.json and never affect deterministic Scene 8 grouping.",
@@ -329,8 +313,7 @@
           "maxItems": 5,
           "items": {
             "type": "string",
-            "pattern": "\\S",
-            "maxLength": 71
+            "pattern": "\\S"
           }
         }
       }
@@ -347,7 +330,7 @@
     "Scene 8 pre-result headlines are deterministically rejected when code can mechanically prove an obvious grouped-result leak, including explicit outcome language, outcome-derived money values that are not valid pre-result facts, and explicit grouped finishing-position disclosure. Subtle semantic spoilers remain prompt and live-inspection responsibilities.",
     "Scene 3 immediately follows Scene 2 for the same sequence and requires WIN plus a valid non-empty HTTPS replayUrl in bettings.json; Scene 3 may not attach to Scene 5 or Scene 8.",
     "Final scene-plan contains only structural planner fields plus contract-declared LLM-owned fields. FACT, builder-DERIVED, CONTROLLED and RUNTIME display fields remain outside scene-plan.json.",
-    "Planner and builder treat maxWords/itemMaxWords as copy targets, enforce global hard character tolerance ceilings derived from maxChars/itemMaxChars, and enforce factual-grounding/markup prose policy from scene-contracts.json.",
+    "Planner and builder treat maxWords/itemMaxWords/maxChars/itemMaxChars as copy and design targets only; prose length is not storage-fatal.",
     "Planner and builder deterministically calculate user-visible planned duration from runtime-contract.json. Planned duration must not exceed the hard maximum; replay metadata/play timeout allowances are runtime failure-safety behaviour, not editorial duration.",
     "Scene 8 headlineCategory meaning, eligibility and diversity are copy-stage quality rules and never authorize structural changes.",
     "Natural-language quality and any no-spoiler meaning beyond the mechanically provable Scene 8 guard remain copy-prompt responsibilities."
