@@ -253,7 +253,14 @@ At 17+ bets:
 
 The rich internal copy input remains deterministic and is used for validation/merge.
 
-The Bedrock request is a compact projection:
+Current rich protocol:
+
+```text
+groundingProtocol = FACT_PARTS_V2_3
+copyInputVersion = 2.4
+```
+
+The Bedrock request remains a compact projection:
 
 ```text
 groundingProtocol = FACT_PARTS_COMPACT_V1
@@ -266,7 +273,18 @@ The compact payload sends only scene-relevant phase-scoped facts and requested c
 
 The model returns `fact` and `text` parts. Fact IDs are expanded deterministically.
 
-Narrative semantics are not reconstructed by JavaScript.
+The copy interface now follows one explicit ownership rule:
+
+```text
+code owns exact factual values + chronology + eligibility
+LLM owns grammar + sentence construction + narrative colour
+```
+
+Model-facing atoms are atomic values or small factual units rather than complete customer sentences. Counts no longer include their nouns, stake/return atoms contain only exact money values, P&L atoms use exact signed values, odds remain supplied decimal odds, and result facts are decomposed rather than duplicated into prose-shaped summary atoms.
+
+The response assembler no longer classifies fact atoms as sentence clauses. It preserves model punctuation/spacing and inserts only a mechanical safe space when adjacent parts would otherwise collapse together.
+
+Narrative semantics are not reconstructed or repaired by JavaScript.
 
 ## Copy availability boundary
 

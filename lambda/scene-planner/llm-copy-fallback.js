@@ -9,7 +9,7 @@ const FALLBACK_TEXT = {
   lookingAheadTeaser: 'There is still more to come.',
   setupKicker: 'Next up',
   setupHeadline: 'A quick run of races',
-  payoffHeadline: 'That block is done',
+  payoffHeadline: 'Those results are in',
   contextLine: 'The day keeps moving.',
   dayVerdict: 'A racing day with plenty of movement from start to finish.',
   standoutCopy: 'One moment stood out from the rest.',

@@ -33,8 +33,8 @@ function goodResponse() {
   };
 }
 
-assert.strictEqual(input.copyInputVersion, '2.3');
-assert.strictEqual(input.groundingProtocol, 'FACT_PARTS_V2_2');
+assert.strictEqual(input.copyInputVersion, '2.4');
+assert.strictEqual(input.groundingProtocol, 'FACT_PARTS_V2_3');
 
 const parsed = parseJsonObject(JSON.stringify(goodResponse()));
 const normalized = validateCopyResponse(input, parsed);
@@ -158,7 +158,10 @@ groundedWinningBets.scenes[dayIndex].dayVerdict = [
   textPart(' shaped the day.')
 ];
 const groundedDayNormalized = validateCopyResponse(input, groundedWinningBets);
-assert.strictEqual(groundedDayNormalized.scenes[dayIndex].dayVerdict, '3 winning bets shaped the day.');
+assert.strictEqual(
+  groundedDayNormalized.scenes[dayIndex].dayVerdict,
+  input.scenes[dayIndex].context.factAtomsByPhase.POST_DAY.DAY_WINNING_BETS + ' shaped the day.'
+);
 
 const bet3SceneIndex = input.scenes.findIndex(scene => scene.sceneType === 2 && scene.betSequence === 3);
 const rawMoney = goodResponse();
@@ -181,6 +184,35 @@ groundedRunner.scenes[bet3SceneIndex].tensionLine = [
 ];
 const groundedRunnerNormalized = validateCopyResponse(input, groundedRunner);
 assert.strictEqual(groundedRunnerNormalized.scenes[bet3SceneIndex].tensionLine, bet3Runner + ' is ready to go');
+
+const safeMissingSpaces = goodResponse();
+safeMissingSpaces.scenes[0].openingTeaser = [
+  textPart('Backed'),
+  fact('DAY_TOTAL_BETS'),
+  textPart('bets across'),
+  fact('DAY_MEETING_COUNT'),
+  textPart('meetings.')
+];
+const safeMissingSpacesNormalized = validateCopyResponse(input, safeMissingSpaces);
+assert.strictEqual(
+  safeMissingSpacesNormalized.scenes[0].openingTeaser,
+  'Backed ' + fixture.bets.length + ' bets across ' +
+    new Set(fixture.bets.map(bet => bet.meeting)).size + ' meetings.'
+);
+
+const safeAttachedPunctuation = goodResponse();
+safeAttachedPunctuation.scenes[bet3SceneIndex].tensionLine = [
+  fact('B3_RUNNER'),
+  textPart(','),
+  textPart('next at'),
+  fact('B3_MEETING'),
+  textPart('.')
+];
+const safeAttachedPunctuationNormalized = validateCopyResponse(input, safeAttachedPunctuation);
+assert.strictEqual(
+  safeAttachedPunctuationNormalized.scenes[bet3SceneIndex].tensionLine,
+  fixture.bets[2].runnerName + ', next at ' + fixture.bets[2].meeting + '.'
+);
 
 const textPartWithExtraMetadata = goodResponse();
 textPartWithExtraMetadata.scenes[bet3SceneIndex].tensionLine = [{ type: 'text', text: '<b>ROCEM</b> at $5 is still just display text.', note: 'ignore me' }];
@@ -209,12 +241,16 @@ assert.ok(finalSceneIndex >= 0);
 const crossSceneFinalFact = goodResponse();
 crossSceneFinalFact.scenes[finalSceneIndex].shareCaption = [
   fact('B8_RUNNER'),
-  textPart(' closed the day with the final flourish.'),
-  fact('B8_RESULT_SUMMARY')
+  textPart(' finished '),
+  fact('B8_FINISH'),
+  textPart(' with '),
+  fact('B8_PROFIT_LOSS'),
+  textPart(' on the bet.')
 ];
 const crossSceneFinalNormalized = validateCopyResponse(input, crossSceneFinalFact);
 assert.ok(crossSceneFinalNormalized.scenes[finalSceneIndex].shareCaption.includes(fixture.bets[7].runnerName));
-assert.ok(crossSceneFinalNormalized.scenes[finalSceneIndex].shareCaption.includes(input.factCatalog.B8_RESULT_SUMMARY));
+assert.ok(crossSceneFinalNormalized.scenes[finalSceneIndex].shareCaption.includes(input.factCatalog.B8_FINISH));
+assert.ok(crossSceneFinalNormalized.scenes[finalSceneIndex].shareCaption.includes(input.factCatalog.B8_PROFIT_LOSS));
 
 const futureResultLeak = goodResponse();
 futureResultLeak.scenes[bet3SceneIndex].tensionLine = [
@@ -260,4 +296,4 @@ assert.strictEqual(extraMetadataNormalized.scenes[bet3SceneIndex].tensionLine, b
   }
 }
 
-console.log('FACT_PARTS_V2_2 LLM copy response validation tests passed with prose-quality tolerance.');
+console.log('FACT_PARTS_V2_3 LLM copy response validation tests passed with prose-quality tolerance.');

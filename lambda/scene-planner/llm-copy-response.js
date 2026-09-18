@@ -123,7 +123,7 @@ function composeParts(parts, source, phase, itemIndex, sceneIndex, field, copyIn
         throw new Error(label + ' references unknown or wrong-phase fact atom ' + part.id + '.');
       }
       const text = String(atomMap[part.id]);
-      rendered.push({ kind: isClauseAtom(text) ? 'clause' : 'inline', text, partIndex });
+      rendered.push({ kind: 'fact', text, partIndex });
       return;
     }
 
@@ -141,25 +141,29 @@ function composeParts(parts, source, phase, itemIndex, sceneIndex, field, copyIn
 
 
   let output = '';
-  rendered.forEach((part, index) => {
-    if (index === 0) {
-      output = part.text;
-      return;
-    }
-    const previous = rendered[index - 1];
-    if (previous.kind === 'clause' || part.kind === 'clause') {
-      output = output.trimEnd() + ' ' + part.text.trimStart();
-    } else {
-      output += part.text;
-    }
+  rendered.forEach(part => {
+    output = appendWithSafeBoundary(output, part.text);
   });
 
   if (!output.trim()) throw new Error(label + ' must not resolve to empty text.');
   return output;
 }
 
-function isClauseAtom(text) {
-  return /[.!?]\s*$/u.test(String(text || ''));
+function appendWithSafeBoundary(current, next) {
+  const left = String(current || '');
+  const right = String(next || '');
+  if (!left || !right) return left + right;
+
+  if (/\s$/u.test(left) || /^\s/u.test(right)) return left + right;
+
+  // Preserve punctuation that is intentionally attached to the adjacent value.
+  if (/[([{/@#$]$/u.test(left)) return left + right;
+  if (/^[.,!?;:%)\]}']/u.test(right)) return left + right;
+
+  // Fact atoms are now atomic values/units rather than pre-written clauses.
+  // If neither side supplied whitespace or attaching punctuation, insert one
+  // mechanically so exact parts can never collapse into e.g. "backed5".
+  return left + ' ' + right;
 }
 
 function atomsForPhase(source, phase, itemIndex, copyInput) {
@@ -243,6 +247,6 @@ module.exports = {
   __test: {
     atomsForPhase,
     composeParts,
-    isClauseAtom
+    appendWithSafeBoundary
   }
 };

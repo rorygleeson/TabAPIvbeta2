@@ -45,15 +45,15 @@
       "hardCharacterTolerance": "Validation fails only above target + min(ceil(target * 0.10), 12 characters), applied uniformly to every LLM-owned string and string-array item."
     },
     "groundedCopyProtocol": {
-      "version": "FACT_PARTS_V2_2",
-      "copyInputVersion": "2.3",
+      "version": "FACT_PARTS_V2_3",
+      "copyInputVersion": "2.4",
       "modelCallPolicy": "One LLM copy call per recap. No verifier, repair loop or per-scene model calls.",
-      "rule": "Stable day/bet facts are supplied once in a recap-wide factCatalog. Each scene phase carries a deterministic allowedGlobalFactIdsByPhase scope derived from chronology, while scene-specific aggregates remain local factAtomsByPhase. The model may use only fact IDs allowed by the current phase. Fact atoms ending in sentence punctuation are complete clause atoms and must stand as sentence segments; short inline atoms may compose naturally with text.",
+      "rule": "Stable day/bet facts are supplied once in a recap-wide factCatalog. Each scene phase carries a deterministic allowedGlobalFactIdsByPhase scope derived from chronology, while scene-specific aggregates remain local factAtomsByPhase. The model may use only fact IDs allowed by the current phase. Model-facing fact atoms are exact factual values or small factual units rather than pre-written customer sentences; text parts own grammar, punctuation and narrative phrasing.",
       "scopePolicy": "PRE_RESULT_DAY exposes pre-result facts only; PRE_RESULT and PRE_RESULT_BLOCK expose all pre-result facts plus outcomes already completed before that point; POST_RESULT and POST_RESULT_BLOCK add outcomes through the completed bet/block; POST_COMPLETED_BETS and PRE_FUTURE_RESULTS expose outcomes only through the deterministic checkpoint; POST_RESULT_BY_BET advances row-by-row; POST_DAY exposes all stable facts from the completed day.",
       "semanticDistinction": "A winning bet is not necessarily a race-winning runner. Race-win wording requires finishingPosition=1; bet-result wording follows the wager result.",
       "validation": "LLM copy validation may reject malformed model output internally, but those copy-stage errors are availability-nonfatal: the planner falls back once to deterministic safe copy. Objective deterministic plan/schema/runtime violations remain fatal. Blank narrative sub-parts are ignored.",
       "finalPlan": "Fact IDs, part objects, factCatalog and grounding metadata are copy-stage-only and are stripped before scene.json. Builder interface remains unchanged.",
-      "prosePolicy": "Fact parts remain the preferred path for exact factual content and are strongly scoped by chronology. Narrative text is treated as untrusted display text, not semantically interpreted by JavaScript. Builder rendering HTML-escapes template substitutions, so markup-like characters in prose are rendered as text rather than executed or used as a reason to fail the recap."
+      "prosePolicy": "Fact parts remain the required path for exact factual values and are strongly scoped by chronology. The LLM owns grammar around those values; JavaScript performs only deterministic fact expansion and mechanical safe-boundary spacing, not semantic rewriting or grammar repair. Narrative text is treated as untrusted display text and Builder rendering HTML-escapes template substitutions."
     },
     "copyAvailabilityBoundary": "The deterministic scene plan is authoritative and must remain renderable even when the LLM copy call fails or returns unusable copy. Kubrick makes at most one LLM copy call. Any Bedrock/copy parsing/copy validation failure degrades to deterministic safe copy generated in code; there is no LLM repair call and the job continues to final scene-plan validation and Builder rendering."
   },
