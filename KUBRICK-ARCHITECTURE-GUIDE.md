@@ -346,13 +346,13 @@ The LLM receives:
 - word/character targets
 - style guidance
 
-Fresh copy generation uses `FACT_PARTS_V2`. Concrete facts remain deterministic phase-scoped fact atoms, but the LLM no longer embeds placeholder syntax inside free-form strings. Instead each prose field is composed from only two structured part types: `fact` parts that reference an allowed atom ID and `text` parts that contain narrative/connective language only. Prose-array fields use one parts array per item.
+Fresh copy generation uses `FACT_PARTS_V2_1`. Concrete facts remain deterministic phase-scoped fact atoms and each prose field is composed from only two structured response part types: `fact` parts that reference an allowed atom ID and `text` parts that contain narrative/connective language. Factual atoms have two practical shapes: short inline facts that may compose with text, and complete clause facts that end in sentence punctuation and must stand as their own sentence segment. Prose-array fields use one parts array per item.
 
 The LLM remains free to control rhythm, transitions, emphasis and narrative colour. It does **not** receive authority to reconstruct factual wording or restructure the plan.
 
 There is still exactly one LLM copy call per recap. There is no second verifier model, no per-scene model fan-out and no structural/copy repair loop.
 
-Planner validation rejects malformed parts, unknown or wrong-phase fact IDs and factual literals inside narrative text. Valid fact parts are expanded and joined into ordinary strings before merge. Part metadata never reaches final `scene.json`, so the existing Builder interface remains unchanged.
+Planner validation rejects malformed parts, unknown or wrong-phase fact IDs, raw concrete factual literals inside narrative text, and grammar stitched into or out of complete clause atoms. Valid fact parts are expanded and joined into ordinary strings before merge. Part metadata never reaches final `scene.json`, so the existing Builder interface remains unchanged.
 
 Soft stylistic imperfections should not fail an otherwise structurally valid recap.
 
