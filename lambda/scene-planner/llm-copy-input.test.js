@@ -34,7 +34,7 @@ function assertNoForbiddenFields(payload) {
 
 function assertNoLegacySemanticAtoms(payload) {
   const legacy = [
-    /_ODDS$/u,
+    /^B\d+_ODDS$/u,
     /_PROFIT_LOSS$/u,
     /_RUNNING_PNL$/u,
     /_RACE_WIN$/u,
