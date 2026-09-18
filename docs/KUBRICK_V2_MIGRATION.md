@@ -373,3 +373,8 @@ NOT YET BUILT:
 - new planner tests
 - updated planner deployment packaging
 - cutover of v2 source to the existing AWS planner Lambda
+
+
+### Copy availability boundary
+
+The deterministic planner is the availability boundary. Kubrick makes at most one LLM copy call. If Bedrock fails, JSON is malformed, copy validation rejects the model response, or the model emits unusable/blank copy, the planner does not fail the recap and does not call the LLM again. It substitutes deterministic safe copy in code, preserves the deterministic scene structure exactly, then continues through final scene-plan validation and the existing Builder. Copy quality may degrade; recap availability must not.

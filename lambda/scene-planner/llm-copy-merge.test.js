@@ -8,6 +8,7 @@ const { buildDeterministicScenePlan } = require('./scene-planner');
 const { buildLlmCopyInput } = require('./llm-copy-input');
 const { validateCopyResponse } = require('./llm-copy-response');
 const { mergeCopyIntoPlan } = require('./llm-copy-merge');
+const { buildFallbackCopy } = require('./llm-copy-fallback');
 const { buildRecap } = require('../builder-recap/recap-builder');
 
 const ROOT = path.join(__dirname, '..', '..');
@@ -118,6 +119,24 @@ for (const totalBets of [5, 8, 16, 32, 75]) {
   );
 }
 
+for (const totalBets of [5, 8, 16, 32, 75]) {
+  const bettings = readJson('bettings-' + totalBets + '.json');
+  const deterministicPlan = buildDeterministicScenePlan(bettings);
+  const copyInput = buildLlmCopyInput(bettings, deterministicPlan);
+  const fallbackCopy = buildFallbackCopy(copyInput);
+  const finalPlan = mergeCopyIntoPlan(deterministicPlan, fallbackCopy);
+  const result = buildRecap({ bettings, scenePlan: finalPlan });
+
+  assert.strictEqual(result.betCount, totalBets);
+  assert.strictEqual(result.sceneCount, finalPlan.scenes.length);
+  assert.deepStrictEqual(
+    structuralProjection(finalPlan),
+    structuralProjection(deterministicPlan),
+    'Fallback copy must preserve deterministic structure exactly'
+  );
+  console.log('OK deterministic copy fallback -> builder ' + totalBets);
+}
+
 {
   const bettings = readJson('bettings-5.json');
   const deterministicPlan = buildDeterministicScenePlan(bettings);
@@ -146,4 +165,4 @@ for (const totalBets of [5, 8, 16, 32, 75]) {
   );
 }
 
-console.log('FACT_PARTS_V2_2 final scene-plan merge and Builder compatibility tests passed.');
+console.log('FACT_PARTS_V2_2 merge, deterministic fallback and Builder compatibility tests passed.');

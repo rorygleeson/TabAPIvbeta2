@@ -180,6 +180,15 @@ textPartWithExtraMetadata.scenes[bet3SceneIndex].tensionLine = [{ type: 'text', 
 const textMetadataNormalized = validateCopyResponse(input, textPartWithExtraMetadata);
 assert.strictEqual(textMetadataNormalized.scenes[bet3SceneIndex].tensionLine, '<b>ROCEM</b> at $5 is still just display text.');
 
+const blankTextFragment = goodResponse();
+blankTextFragment.scenes[group67Index].contextLine = [
+  fact('BLOCK_PROFIT_LOSS'),
+  textPart('   '),
+  textPart(' The pressure remained.')
+];
+const blankTextNormalized = validateCopyResponse(input, blankTextFragment);
+assert.strictEqual(blankTextNormalized.scenes[group67Index].contextLine, 'The block lost $85. The pressure remained.');
+
 const wrongPhaseAtom = goodResponse();
 wrongPhaseAtom.scenes[bet3SceneIndex].tensionLine = [
   fact('B3_FINISH'),
