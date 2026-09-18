@@ -241,12 +241,16 @@ assert.ok(finalSceneIndex >= 0);
 const crossSceneFinalFact = goodResponse();
 crossSceneFinalFact.scenes[finalSceneIndex].shareCaption = [
   fact('B8_RUNNER'),
-  textPart(' closed the day with the final flourish.'),
-  fact('B8_RESULT_SUMMARY')
+  textPart(' finished '),
+  fact('B8_FINISH'),
+  textPart(' with '),
+  fact('B8_PROFIT_LOSS'),
+  textPart(' on the bet.')
 ];
 const crossSceneFinalNormalized = validateCopyResponse(input, crossSceneFinalFact);
 assert.ok(crossSceneFinalNormalized.scenes[finalSceneIndex].shareCaption.includes(fixture.bets[7].runnerName));
-assert.ok(crossSceneFinalNormalized.scenes[finalSceneIndex].shareCaption.includes(input.factCatalog.B8_RESULT_SUMMARY));
+assert.ok(crossSceneFinalNormalized.scenes[finalSceneIndex].shareCaption.includes(input.factCatalog.B8_FINISH));
+assert.ok(crossSceneFinalNormalized.scenes[finalSceneIndex].shareCaption.includes(input.factCatalog.B8_PROFIT_LOSS));
 
 const futureResultLeak = goodResponse();
 futureResultLeak.scenes[bet3SceneIndex].tensionLine = [
