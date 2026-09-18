@@ -33,8 +33,8 @@ function goodResponse() {
   };
 }
 
-assert.strictEqual(input.copyInputVersion, '2.3');
-assert.strictEqual(input.groundingProtocol, 'FACT_PARTS_V2_2');
+assert.strictEqual(input.copyInputVersion, '2.4');
+assert.strictEqual(input.groundingProtocol, 'FACT_PARTS_V2_3');
 
 const parsed = parseJsonObject(JSON.stringify(goodResponse()));
 const normalized = validateCopyResponse(input, parsed);
@@ -292,4 +292,4 @@ assert.strictEqual(extraMetadataNormalized.scenes[bet3SceneIndex].tensionLine, b
   }
 }
 
-console.log('FACT_PARTS_V2_2 LLM copy response validation tests passed with prose-quality tolerance.');
+console.log('FACT_PARTS_V2_3 LLM copy response validation tests passed with prose-quality tolerance.');
