@@ -244,9 +244,9 @@ for (const totalBets of [5, 8, 16, 32, 75]) {
   const modelPayload = buildLlmModelPayload(payload);
   const richBytes = Buffer.byteLength(JSON.stringify(payload), 'utf8');
   const compactBytes = Buffer.byteLength(JSON.stringify(modelPayload), 'utf8');
-  assert.ok(compactBytes < richBytes * 0.6, '75-bet model payload must remain substantially smaller than rich validation input');
-  assert.ok(compactBytes < 75000, 'Semantic V4 model payload should remain compact enough for current architecture');
   console.log('75-bet semantic V4 payload bytes: rich=' + richBytes + ' compact=' + compactBytes);
+  assert.ok(compactBytes < richBytes * 0.6, '75-bet model payload must remain substantially smaller than rich validation input');
+  assert.ok(compactBytes < 75000, 'Semantic V4 model payload should remain compact enough for current architecture: ' + compactBytes + ' bytes');
 }
 
 console.log('FACT_SEMANTICS_V4_0 semantic atom and historical-failure regression tests passed.');
