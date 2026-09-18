@@ -1,12 +1,12 @@
-# Manual AWS CLI Smoke Tests — Kubrick V2
+# Manual AWS CLI Smoke Tests
 
 Last updated: 2026-09-18
 
-Purpose: deployed-AWS proof for the current deterministic Kubrick V2 planner using the intentionally reused vbeta1 AWS resources.
+Purpose: deployed AWS proof for the current Kubrick V2 planner while reusing the existing vbeta1-named backend resources.
 
-Commands are Windows CMD compatible.
+All commands are Windows CMD-compatible unless stated otherwise.
 
-## 1. Environment
+## Environment
 
 Account:
 
@@ -20,15 +20,34 @@ Region:
 ap-southeast-2
 ```
 
-Resources:
+Planner Lambda:
 
 ```text
-Planner Lambda : tab-recap-vbeta1-scene-planner
-Planning queue : tab-recap-vbeta1-planning
-Planning DLQ   : tab-recap-vbeta1-planning-dlq
-Rendering queue: tab-recap-vbeta1-rendering
-Storage bucket : tab-recap-vbeta1
-Jobs table     : tab-recap-vbeta1-jobs
+tab-recap-vbeta1-scene-planner
+```
+
+Storage:
+
+```text
+tab-recap-vbeta1
+```
+
+Jobs table:
+
+```text
+tab-recap-vbeta1-jobs
+```
+
+Planning queue:
+
+```text
+https://sqs.ap-southeast-2.amazonaws.com/134387458447/tab-recap-vbeta1-planning
+```
+
+Rendering queue:
+
+```text
+https://sqs.ap-southeast-2.amazonaws.com/134387458447/tab-recap-vbeta1-rendering
 ```
 
 Bedrock model/profile:
@@ -37,31 +56,21 @@ Bedrock model/profile:
 au.anthropic.claude-sonnet-4-5-20250929-v1:0
 ```
 
-Source-controlled planner configuration:
+Current source-controlled planner timeout:
 
 ```text
-Runtime       nodejs22.x
-Memory        512 MB
-Timeout       240 seconds
-Planning lease 300 seconds
+240 seconds
 ```
 
-Planning queue operating policy remains conservative:
+Planning lease:
 
 ```text
-VisibilityTimeout = 1440 seconds
-maxReceiveCount   = 3
+300 seconds
 ```
 
-## 2. Important source/deployment rule
+The vbeta1 resource names are intentional. Do not create parallel vbeta2 AWS resources merely because the source repo is now TabAPIvbeta2.
 
-A GitHub commit is not deployment proof.
-
-The deploy workflow runs from the `deploy` branch.
-
-Before claiming live source equivalence, verify Lambda configuration and, where relevant, the deploy workflow run/commit.
-
-## 3. Identity check
+## 1. Identity
 
 ```cmd
 aws sts get-caller-identity --region ap-southeast-2
@@ -73,9 +82,15 @@ Expected account:
 134387458447
 ```
 
-## 4. Standard direct planner regression
+## 2. Primary direct planner test helper
 
-Preferred command from repository root:
+Current helper:
+
+```cmd
+tests\tools\run-planner-test.cmd <size>
+```
+
+Examples:
 
 ```cmd
 tests\tools\run-planner-test.cmd 5
@@ -86,207 +101,242 @@ tests\tools\run-planner-test.cmd 50
 tests\tools\run-planner-test.cmd 75
 ```
 
-The helper:
+The script:
 
-1. uploads `tests/fixtures/bettings-N.json`;
-2. creates a `RECEIVED` job;
-3. invokes the planner Lambda directly with no qualifier/alias, therefore `$LATEST`;
-4. requires planner status `RENDERING`;
-5. downloads `scene.json`;
-6. writes a rendering-queue message file;
-7. does not send that rendering message automatically.
+1. uploads the selected fixture to S3;
+2. creates a fresh DynamoDB `RECEIVED` job;
+3. creates a direct planner event;
+4. invokes `tab-recap-vbeta1-scene-planner` at `$LATEST`;
+5. requires returned status `RENDERING`;
+6. downloads final `scene.json`;
+7. writes a render-message file for optional manual Builder handoff.
 
-## 5. Latest direct proof — PASS
+It does not automatically send the rendering SQS message.
 
-On 2026-09-18:
+## 3. Latest direct live proof — PASS
 
-| Bets | Job | Scene count | Status |
-|---:|---|---:|---|
-| 5 | `test-step10-5-20260918051253` | 8 | RENDERING |
-| 8 | `test-step10-8-20260918051209` | 11 | RENDERING |
-| 16 | `test-step10-16-20260918051457` | 16 | RENDERING |
-| 32 | `test-step10-32-20260918051624` | 20 | RENDERING |
-| 50 | `test-step10-50-20260918051812` | 25 | RENDERING |
-| 75 | `test-step10-75-20260918051948` | 27 | RENDERING |
+All of the following were run against deployed `$LATEST` on 2026-09-18.
 
-The 5 / 8 / 32 / 50 / 75 fixtures use the new real-race dataset.
+### 5 bets
 
-The 16-bet test uses the retained older baseline fixture.
+Job:
 
-The 75-bet fixture deliberately has `replayUrl = null` at sequences 74 and 75. The planner still reached `RENDERING`.
+```text
+test-step10-5-20260918051253
+```
 
-## 6. Real SQS happy path
+Observed:
 
-For a full queue-trigger proof, first create/upload the job exactly as the helper would, then send:
+```text
+status     = RENDERING
+sceneCount = 8
+```
+
+Result: **PASS**
+
+### 8 bets
+
+Job:
+
+```text
+test-step10-8-20260918051209
+```
+
+Observed:
+
+```text
+status     = RENDERING
+sceneCount = 11
+```
+
+Result: **PASS**
+
+### 16 bets
+
+Job:
+
+```text
+test-step10-16-20260918051457
+```
+
+Observed:
+
+```text
+status     = RENDERING
+sceneCount = 16
+```
+
+Result: **PASS**
+
+Note: this fixture remains the older retained baseline data set.
+
+### 32 bets
+
+Job:
+
+```text
+test-step10-32-20260918051624
+```
+
+Observed:
+
+```text
+status     = RENDERING
+sceneCount = 20
+```
+
+Result: **PASS**
+
+### 50 bets
+
+Job:
+
+```text
+test-step10-50-20260918051812
+```
+
+Observed:
+
+```text
+status     = RENDERING
+sceneCount = 25
+```
+
+Result: **PASS**
+
+### 75 bets
+
+Job:
+
+```text
+test-step10-75-20260918051948
+```
+
+Observed:
+
+```text
+status     = RENDERING
+sceneCount = 27
+```
+
+Result: **PASS**
+
+The 75-bet fixture deliberately had `replayUrl = null` at sequences 74 and 75. Planning still completed successfully.
+
+## 4. Current direct-test acceptance statement
+
+The deployed planner boundary is proven across:
+
+```text
+5 -> 8 -> 16 -> 32 -> 50 -> 75 bets
+```
+
+Current direct tests prove:
+
+- canonical fixture acceptance;
+- deterministic scene structure;
+- Scene 5 / Scene 8 scaling;
+- Scene 4 midpoint placement;
+- replay selection;
+- missing replay URL handling;
+- 75-bet compact model payload;
+- successful transition to `RENDERING`.
+
+The tests do not prove perfect prose quality.
+
+## 5. Current copy-quality note
+
+Valid plans still occasionally contain awkward LLM wording.
+
+Examples seen in live output:
+
+```text
+The block lost $45.
+profit for the day day.
+Backed 8 backed runners won their races.
+delivered The bet made $2800 profit.
+```
+
+Do not convert these into planner hard failures.
+
+If copy polish is attempted, keep it prompt-only first and compare 5- and 75-bet outputs.
+
+## 6. Historical resilience proofs retained
+
+Earlier live testing already proved these backend behaviours and the evidence remains useful:
+
+- direct happy path;
+- real planning-SQS happy path;
+- duplicate/idempotent message handling;
+- existing-scene recovery;
+- expired planning lease recovery;
+- invalid bettings rejection;
+- missing DynamoDB job rejection;
+- final direct/SQS happy path.
+
+Those tests were performed against earlier deployed planner generations. They demonstrate the surrounding S3/SQS/DynamoDB operating model, but they are not evidence that old LLM repair-loop behaviour still exists.
+
+Kubrick V2 intentionally removed that old copy/plan repair architecture.
+
+## 7. Planning queue operating decision
+
+Current source-controlled queue policy remains intentionally conservative:
+
+```text
+VisibilityTimeout = 1440 seconds
+maxReceiveCount   = 3
+```
+
+This favours non-overlapping redelivery over quick poison-message tests.
+
+A permanent failure may take roughly 48+ minutes after the first failed receive to progress to the DLQ.
+
+Verify live queue configuration when needed:
 
 ```cmd
-aws sqs send-message --queue-url https://sqs.ap-southeast-2.amazonaws.com/134387458447/tab-recap-vbeta1-planning --message-body "{"schemaVersion":"1.0","jobId":"JOB_ID","bettingsS3Key":"working/JOB_ID/bettings.json","testMode":true}" --region ap-southeast-2
+aws sqs get-queue-attributes --queue-url https://sqs.ap-southeast-2.amazonaws.com/134387458447/tab-recap-vbeta1-planning --attribute-names RedrivePolicy VisibilityTimeout --region ap-southeast-2
 ```
 
-Verify state:
+## 8. Optional manual Builder handoff
+
+After a planner helper test passes, the generated render-message file can be sent manually:
 
 ```cmd
-aws dynamodb get-item --table-name tab-recap-vbeta1-jobs --key "{"jobId":{"S":"JOB_ID"}}" --consistent-read --region ap-southeast-2
+aws sqs send-message --queue-url https://sqs.ap-southeast-2.amazonaws.com/134387458447/tab-recap-vbeta1-rendering --message-body file://PATH_TO_RENDER_MESSAGE.json --region ap-southeast-2
 ```
 
-Expected successful final planner state:
+Do not send it automatically from the planner test helper.
 
-```text
-status = RENDERING
-sceneS3Key = working/JOB_ID/scene.json
-error absent/null
-```
+## 9. Logging expectations
 
-Historical SQS happy-path/idempotency/state recovery proofs were completed on the predecessor planner baseline. Re-run a fresh SQS proof after any material deployed orchestration/state-handling change.
+Normal planner happy path should contain the applicable events for:
 
-## 7. Duplicate / idempotency proof
+- planning message accepted;
+- job claimed;
+- bettings validated;
+- deterministic plan created/stored;
+- one LLM copy request attempted;
+- valid copy merged OR copy fallback used;
+- final scene plan validated/stored;
+- job moved to `RENDERING`.
 
-After a job has reached `RENDERING`, resend the same planning message.
+Copy fallback is an availability path, not a second model attempt.
 
-Expected:
-
-- status remains `RENDERING`;
-- no second copy generation run;
-- no overwrite of a valid completed scene;
-- logs indicate already-complete/idempotent handling.
-
-## 8. Existing-scene recovery
-
-If a valid `working/JOB_ID/scene.json` already exists for a recoverable job, planner recovery should avoid unnecessary model work.
-
-This path should be re-proven after any change to state recovery or storage ownership.
-
-## 9. Expired planning lease recovery
-
-A stale `PLANNING` job with an expired lease should be claimable by a new attempt.
-
-Expected:
-
-- old attempt ownership replaced;
-- fresh lease written;
-- successful run reaches `RENDERING`;
-- temporary lease ownership fields cleared after success.
-
-## 10. Invalid canonical input
-
-A deliberately corrupted canonical input must still hard-fail.
-
-Example corruption:
-
-```text
-bet 1 profitLoss does not equal return - stake
-```
-
-Expected:
-
-- Lambda invocation fails;
-- job becomes `FAILED`;
-- no successful final `scene.json` is accepted.
-
-Copy fallback does **not** apply to invalid canonical input.
-
-## 11. Missing job
-
-Invoking with a job ID not present in DynamoDB must fail and must not silently auto-create the job.
-
-This remains a hard orchestration/state error.
-
-## 12. Copy fallback proof
-
-Copy failure is deliberately different from structural/input failure.
-
-The planner permits exactly one Bedrock copy attempt.
-
-If that attempt fails because of model invocation, parsing or copy-response validation, planner code must:
-
-1. log a copy fallback event;
-2. generate deterministic safe copy;
-3. preserve the deterministic scene structure;
-4. continue through final scene validation;
-5. reach `RENDERING` if no non-copy hard failure exists.
-
-There must be no second Bedrock call.
-
-Relevant implementation:
-
-```text
-lambda/scene-planner/llm-copy-fallback.js
-```
-
-## 13. Compact 75-bet payload proof
-
-The old rich copy payload once exceeded the model input limit at 75 bets.
-
-Current Bedrock input is the compact projection:
-
-```text
-FACT_PARTS_COMPACT_V1
-modelPayloadVersion = 1.0
-```
-
-The 2026-09-18 75-bet live pass demonstrates that the current compact path handles the full fixture successfully.
-
-Do not revert to sending the full rich validation object to Bedrock.
-
-## 14. Rendering handoff
-
-The planner helper writes:
-
-```text
-tests\results\JOB_ID\render-message.json
-```
-
-To send it manually:
-
-```cmd
-aws sqs send-message --queue-url https://sqs.ap-southeast-2.amazonaws.com/134387458447/tab-recap-vbeta1-rendering --message-body file://C:\Dev\TabAPIvbeta2\tests\results\JOB_ID\render-message.json --region ap-southeast-2
-```
-
-Then inspect Builder/DynamoDB/S3 output separately.
-
-## 15. Missing replay media proof
-
-Current canonical semantics:
-
-```text
-valid HTTPS replayUrl -> replay available
-null replayUrl        -> replay unavailable
-```
-
-A null replay URL is not a planner failure.
-
-Current deliberate test coverage:
-
-```text
-bettings-75 sequence 74 -> null
-bettings-75 sequence 75 -> null
-```
-
-The 75-bet direct proof passed.
-
-## 16. Current acceptance boundary
+## 10. Current manual-test status
 
 ### PROVEN
 
-- direct planner path at 5 / 8 / 16 / 32 / 50 / 75;
-- large compact copy payload;
-- real-data fixture handling;
-- missing replay handling;
-- deterministic scene structure;
-- copy-stage availability fallback from prior targeted proof;
-- existing AWS resource reuse.
+- direct deployed planner at 5 / 8 / 16 / 32 / 50 / 75;
+- 75-bet payload no longer exceeds model input;
+- missing replay URLs are harmless;
+- surrounding vbeta1 S3/Dynamo/SQS topology remains in use.
 
-### Re-run when relevant code changes
+### RETAINED HISTORICAL EVIDENCE
 
-- real SQS happy path;
-- idempotency;
-- stale-lease recovery;
-- existing-scene recovery;
-- DLQ/poison-message flow;
-- rendering-queue Builder handoff.
+- SQS idempotency/recovery/failure-path proofs from earlier Step-10 testing.
 
-### Not a hard acceptance failure
+### REMAINING WHEN REQUIRED
 
-Awkward copy such as grammar, repeated words or internal terminology must not be turned into a new hard planner validator.
-
-If copy quality is refined, test it separately as a prompt/copy-quality change.
+- fresh full Builder/rendered-HTML proof using the new real fixtures;
+- fresh poison-message/DLQ timing proof if that operational acceptance evidence is still required;
+- any final end-to-end frontend/orchestrator/normaliser flow proof once those planned components are integrated.
