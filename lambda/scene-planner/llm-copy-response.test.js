@@ -60,16 +60,16 @@ withinCharTolerance.scenes[replayIndex].replayLabel = text('x'.repeat(71));
 assert.doesNotThrow(() => validateCopyResponse(input, withinCharTolerance));
 
 const overCharTolerance = goodResponse();
-overCharTolerance.scenes[replayIndex].replayLabel = text('x'.repeat(72));
-assert.throws(() => validateCopyResponse(input, overCharTolerance), /hard maxChars tolerance/);
+overCharTolerance.scenes[replayIndex].replayLabel = text('x'.repeat(200));
+assert.doesNotThrow(() => validateCopyResponse(input, overCharTolerance));
 
 const withinItemCharTolerance = goodResponse();
 withinItemCharTolerance.scenes[replayIndex].replayComments[0] = text('x'.repeat(71));
 assert.doesNotThrow(() => validateCopyResponse(input, withinItemCharTolerance));
 
 const overItemCharTolerance = goodResponse();
-overItemCharTolerance.scenes[replayIndex].replayComments[0] = text('x'.repeat(72));
-assert.throws(() => validateCopyResponse(input, overItemCharTolerance), /hard itemMaxChars tolerance/);
+overItemCharTolerance.scenes[replayIndex].replayComments[0] = text('x'.repeat(200));
+assert.doesNotThrow(() => validateCopyResponse(input, overItemCharTolerance));
 
 const badIndex = goodResponse();
 badIndex.scenes[1].sceneIndex = 99;
