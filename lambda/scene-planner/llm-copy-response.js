@@ -23,9 +23,8 @@ function validateCopyResponse(copyInput, response) {
   if (!response || typeof response !== 'object' || Array.isArray(response)) {
     throw new Error('LLM copy response must be an object.');
   }
-  const topKeys = Object.keys(response);
-  if (topKeys.length !== 1 || topKeys[0] !== 'scenes' || !Array.isArray(response.scenes)) {
-    throw new Error('LLM copy response must contain only a scenes array.');
+  if (!Array.isArray(response.scenes)) {
+    throw new Error('LLM copy response must contain a scenes array.');
   }
   if (response.scenes.length !== copyInput.scenes.length) {
     throw new Error('LLM copy response scene count does not match copy input.');
@@ -43,11 +42,6 @@ function validateCopyResponse(copyInput, response) {
     }
 
     const fieldRules = source.requiredFields || {};
-    const allowed = new Set(['sceneIndex', ...Object.keys(fieldRules)]);
-    for (const key of Object.keys(item)) {
-      if (!allowed.has(key)) throw new Error('LLM copy scene ' + index + ' returned unexpected field ' + key + '.');
-    }
-
     const normalizedItem = { sceneIndex: index };
 
     for (const [field, rule] of Object.entries(fieldRules)) {
@@ -122,10 +116,6 @@ function composeParts(parts, source, phase, itemIndex, sceneIndex, field, copyIn
     }
 
     if (part.type === 'fact') {
-      const keys = Object.keys(part);
-      if (keys.length !== 2 || !keys.includes('type') || !keys.includes('id')) {
-        throw new Error(label + ' fact part ' + partIndex + ' must contain only type and id.');
-      }
       if (typeof part.id !== 'string' || !ATOM_ID_PATTERN.test(part.id)) {
         throw new Error(label + ' fact part ' + partIndex + ' has invalid atom id.');
       }
@@ -138,10 +128,6 @@ function composeParts(parts, source, phase, itemIndex, sceneIndex, field, copyIn
     }
 
     if (part.type === 'text') {
-      const keys = Object.keys(part);
-      if (keys.length !== 2 || !keys.includes('type') || !keys.includes('text')) {
-        throw new Error(label + ' text part ' + partIndex + ' must contain only type and text.');
-      }
       if (typeof part.text !== 'string' || !part.text.length) {
         throw new Error(label + ' text part ' + partIndex + ' must contain non-empty text.');
       }
@@ -232,7 +218,6 @@ function validateField(value, rule, sceneIndex, field) {
 
   if (typeof value === 'string') {
     if (!value.trim()) throw new Error(label + ' must not be empty.');
-    if (/[<>]/u.test(value)) throw new Error(label + ' contains forbidden markup.');
     return;
   }
 
@@ -241,7 +226,6 @@ function validateField(value, rule, sceneIndex, field) {
     if (rule.maxItems !== undefined && value.length > rule.maxItems) throw new Error(label + ' has too many items.');
     for (const item of value) {
       if (typeof item !== 'string' || !item.trim()) throw new Error(label + ' items must be non-empty strings.');
-      if (/[<>]/u.test(item)) throw new Error(label + ' item contains forbidden markup.');
     }
     return;
   }
