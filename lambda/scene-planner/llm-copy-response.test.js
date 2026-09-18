@@ -78,49 +78,55 @@ const badIndex = goodResponse();
 badIndex.scenes[1].sceneIndex = 99;
 assert.throws(() => validateCopyResponse(input, badIndex), /sceneIndex mismatch/);
 
-const group67Index = input.scenes.findIndex(scene =>
-  scene.sceneType === 5 &&
-  JSON.stringify(scene.betSequences) === JSON.stringify([6, 7])
-);
-assert.ok(group67Index >= 0);
+const groupedIndex = input.scenes.findIndex(scene => scene.sceneType === 5 && scene.betSequences.length >= 2);
+assert.ok(groupedIndex >= 0);
+const groupedScene = input.scenes[groupedIndex];
+const groupedPostAtoms = groupedScene.context.factAtomsByPhase.POST_RESULT_BLOCK;
+const groupedFirst = groupedScene.betSequences[0];
+const groupedSecond = groupedScene.betSequences[1];
 
 const groundedGroup = goodResponse();
-groundedGroup.scenes[group67Index].payoffHeadline = text('A tough double landed.');
-groundedGroup.scenes[group67Index].contextLine = [
-  fact('B6_FINISH'),
-  fact('B7_FINISH'),
+groundedGroup.scenes[groupedIndex].payoffHeadline = text('A tough double landed.');
+groundedGroup.scenes[groupedIndex].contextLine = [
+  fact('B' + groupedFirst + '_FINISH'),
+  fact('B' + groupedSecond + '_FINISH'),
   fact('BLOCK_PROFIT_LOSS'),
   textPart(' The pressure was building.')
 ];
 const groundedGroupNormalized = validateCopyResponse(input, groundedGroup);
-assert.strictEqual(groundedGroupNormalized.scenes[group67Index].contextLine, 'GIN AND BARE IT finished 4th. INSAIN CHAOS finished 2nd. The block lost $85. The pressure was building.');
+assert.strictEqual(
+  groundedGroupNormalized.scenes[groupedIndex].contextLine,
+  groupedPostAtoms['B' + groupedFirst + '_FINISH'] + ' ' +
+    groupedPostAtoms['B' + groupedSecond + '_FINISH'] + ' ' +
+    groupedPostAtoms.BLOCK_PROFIT_LOSS + ' The pressure was building.'
+);
 
 const tolerantPrefixIntoClause = goodResponse();
-tolerantPrefixIntoClause.scenes[group67Index].contextLine = [
+tolerantPrefixIntoClause.scenes[groupedIndex].contextLine = [
   textPart('That result was '),
   fact('BLOCK_PROFIT_LOSS')
 ];
 const tolerantPrefixNormalized = validateCopyResponse(input, tolerantPrefixIntoClause);
-assert.strictEqual(tolerantPrefixNormalized.scenes[group67Index].contextLine, 'That result was The block lost $85.');
+assert.strictEqual(tolerantPrefixNormalized.scenes[groupedIndex].contextLine, 'That result was ' + groupedPostAtoms.BLOCK_PROFIT_LOSS);
 
 const tolerantSuffixFromClause = goodResponse();
-tolerantSuffixFromClause.scenes[group67Index].contextLine = [
+tolerantSuffixFromClause.scenes[groupedIndex].contextLine = [
   fact('BLOCK_PROFIT_LOSS'),
   textPart(' turned the day around.')
 ];
 const tolerantSuffixNormalized = validateCopyResponse(input, tolerantSuffixFromClause);
-assert.strictEqual(tolerantSuffixNormalized.scenes[group67Index].contextLine, 'The block lost $85. turned the day around.');
+assert.strictEqual(tolerantSuffixNormalized.scenes[groupedIndex].contextLine, groupedPostAtoms.BLOCK_PROFIT_LOSS + ' turned the day around.');
 
 const goodClauseNarrative = goodResponse();
-goodClauseNarrative.scenes[group67Index].contextLine = [
+goodClauseNarrative.scenes[groupedIndex].contextLine = [
   fact('BLOCK_PROFIT_LOSS'),
   textPart(' That changed the mood.')
 ];
 const goodClauseNarrativeNormalized = validateCopyResponse(input, goodClauseNarrative);
-assert.strictEqual(goodClauseNarrativeNormalized.scenes[group67Index].contextLine, 'The block lost $85. That changed the mood.');
+assert.strictEqual(goodClauseNarrativeNormalized.scenes[groupedIndex].contextLine, groupedPostAtoms.BLOCK_PROFIT_LOSS + ' That changed the mood.');
 
 const falseCollectiveFinish = goodResponse();
-falseCollectiveFinish.scenes[group67Index].payoffHeadline = text('Both runners second');
+falseCollectiveFinish.scenes[groupedIndex].payoffHeadline = text('Both runners second');
 assert.doesNotThrow(() => validateCopyResponse(input, falseCollectiveFinish));
 
 const ordinaryNarrativeOrdinal = goodResponse();
@@ -160,11 +166,12 @@ rawMoney.scenes[dayIndex].dayVerdict = text('The day finished $20 up.');
 assert.doesNotThrow(() => validateCopyResponse(input, rawMoney));
 
 const explicitPosition = goodResponse();
-explicitPosition.scenes[group67Index].payoffHeadline = text('Both runners finished second');
+explicitPosition.scenes[groupedIndex].payoffHeadline = text('Both runners finished second');
 assert.doesNotThrow(() => validateCopyResponse(input, explicitPosition));
 
+const bet3Runner = fixture.bets[2].runnerName;
 const protectedRunner = goodResponse();
-protectedRunner.scenes[bet3SceneIndex].tensionLine = text('ROCEM is ready to go');
+protectedRunner.scenes[bet3SceneIndex].tensionLine = text(bet3Runner + ' is ready to go');
 assert.doesNotThrow(() => validateCopyResponse(input, protectedRunner));
 
 const groundedRunner = goodResponse();
@@ -173,7 +180,7 @@ groundedRunner.scenes[bet3SceneIndex].tensionLine = [
   textPart(' is ready to go')
 ];
 const groundedRunnerNormalized = validateCopyResponse(input, groundedRunner);
-assert.strictEqual(groundedRunnerNormalized.scenes[bet3SceneIndex].tensionLine, 'ROCEM is ready to go');
+assert.strictEqual(groundedRunnerNormalized.scenes[bet3SceneIndex].tensionLine, bet3Runner + ' is ready to go');
 
 const textPartWithExtraMetadata = goodResponse();
 textPartWithExtraMetadata.scenes[bet3SceneIndex].tensionLine = [{ type: 'text', text: '<b>ROCEM</b> at $5 is still just display text.', note: 'ignore me' }];
@@ -181,13 +188,13 @@ const textMetadataNormalized = validateCopyResponse(input, textPartWithExtraMeta
 assert.strictEqual(textMetadataNormalized.scenes[bet3SceneIndex].tensionLine, '<b>ROCEM</b> at $5 is still just display text.');
 
 const blankTextFragment = goodResponse();
-blankTextFragment.scenes[group67Index].contextLine = [
+blankTextFragment.scenes[groupedIndex].contextLine = [
   fact('BLOCK_PROFIT_LOSS'),
   textPart('   '),
   textPart(' The pressure remained.')
 ];
 const blankTextNormalized = validateCopyResponse(input, blankTextFragment);
-assert.strictEqual(blankTextNormalized.scenes[group67Index].contextLine, 'The block lost $85. The pressure remained.');
+assert.strictEqual(blankTextNormalized.scenes[groupedIndex].contextLine, groupedPostAtoms.BLOCK_PROFIT_LOSS + ' The pressure remained.');
 
 const wrongPhaseAtom = goodResponse();
 wrongPhaseAtom.scenes[bet3SceneIndex].tensionLine = [
@@ -206,8 +213,8 @@ crossSceneFinalFact.scenes[finalSceneIndex].shareCaption = [
   fact('B8_RESULT_SUMMARY')
 ];
 const crossSceneFinalNormalized = validateCopyResponse(input, crossSceneFinalFact);
-assert.ok(crossSceneFinalNormalized.scenes[finalSceneIndex].shareCaption.includes('LE PLUS RAPIDE'));
-assert.ok(crossSceneFinalNormalized.scenes[finalSceneIndex].shareCaption.includes('finished 1st'));
+assert.ok(crossSceneFinalNormalized.scenes[finalSceneIndex].shareCaption.includes(fixture.bets[7].runnerName));
+assert.ok(crossSceneFinalNormalized.scenes[finalSceneIndex].shareCaption.includes(input.factCatalog.B8_RESULT_SUMMARY));
 
 const futureResultLeak = goodResponse();
 futureResultLeak.scenes[bet3SceneIndex].tensionLine = [
