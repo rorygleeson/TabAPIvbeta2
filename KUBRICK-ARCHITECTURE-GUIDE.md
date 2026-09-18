@@ -4,7 +4,7 @@
 >
 > This document supersedes the old vbeta1 Kubrick planner design.
 
-Last updated: 2026-09-18
+Last updated: 2026-09-19
 
 ---
 
@@ -508,7 +508,7 @@ Region:
 ap-southeast-2
 ```
 
-Key resources:
+Key backend resources:
 
 ```text
 S3        tab-recap-vbeta1
@@ -518,6 +518,16 @@ SQS       tab-recap-vbeta1-rendering
 Lambda    tab-recap-vbeta1-scene-planner
 Lambda    tab-recap-vbeta1-builder-recap
 ```
+
+The new POC API source/IaC adds:
+
+```text
+API Gateway REST API  tab-recap-vbeta1-api
+Lambda                tab-recap-vbeta1-orchestrator
+Usage Plan            tab-recap-vbeta1-poc
+```
+
+The API key value is deliberately **not** stored in source or documentation. It is created manually in API Gateway and attached to the usage plan after deployment.
 
 Bedrock model/profile:
 
@@ -538,11 +548,9 @@ Deployment runs from the `deploy` branch via `.github/workflows/deploy.yml`.
 
 GitHub source changes are not assumed deployed until the deployment flow is explicitly run and verified.
 
----
-
 ## 10. Current implemented backend flow
 
-The currently implemented planner/builder backend boundary is:
+The currently proven backend path is:
 
 ```text
 working/<jobId>/bettings.json
@@ -567,80 +575,84 @@ rendering SQS
        v
 Builder Lambda
        |
-       v
-recap HTML in private S3
+       +--> recaps/<jobId>/recap.html
+       +--> DynamoDB READY + recapS3Key
 ```
 
-The planner test harness directly invokes the planner and stops after `RENDERING`; it does not automatically send the rendering SQS message.
+The Planner now sends the rendering SQS message automatically after `scene.json` is written and the job is transitioned to `RENDERING`.
 
----
+The parameterised harness `tests/tools/run-planner-test.cmd` now verifies the complete Planner -> rendering SQS -> Builder path and downloads the final recap HTML. Live 5-, 50- and 75-bet runs have reached `READY`.
 
-## 11. Planned full product flow
+The existing downstream Planner/Builder contracts are unchanged by the Orchestrator work.
 
-The intended full pilot/product flow remains broader than the currently tested planner boundary.
+## 11. POC API / Orchestrator boundary
 
-Planned end-to-end flow:
+For the POC, the Normaliser is deliberately decoupled. Any client that can produce canonical `bettings.json` may call the API.
+
+The locked public API surface is exactly:
 
 ```text
-Pilot frontend
+POST /jobs
+GET  /jobs/{jobId}
+```
+
+Both methods require an API Gateway API key through the standard `x-api-key` header.
+
+The API Gateway key is a shared POC secret rather than user authentication. The actual key value must never be committed to GitHub or documented in the repository. It is created manually in the AWS Console and attached to the deployed usage plan.
+
+`POST /jobs` accepts canonical `bettings.json` as the request body. The Orchestrator:
+
+```text
+generates UUID jobId
+-> writes working/<jobId>/bettings.json
+-> creates DynamoDB job = RECEIVED
+-> sends the existing planning SQS message
+-> returns jobId
+```
+
+The UUID is owned by the Orchestrator. Planner and Builder continue treating `jobId` as an opaque non-empty string, so the existing downstream flow does not change.
+
+`GET /jobs/{jobId}` reads DynamoDB. While processing it returns the current status. When the job is `READY`, the Orchestrator uses `recapS3Key` to generate a fresh short-lived S3 pre-signed URL and returns it as `recapUrl`.
+
+The pre-signed URL is never stored in DynamoDB. The stable object key remains the persisted state.
+
+POC flow:
+
+```text
+any canonical-data client
   |
+  | POST /jobs + x-api-key
   v
-API Gateway / simple pilot access boundary
+API Gateway
   |
   v
 Orchestrator Lambda
   |
-  +--> create job in DynamoDB
-  +--> issue short-lived presigned S3 upload URL
+  +--> UUID jobId
+  +--> private S3 bettings.json
+  +--> DynamoDB RECEIVED
+  +--> planning SQS
   |
   v
-browser uploads TAB CSV directly to private S3
-  |
-  v
-one Python Normaliser Lambda
-  |
-  +--> Pass 1: deterministic CSV parse/normalisation
-  +--> Pass 2: authoritative historical race/result/media enrichment
-  +--> Pass 3: final canonical bettings.json
-  |
-  v
-planning SQS
-  |
-  v
-Kubrick V2 Scene Planner Lambda
-  |
-  +--> deterministic scene structure
-  +--> one Bedrock copy call
-  +--> deterministic fallback if copy stage fails
-  |
-  v
-scene.json
+Kubrick V2 Planner
   |
   v
 rendering SQS
   |
   v
-existing Builder Lambda
+Builder
   |
-  v
-private recap.html in S3
+  +--> private recap.html
+  +--> DynamoDB READY
   |
+  | GET /jobs/{jobId} + x-api-key
   v
-short-lived recap URL
-  |
-  v
-frontend polls job status and displays/redirects to recap
+Orchestrator generates fresh recapUrl
 ```
 
-DynamoDB remains the job/status store across the flow. S3 remains private object storage for upload, working artifacts and rendered output. SQS remains the decoupling boundary between planning and rendering.
+Source and IaC for this API/Orchestrator are implemented in the repository. They remain **IN PROGRESS** until the new stack is deployed, the API key is configured manually, and an API-level end-to-end test reaches `READY`.
 
-The exact event/queue handoff used to trigger the future production Normaliser is not yet locked and must not be invented prematurely.
-
-This full flow is a target architecture. The current repository contains the integrated local Normaliser proving ground plus the implemented planner and Builder, but the complete browser-upload/API/orchestration/status/delivery path is not yet treated as proven production flow.
-
-Do not blur **implemented/proven** and **planned** components.
-
----
+The new test harness `tests/tools/run-orchestrator-test.cmd` is intended to exercise the same 5 / 8 / 16 / 32 / 50 / 75 canonical fixtures through the public API.
 
 ## 12. Normaliser boundary
 
@@ -682,20 +694,21 @@ The 16-bet fixture remains the older baseline dataset.
 
 The 75-bet fixture deliberately has `replayUrl: null` on sequences 74 and 75 to prove missing replay media is harmless.
 
-Direct live planner tests reached `RENDERING` on 2026-09-18 for:
+Planner structural tests have passed at 5 / 8 / 16 / 32 / 50 / 75 bets.
+
+The downstream automatic handoff is now also live-proven:
 
 ```text
-5 bets  -> 8 scenes
-8 bets  -> 11 scenes
-16 bets -> 16 scenes
-32 bets -> 20 scenes
-50 bets -> 25 scenes
-75 bets -> 27 scenes
+5 bets  -> Planner -> rendering SQS -> Builder -> READY -> recap.html
+50 bets -> Planner -> rendering SQS -> Builder -> READY -> recap.html
+75 bets -> Planner -> rendering SQS -> Builder -> READY -> recap.html
 ```
 
-This proves planner structural stability across the tested sizes. It does not mean every generated sentence is polished.
+The 50-bet run exposed one legitimate Scene 4 grounding gap. `CHECKPOINT_BETS_REMAINING` was added to the `PRE_FUTURE_RESULTS` phase and the rerun completed with real LLM copy rather than fallback.
 
----
+The 75-bet end-to-end run also completed with real LLM copy and reached `READY`.
+
+The public API/Orchestrator path has not yet been live-proven.
 
 ## 14. Copy-quality hardening
 
@@ -739,7 +752,7 @@ These rules are mandatory:
 
 ### PROVEN
 
-- deterministic Kubrick V2 planner implemented;
+- deterministic Kubrick V2 planner implemented and live-tested;
 - canonical input cleanup implemented;
 - exact primary coverage and chronology enforced;
 - replay eligibility/placement implemented;
@@ -747,12 +760,12 @@ These rules are mandatory:
 - Scene 5 and Scene 8 grouping implemented;
 - duration candidate selection implemented;
 - compact one-call copy payload implemented;
-- atomic fact-value copy interface implemented in source;
-- compact grounded-string response protocol live-proven at 75 bets;
-- semantic V4 typed atom/capability interface implemented and CI-proven;
+- semantic V4 copy interface live-tested;
 - deterministic copy fallback implemented;
-- existing Builder compatibility retained;
-- direct live planner tests pass at 5 / 8 / 16 / 32 / 50 / 75;
+- Planner automatically sends the rendering SQS message;
+- Builder consumes the rendering message and writes `recaps/<jobId>/recap.html`;
+- DynamoDB transitions through `RENDERING` to `READY`;
+- end-to-end Planner -> rendering SQS -> Builder is live-proven at 5, 50 and 75 bets;
 - 75-bet fixture passes with two missing replay URLs.
 
 ### LOCKED
@@ -764,31 +777,24 @@ These rules are mandatory:
 - no second model call;
 - copy-stage failure falls back deterministically;
 - prose quality remains non-fatal;
-- existing vbeta1 AWS topology is reused;
-- Builder remains downstream-compatible.
+- existing vbeta1-named AWS backend topology is reused;
+- Builder remains downstream-compatible;
+- Orchestrator generates UUID `jobId`;
+- public POC API is `POST /jobs` plus `GET /jobs/{jobId}`;
+- both API methods require API Gateway `x-api-key`;
+- the API key value is created manually in AWS and is never stored in source;
+- the Normaliser remains decoupled and is not part of the API contract;
+- DynamoDB stores stable `recapS3Key`, not a pre-signed URL;
+- `GET /jobs/{jobId}` generates a fresh short-lived recap URL when status is `READY`.
 
-### REMAINING / PLANNED
+### IN PROGRESS
 
-- deploy and live-test semantic V4 across representative 5 / 16 / 32 / 75-bet fixtures and compare copy quality/token usage against the recorded V3 runs;
-- continue Builder/rendered-HTML regression proof with the new real fixtures where useful;
-- continue Normaliser integration toward canonical `bettings.json`;
-- complete the full upload/orchestration/status/delivery product path when that work is resumed.
+- deploy `tabapivbeta1-orchestrator` from `infra/orchestrator.yml`;
+- manually create/attach the shared API Gateway key to the `tab-recap-vbeta1-poc` usage plan;
+- live-test `tests/tools/run-orchestrator-test.cmd` against representative fixtures;
+- mark the API/Orchestrator boundary PROVEN only after the public API reaches `READY` and the returned pre-signed URL downloads the recap.
 
-The planner should not be structurally redesigned unless new evidence demonstrates a real architectural defect.
-
-
-### Final V4 semantic hardening — 2026-09-18
-
-The final V4 copy interface adds three narrow safeguards without changing planner structure, Builder inputs, validation philosophy or the one-call/fallback architecture:
-
-- return/P&L model-facing facts carry their semantic noun as indivisible text units (for example `$126 returned`, `$96 profit`, `$45 loss`), preventing correct amounts from being relabelled as the wrong financial concept;
-- `replayEvidence=RESULT_FACTS_ONLY` explicitly limits replay labels/comments to supplied result facts and does not authorize invented race-running action;
-- `oddsClassificationEvidence=NONE` means numeric decimal odds must not be converted into inferred favourite/outsider/longshot-style classifications.
-
-The 75-bet CI model payload increased from 64,991 bytes to 66,459 bytes (+1,468 bytes, about 2.3%), remaining below the final V4 69,000-byte regression ceiling. CI remains green at 5 / 8 / 16 / 32 / 75 bets, including Builder and deterministic fallback compatibility.
-
-
----
+The planner/Builder path should not be structurally redesigned unless new evidence demonstrates a real architectural defect.
 
 ## Appendix A. Scene Template Variable Ownership Mapping
 

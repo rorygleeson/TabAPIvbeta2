@@ -33,6 +33,10 @@ jobs:
         working-directory: lambda/scene-planner
         run: npm ci --ignore-scripts
 
+      - name: Install orchestrator dependencies
+        working-directory: lambda/orchestrator
+        run: npm install --ignore-scripts
+
       - name: Syntax check builder JavaScript
         run: |
           node --check lambda/builder-recap/index.js
@@ -142,6 +146,17 @@ jobs:
           node lambda/scene-planner/llm-copy-response.test.js
           node lambda/scene-planner/llm-copy-merge.test.js
           echo "OK: Kubrick v2 deterministic planner, one-call LLM copy boundary, deterministic copy fallback and final Builder compatibility validated."
+
+      - name: Verify orchestrator scaffold
+        run: |
+          test -f lambda/orchestrator/index.js
+          test -f lambda/orchestrator/index.test.js
+          test -f lambda/orchestrator/package.json
+          test -f infra/orchestrator.yml
+          node --check lambda/orchestrator/index.js
+          node --check lambda/orchestrator/index.test.js
+          node lambda/orchestrator/index.test.js
+          echo "OK: Orchestrator API entrypoint and IaC scaffold validated."
 
       - name: Reject obvious backup/history files
         run: |

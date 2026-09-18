@@ -240,3 +240,47 @@ jobs:
             --stack-name tabapivbeta1-scene-planner \
             --query "Stacks[0].Outputs" \
             --output table
+
+      - name: Package orchestrator Lambda
+        run: |
+          rm -rf dist/orchestrator-package dist/orchestrator.zip
+          mkdir -p dist/orchestrator-package
+          cd lambda/orchestrator
+          npm install --omit=dev --ignore-scripts
+          cd ../..
+          cp lambda/orchestrator/index.js dist/orchestrator-package/index.js
+          cp lambda/orchestrator/package.json dist/orchestrator-package/package.json
+          cp -R lambda/orchestrator/node_modules dist/orchestrator-package/node_modules
+          test -f dist/orchestrator-package/index.js
+          test -d dist/orchestrator-package/node_modules/@aws-sdk/client-s3
+          test -d dist/orchestrator-package/node_modules/@aws-sdk/client-dynamodb
+          test -d dist/orchestrator-package/node_modules/@aws-sdk/client-sqs
+          test -d dist/orchestrator-package/node_modules/@aws-sdk/s3-request-presigner
+          cd dist/orchestrator-package
+          zip -qr ../orchestrator.zip .
+          cd ../..
+          unzip -l dist/orchestrator.zip | grep 'index.js'
+          aws s3 cp \
+            dist/orchestrator.zip \
+            s3://tab-recap-vbeta1/deploy-artifacts/orchestrator/$GITHUB_SHA.zip \
+            --region ap-southeast-2
+
+      - name: Deploy orchestrator API
+        run: |
+          aws cloudformation deploy \
+            --region ap-southeast-2 \
+            --stack-name tabapivbeta1-orchestrator \
+            --template-file infra/orchestrator.yml \
+            --parameter-overrides \
+              ArtifactBucket=tab-recap-vbeta1 \
+              ArtifactKey=deploy-artifacts/orchestrator/$GITHUB_SHA.zip \
+            --capabilities CAPABILITY_NAMED_IAM \
+            --no-fail-on-empty-changeset
+
+      - name: Show orchestrator outputs
+        run: |
+          aws cloudformation describe-stacks \
+            --region ap-southeast-2 \
+            --stack-name tabapivbeta1-orchestrator \
+            --query "Stacks[0].Outputs" \
+            --output table
