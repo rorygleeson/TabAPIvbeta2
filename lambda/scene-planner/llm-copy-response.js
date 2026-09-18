@@ -257,8 +257,6 @@ function validateField(value, rule, sceneIndex, field) {
 
   if (typeof value === 'string') {
     if (!value.trim()) throw new Error(label + ' must not be empty.');
-    const hardMaxChars = hardCharLimit(rule.maxChars);
-    if (hardMaxChars && value.length > hardMaxChars) throw new Error(label + ' exceeds hard maxChars tolerance (' + hardMaxChars + ').');
     if (/[<>]/u.test(value)) throw new Error(label + ' contains forbidden markup.');
     return;
   }
@@ -268,8 +266,6 @@ function validateField(value, rule, sceneIndex, field) {
     if (rule.maxItems !== undefined && value.length > rule.maxItems) throw new Error(label + ' has too many items.');
     for (const item of value) {
       if (typeof item !== 'string' || !item.trim()) throw new Error(label + ' items must be non-empty strings.');
-      const hardItemMaxChars = hardCharLimit(rule.itemMaxChars);
-      if (hardItemMaxChars && item.length > hardItemMaxChars) throw new Error(label + ' item exceeds hard itemMaxChars tolerance (' + hardItemMaxChars + ').');
       if (/[<>]/u.test(item)) throw new Error(label + ' item contains forbidden markup.');
     }
     return;
