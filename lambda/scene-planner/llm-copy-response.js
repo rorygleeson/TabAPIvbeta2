@@ -1,7 +1,7 @@
 'use strict';
 
 const ATOM_ID_PATTERN = /^[A-Z][A-Z0-9_]*$/u;
-const SENSITIVE_NARRATIVE_PATTERN = /(?:[$%@]|\d|\b(?:win|wins|winner|winners|winning|won|loss|losses|lost|lose|losing|profit|profits|return|returns|returned|stake|staked|odds)\b)/iu;
+const RAW_CONCRETE_PATTERN = /[$%@]|\d/u;
 const POSITION_WORD = '(?:first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|eleventh|twelfth|thirteenth|fourteenth|fifteenth|sixteenth|seventeenth|eighteenth|nineteenth|twentieth)';
 const POSITION_CLAIM_PATTERN = new RegExp(
   '\\b(?:finished|finishing|ran|placed|came)\\s+' + POSITION_WORD + '\\b' +
@@ -177,8 +177,8 @@ function atomsForPhase(source, phase, itemIndex) {
 
 function validateNarrativeText(rawText, source, label) {
   const text = String(rawText || '');
-  if (SENSITIVE_NARRATIVE_PATTERN.test(text) || POSITION_CLAIM_PATTERN.test(text)) {
-    throw new Error(label + ' contains concrete factual wording; use a fact part instead.');
+  if (RAW_CONCRETE_PATTERN.test(text) || POSITION_CLAIM_PATTERN.test(text)) {
+    throw new Error(label + ' contains raw concrete factual wording; use a fact part instead.');
   }
 
   const lower = text.toLocaleLowerCase('en-AU');

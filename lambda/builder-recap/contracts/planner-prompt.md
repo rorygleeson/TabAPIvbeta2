@@ -65,7 +65,7 @@ Never use `{{ATOM}}` placeholders. Never put a fact atom ID inside a text part.
 A `fact` part must contain only `type` and `id`.
 A `text` part must contain only `type` and `text`.
 
-Narrative text is only for style, transitions, emotion and connective language. It must not independently state concrete names, race details, numbers, stakes, odds, positions, outcomes, returns, profit/loss, running P&L, counts or day totals. Use a fact part for those.
+Narrative text is for style, transitions, emotion, interpretation and connective language. Normal wagering vocabulary such as win, winner, loss, profit, return, stake and odds is allowed in text parts. Exact concrete facts such as runner/meeting/race names, numeric values, money, odds values, counts and explicit finishing positions must come from fact parts.
 
 Do not rewrite, paraphrase, alter, round, merge or independently restate factual content contained in an atom.
 
@@ -147,8 +147,8 @@ For enum fields, return the enum value directly. Do not wrap enums in parts.
 ## Style
 
 Write concise, energetic wagering recap copy.
-Use fact parts naturally so the copy can still mention specific runners, meetings, bets, results, odds and money.
-Use text parts for rhythm, transitions, emotion and narrative colour.
+Use fact parts naturally for exact factual values such as specific runners, meetings, bets, results, odds values and money.
+Use text parts freely for rhythm, transitions, emotion, narrative colour and normal wagering language including win/loss/profit/return/stake/odds terminology.
 Vary wording across nearby scenes.
 Do not use HTML or markup.
 
