@@ -1,0 +1,181 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: API Gateway and Orchestrator Lambda for the TAB Daily Recap vbeta1 pilot.
+
+Parameters:
+  ArtifactBucket:
+    Type: String
+    Description: S3 bucket containing the Lambda deployment package.
+  ArtifactKey:
+    Type: String
+    Description: S3 key of the Lambda deployment package.
+
+Resources:
+  OrchestratorExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: tab-recap-vbeta1-orchestrator-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: OrchestratorRuntime
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - s3:PutObject
+                Resource: arn:aws:s3:::tab-recap-vbeta1/working/*
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                Resource: arn:aws:s3:::tab-recap-vbeta1/recaps/*
+              - Effect: Allow
+                Action:
+                  - dynamodb:PutItem
+                  - dynamodb:GetItem
+                Resource: arn:aws:dynamodb:ap-southeast-2:134387458447:table/tab-recap-vbeta1-jobs
+              - Effect: Allow
+                Action:
+                  - sqs:SendMessage
+                Resource: arn:aws:sqs:ap-southeast-2:134387458447:tab-recap-vbeta1-planning
+      Tags:
+        - Key: Project
+          Value: TabAPIvbeta1
+        - Key: Environment
+          Value: pilot
+
+  OrchestratorFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: tab-recap-vbeta1-orchestrator
+      Runtime: nodejs22.x
+      Handler: index.handler
+      Role: !GetAtt OrchestratorExecutionRole.Arn
+      Timeout: 30
+      MemorySize: 256
+      Environment:
+        Variables:
+          STORAGE_BUCKET: tab-recap-vbeta1
+          JOBS_TABLE: tab-recap-vbeta1-jobs
+          PLANNING_QUEUE_URL: !Sub https://sqs.${AWS::Region}.amazonaws.com/${AWS::AccountId}/tab-recap-vbeta1-planning
+          RECAP_URL_TTL_SECONDS: '900'
+      Code:
+        S3Bucket: !Ref ArtifactBucket
+        S3Key: !Ref ArtifactKey
+      Tags:
+        - Key: Project
+          Value: TabAPIvbeta1
+        - Key: Environment
+          Value: pilot
+
+  RecapApi:
+    Type: AWS::ApiGateway::RestApi
+    Properties:
+      Name: tab-recap-vbeta1-api
+      Description: Pilot API for submitting canonical bettings.json and polling recap jobs.
+      EndpointConfiguration:
+        Types:
+          - REGIONAL
+
+  JobsResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref RecapApi
+      ParentId: !GetAtt RecapApi.RootResourceId
+      PathPart: jobs
+
+  JobResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref RecapApi
+      ParentId: !Ref JobsResource
+      PathPart: '{jobId}'
+
+  CreateJobMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref RecapApi
+      ResourceId: !Ref JobsResource
+      HttpMethod: POST
+      AuthorizationType: NONE
+      ApiKeyRequired: true
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${OrchestratorFunction.Arn}/invocations
+
+  GetJobMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref RecapApi
+      ResourceId: !Ref JobResource
+      HttpMethod: GET
+      AuthorizationType: NONE
+      ApiKeyRequired: true
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${OrchestratorFunction.Arn}/invocations
+
+  ApiDeployment:
+    Type: AWS::ApiGateway::Deployment
+    DependsOn:
+      - CreateJobMethod
+      - GetJobMethod
+    Properties:
+      RestApiId: !Ref RecapApi
+      Description: Initial pilot API deployment.
+
+  ApiStage:
+    Type: AWS::ApiGateway::Stage
+    Properties:
+      RestApiId: !Ref RecapApi
+      DeploymentId: !Ref ApiDeployment
+      StageName: poc
+
+  PilotUsagePlan:
+    Type: AWS::ApiGateway::UsagePlan
+    DependsOn:
+      - ApiStage
+    Properties:
+      UsagePlanName: tab-recap-vbeta1-poc
+      Description: Shared-key pilot usage plan. API key value is created manually and is never stored in source.
+      ApiStages:
+        - ApiId: !Ref RecapApi
+          Stage: !Ref ApiStage
+      Throttle:
+        RateLimit: 5
+        BurstLimit: 10
+
+  OrchestratorInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref OrchestratorFunction
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${RecapApi}/*/*/*
+
+Outputs:
+  OrchestratorFunctionName:
+    Description: Orchestrator Lambda function name.
+    Value: !Ref OrchestratorFunction
+  RecapApiId:
+    Description: API Gateway REST API ID.
+    Value: !Ref RecapApi
+  RecapApiBaseUrl:
+    Description: Pilot API base URL.
+    Value: !Sub https://${RecapApi}.execute-api.${AWS::Region}.amazonaws.com/poc
+  PilotUsagePlanId:
+    Description: Usage plan to which the manually created API key must be attached.
+    Value: !Ref PilotUsagePlan
