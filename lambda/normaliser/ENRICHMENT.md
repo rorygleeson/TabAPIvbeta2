@@ -1,5 +1,8 @@
 # TAB Pass 2 Enrichment Logic Specification
 
+> **Component-level Pass 2 reference.** Current integrated Normaliser authority is `docs/NORMALISER-LOGIC-SPEC.md` using `tests/normaliser/normaliser.py`. This file records the Pass 2 enrichment contract and remains useful design detail, but overall current status must be read from the integrated vbeta2 specification.
+
+
 > Component/reference specification for the standalone Pass-2 enrichment harness. The current integrated local Normaliser direction is documented in `docs/NORMALISER-LOGIC-SPEC.md` and implemented in `tests/normaliser/normaliser.py`. Keep this file for enrichment provenance; do not treat it as the end-to-end Normaliser status document.
 
 Status: **PASS 2 v0.1 TEST CANDIDATE**  
