@@ -79,7 +79,7 @@ GOOD:
 ]
 ```
 
-Code joins complete factual clauses with sentence spacing. Do not try to make a clause fact finish grammar that starts in a text part, and do not make text finish grammar that starts in a clause fact.
+Code joins complete factual clauses with safe spacing. For copy quality, treat clause facts as complete sentences and start fresh narrative after them. This is generation guidance, not a hard validation rule: awkward grammar must not fail an otherwise factually and structurally valid recap.
 
 ### Inline facts
 
@@ -186,7 +186,7 @@ For enum fields, return the enum value directly. Do not wrap enums in parts.
 Write concise, energetic wagering recap copy.
 Use fact parts naturally for exact factual values.
 Use text parts freely for rhythm, transitions, emotion, narrative colour and normal wagering language.
-Prefer clean sentence boundaries over complicated stitching around factual clauses.
+Prefer clean sentence boundaries over complicated stitching around factual clauses. Prose quality is prompt-owned and non-fatal; factual and structural correctness are code-enforced.
 Vary wording across nearby scenes.
 Do not use HTML or markup.
 
@@ -194,7 +194,7 @@ Do not use HTML or markup.
 
 `maxWords` and `itemMaxWords` are writing targets. Aim to stay inside them.
 
-`maxChars` and `itemMaxChars` are design targets. Code applies a small hard tolerance after fact expansion and part joining, so keep the final wording close to the supplied target.
+`maxChars` and `itemMaxChars` are design targets only. Keep the final wording close to them, but length overshoot is non-fatal and must not cause an otherwise valid recap to fail.
 
 For prose-array fields, preserve input item order.
 

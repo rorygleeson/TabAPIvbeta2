@@ -1,5 +1,5 @@
 {
-  "contractVersion": "2.0.15",
+  "contractVersion": "2.0.17",
   "companionContracts": [
     "contracts/bettings.schema.json",
     "contracts/scene-plan.schema.json",
@@ -51,8 +51,9 @@
       "rule": "Stable day/bet facts are supplied once in a recap-wide factCatalog. Each scene phase carries a deterministic allowedGlobalFactIdsByPhase scope derived from chronology, while scene-specific aggregates remain local factAtomsByPhase. The model may use only fact IDs allowed by the current phase. Fact atoms ending in sentence punctuation are complete clause atoms and must stand as sentence segments; short inline atoms may compose naturally with text.",
       "scopePolicy": "PRE_RESULT_DAY exposes pre-result facts only; PRE_RESULT and PRE_RESULT_BLOCK expose all pre-result facts plus outcomes already completed before that point; POST_RESULT and POST_RESULT_BLOCK add outcomes through the completed bet/block; POST_COMPLETED_BETS and PRE_FUTURE_RESULTS expose outcomes only through the deterministic checkpoint; POST_RESULT_BY_BET advances row-by-row; POST_DAY exposes all stable facts from the completed day.",
       "semanticDistinction": "A winning bet is not necessarily a race-winning runner. Race-win wording requires finishingPosition=1; bet-result wording follows the wager result.",
-      "validation": "Planner resolves fact IDs from the same recap-wide catalog and deterministic chronological scope sent to the model, plus scene-local aggregate atoms. It rejects unknown or out-of-scope IDs, malformed parts, protected factual literals typed raw in text, raw numeric/money/odds-symbol facts, explicit finishing-position constructions in text, and grammar stitched into or out of complete clause atoms. Normal wagering vocabulary is allowed in narrative text.",
-      "finalPlan": "Fact IDs, part objects, factCatalog and grounding metadata are copy-stage-only and are stripped before scene.json. Builder interface remains unchanged."
+      "validation": "Planner hard-fails only on machine-verifiable correctness: malformed response structure/parts, unknown or chronologically out-of-scope fact IDs, invalid enums/cardinality, protected factual literals typed raw in narrative, raw numeric/money/odds-symbol facts typed raw, explicit finishing-position constructions typed raw, forbidden markup, and downstream contract violations. Grammar, sentence flow, capitalization, connective wording, word-count targets and character-length targets are non-fatal.",
+      "finalPlan": "Fact IDs, part objects, factCatalog and grounding metadata are copy-stage-only and are stripped before scene.json. Builder interface remains unchanged.",
+      "prosePolicy": "Clause atoms remain complete factual sentences for generation quality, but the planner does not attempt to prove English grammar around them. Composition preserves deterministic fact wording and uses safe spacing. Copy-length fields are prompt/design targets only. Awkward or overlong prose may render rather than fail the job."
     }
   },
   "fieldSources": {

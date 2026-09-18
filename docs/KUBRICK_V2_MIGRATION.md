@@ -322,7 +322,7 @@ These rules exist specifically to prevent Kubrick V2 from becoming another colle
 5. No downstream redesign to compensate for weak planner structure.
 6. No new production rule unless it can be described as a general planning rule.
 7. Prefer small modules with single responsibilities over another oversized planner file.
-8. Soft stylistic copy imperfections should not fail an otherwise correct recap.
+8. Soft stylistic copy imperfections, grammar issues and copy-length overshoots should not fail an otherwise factually and structurally correct recap.
 
 ## Working method
 
