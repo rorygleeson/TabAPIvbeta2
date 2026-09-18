@@ -185,6 +185,35 @@ groundedRunner.scenes[bet3SceneIndex].tensionLine = [
 const groundedRunnerNormalized = validateCopyResponse(input, groundedRunner);
 assert.strictEqual(groundedRunnerNormalized.scenes[bet3SceneIndex].tensionLine, bet3Runner + ' is ready to go');
 
+const safeMissingSpaces = goodResponse();
+safeMissingSpaces.scenes[0].openingTeaser = [
+  textPart('Backed'),
+  fact('DAY_TOTAL_BETS'),
+  textPart('bets across'),
+  fact('DAY_MEETING_COUNT'),
+  textPart('meetings.')
+];
+const safeMissingSpacesNormalized = validateCopyResponse(input, safeMissingSpaces);
+assert.strictEqual(
+  safeMissingSpacesNormalized.scenes[0].openingTeaser,
+  'Backed ' + fixture.bets.length + ' bets across ' +
+    new Set(fixture.bets.map(bet => bet.meeting)).size + ' meetings.'
+);
+
+const safeAttachedPunctuation = goodResponse();
+safeAttachedPunctuation.scenes[bet3SceneIndex].tensionLine = [
+  fact('B3_RUNNER'),
+  textPart(','),
+  textPart('next at'),
+  fact('B3_MEETING'),
+  textPart('.')
+];
+const safeAttachedPunctuationNormalized = validateCopyResponse(input, safeAttachedPunctuation);
+assert.strictEqual(
+  safeAttachedPunctuationNormalized.scenes[bet3SceneIndex].tensionLine,
+  fixture.bets[2].runnerName + ', next at ' + fixture.bets[2].meeting + '.'
+);
+
 const textPartWithExtraMetadata = goodResponse();
 textPartWithExtraMetadata.scenes[bet3SceneIndex].tensionLine = [{ type: 'text', text: '<b>ROCEM</b> at $5 is still just display text.', note: 'ignore me' }];
 const textMetadataNormalized = validateCopyResponse(input, textPartWithExtraMetadata);
