@@ -99,7 +99,7 @@ aws s3 cp "s3://tab-recap-vbeta1/%RECAPKEY%" "%OUTDIR%\recap.html" --region ap-s
 if errorlevel 1 exit /b 1
 
 echo.
-echo PASS - end-to-end Planner -> Rendering SQS -> Builder completed.
+echo PASS - end-to-end Planner to Rendering SQS to Builder completed.
 echo Job ID   : %JOBID%
 echo Status   : READY
 echo Recap key: %RECAPKEY%
