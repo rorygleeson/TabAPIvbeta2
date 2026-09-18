@@ -35,6 +35,17 @@ assert.strictEqual(__test.durationWithinHardMaxMs(300001),false);
 __test.validateScene8RuntimeContract();
 const bad=fastPlan(5,5);bad.scenes.find(x=>x.sceneType===8).comments=['one'];
 assert.throws(()=>buildRecap({bettings:makeBettings(5),scenePlan:bad}),e=>e instanceof BuildError&&(/comments.length/.test(e.message)||e.stage==='SCENE_PLAN_SCHEMA'));
+const tolerantBettings=makeBettings(5);
+const tolerantPlan=fastPlan(5,5);
+tolerantPlan.scenes[0].openingTeaser='<b>'+('Very long but harmless recap prose '.repeat(30))+'</b>';
+tolerantPlan.scenes.find(x=>x.sceneType===8).headline='Odds @ 3, $20 in play, <script>not executable</script> '+('extra words '.repeat(30));
+tolerantPlan.scenes.find(x=>x.sceneType===8).comments=tolerantPlan.scenes.find(x=>x.sceneType===8).comments.map((_,i)=>'Result '+(i+1)+' <em>display only</em> '+('long copy '.repeat(20)));
+const tolerantOut=buildRecap({bettings:tolerantBettings,scenePlan:tolerantPlan});
+assert.match(tolerantOut.html,/&lt;b&gt;Very long but harmless recap prose/);
+assert.match(tolerantOut.html,/&lt;script&gt;not executable&lt;\/script&gt;/);
+assert.match(tolerantOut.html,/&lt;em&gt;display only&lt;\/em&gt;/);
+assert.doesNotMatch(tolerantOut.html,/<script>not executable<\/script>/);
+
 const runtimeContract=JSON.parse(fs.readFileSync(path.resolve(__dirname,'contracts/runtime-contract.json'),'utf8'));
 assert.strictEqual(runtimeContract.timeline.scene3.replayClipSeconds,17);
 assert.strictEqual(runtimeContract.timeline.scene3.replayStartSecondsBeforeEnd,48);
