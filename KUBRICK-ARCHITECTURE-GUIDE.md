@@ -566,44 +566,61 @@ The intended full pilot/product flow remains broader than the currently tested p
 Planned end-to-end flow:
 
 ```text
-User / pilot frontend
+Pilot frontend
   |
   v
-upload TAB CSV using short-lived presigned S3 URL
+API Gateway / simple pilot access boundary
   |
   v
-Orchestrator / job creation
+Orchestrator Lambda
+  |
+  +--> create job in DynamoDB
+  +--> issue short-lived presigned S3 upload URL
   |
   v
-Python Normaliser
+browser uploads TAB CSV directly to private S3
+  |
+  v
+one Python Normaliser Lambda
   |
   +--> Pass 1: deterministic CSV parse/normalisation
   +--> Pass 2: authoritative historical race/result/media enrichment
   +--> Pass 3: final canonical bettings.json
   |
   v
-planning queue
+planning SQS
   |
   v
-Kubrick V2 Scene Planner
+Kubrick V2 Scene Planner Lambda
+  |
+  +--> deterministic scene structure
+  +--> one Bedrock copy call
+  +--> deterministic fallback if copy stage fails
   |
   v
 scene.json
   |
   v
-rendering queue
+rendering SQS
   |
   v
-existing Builder
+existing Builder Lambda
   |
   v
-private recap.html
+private recap.html in S3
   |
   v
-short-lived delivery URL / status response
+short-lived recap URL
+  |
+  v
+frontend polls job status and displays/redirects to recap
 ```
 
-This full flow is a target architecture. The current repository contains substantial Normaliser test/prototype logic plus the implemented planner and Builder, but the complete browser-upload/orchestration product path is not yet treated as proven production flow.
+DynamoDB remains the job/status store across the flow. S3 remains private object storage for upload, working artifacts and rendered output. SQS remains the decoupling boundary between planning and rendering.
+
+The exact event/queue handoff used to trigger the future production Normaliser is not yet locked and must not be invented prematurely.
+
+This full flow is a target architecture. The current repository contains the integrated local Normaliser proving ground plus the implemented planner and Builder, but the complete browser-upload/API/orchestration/status/delivery path is not yet treated as proven production flow.
 
 Do not blur **implemented/proven** and **planned** components.
 
