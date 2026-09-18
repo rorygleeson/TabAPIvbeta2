@@ -375,9 +375,9 @@ function groupPreAtoms(bettings, bets) {
   const before = previousRunningPnl(bettings, bets[0].sequence);
   const meetings = unique(bets.map(bet => bet.meeting));
   return {
-    BLOCK_BET_COUNT: countPhrase(bets.length, 'bet') + ' in the block',
-    BLOCK_TOTAL_STAKE: money(sum(bets.map(bet => bet.stake))) + ' staked across the block',
-    BLOCK_RUNNING_PNL_BEFORE: sentence(capitalize(runningPnlPhrase(before, 'before the block'))),
+    BLOCK_BET_COUNT: countPhrase(bets.length, 'bet') + ' together',
+    BLOCK_TOTAL_STAKE: money(sum(bets.map(bet => bet.stake))) + ' staked across those bets',
+    BLOCK_RUNNING_PNL_BEFORE: sentence(capitalize(runningPnlPhrase(before, 'before those bets'))),
     BLOCK_MEETINGS: joinNatural(meetings)
   };
 }
@@ -388,9 +388,9 @@ function groupPostAtoms(bets) {
   const raceWinners = bets.filter(bet => Number(bet.finishingPosition) === 1).length;
   return {
     BLOCK_PROFIT_LOSS: sentence(capitalize(blockProfitLossPhrase(pl))),
-    BLOCK_RUNNING_PNL_AFTER: sentence(capitalize(runningPnlPhrase(bets[bets.length - 1].runningPnl, 'after the block'))),
-    BLOCK_WINNING_BETS: sentence((winningBets === 1 ? 'There was ' : 'There were ') + countPhrase(winningBets, 'winning bet') + ' in the block'),
-    BLOCK_RACE_WINNERS: sentence(capitalize(countPhrase(raceWinners, 'backed runner')) + ' won ' + (raceWinners === 1 ? 'its race' : 'their races') + ' in the block')
+    BLOCK_RUNNING_PNL_AFTER: sentence(capitalize(runningPnlPhrase(bets[bets.length - 1].runningPnl, 'after those bets'))),
+    BLOCK_WINNING_BETS: sentence((winningBets === 1 ? 'There was ' : 'There were ') + countPhrase(winningBets, 'winning bet') + ' among those bets'),
+    BLOCK_RACE_WINNERS: sentence(capitalize(countPhrase(raceWinners, 'backed runner')) + ' won ' + (raceWinners === 1 ? 'its race' : 'their races') + ' among those bets')
   };
 }
 
@@ -538,9 +538,9 @@ function betProfitLossPhrase(value) {
 
 function blockProfitLossPhrase(value) {
   const n = Number(value);
-  if (n > 0) return 'the block made ' + money(n) + ' profit';
-  if (n < 0) return 'the block lost ' + money(Math.abs(n));
-  return 'the block broke even';
+  if (n > 0) return 'those bets made ' + money(n) + ' profit combined';
+  if (n < 0) return 'those bets lost ' + money(Math.abs(n)) + ' combined';
+  return 'those bets broke even combined';
 }
 
 function pnlPhrase(value, suffix) {
