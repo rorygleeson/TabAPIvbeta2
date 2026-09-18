@@ -184,10 +184,26 @@ function validateNarrativeText(rawText, source, label) {
   const lower = text.toLocaleLowerCase('en-AU');
   for (const term of source.context?.protectedTerms || []) {
     const normalized = String(term || '').trim().toLocaleLowerCase('en-AU');
+    if (normalized && containsProtectedTerm(lower, normalized)) {
+      throw new Error(label + ' contains protected factual text; use a fact part instead: ' + term + '.');
+    }
+  }
+}
+
+function containsProtectedTerm(lowerText, normalizedTerm) {
+  const escaped = normalizedTerm.replace(/[.*+?^$\{\}()|[\]\\]/gu, '\\  const lower = text.toLocaleLowerCase('en-AU');
+  for (const term of source.context?.protectedTerms || []) {
+    const normalized = String(term || '').trim().toLocaleLowerCase('en-AU');
     if (normalized && lower.includes(normalized)) {
       throw new Error(label + ' contains protected factual text; use a fact part instead: ' + term + '.');
     }
   }
+}');
+  const startsWord = /[\p{L}\p{N}]/u.test(normalizedTerm[0] || '');
+  const endsWord = /[\p{L}\p{N}]/u.test(normalizedTerm[normalizedTerm.length - 1] || '');
+  const left = startsWord ? '(?<![\\p{L}\\p{N}])' : '';
+  const right = endsWord ? '(?![\\p{L}\\p{N}])' : '';
+  return new RegExp(left + escaped + right, 'iu').test(lowerText);
 }
 
 function hardCharLimit(target) {
@@ -249,6 +265,7 @@ module.exports = {
   __test: {
     atomsForPhase,
     composeParts,
-    validateNarrativeText
+    validateNarrativeText,
+    containsProtectedTerm
   }
 };
