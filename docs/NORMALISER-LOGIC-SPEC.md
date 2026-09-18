@@ -1,12 +1,18 @@
 # TAB CSV Normaliser Logic Specification
 
+Last updated: 2026-09-18
+
 Status: **LOCAL ONLY / v0.9 READY FOR RUN 2**  
 Repository: `rorygleeson/TabAPIvbeta2`  
 Canonical runnable script: `tests/normaliser/normaliser.py`
 
 ## 1. Locked execution model
 
-The Normaliser is deliberately local-only for this phase and remains separate from the Step-10 scheduler/planner work.
+The Normaliser is deliberately local-only for this phase and remains separate from the Kubrick V2 planner runtime.
+
+The planned production shape is **one Python Normaliser Lambda** with separate internal Pass 1 / Pass 2 / Pass 3 stages/functions, not three independent Normaliser Lambdas. That production deployment is not yet treated as proven. The current integrated local script is the executable design/proving ground.
+
+Its downstream boundary is the canonical `bettings.json` contract consumed by Kubrick V2. Kubrick must not absorb CSV parsing or historical-results enrichment responsibilities.
 
 There is exactly one runnable Python script:
 
