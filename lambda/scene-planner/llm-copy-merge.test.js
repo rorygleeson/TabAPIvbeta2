@@ -92,8 +92,8 @@ for (const totalBets of [5, 8, 16, 32, 75]) {
   const validatedCopy = validateCopyResponse(copyInput, copyResponse);
   const finalPlan = mergeCopyIntoPlan(deterministicPlan, validatedCopy);
 
-  assert.strictEqual(copyInput.copyInputVersion, '2.2');
-  assert.strictEqual(copyInput.groundingProtocol, 'FACT_PARTS_V2_1');
+  assert.strictEqual(copyInput.copyInputVersion, '2.3');
+  assert.strictEqual(copyInput.groundingProtocol, 'FACT_PARTS_V2_2');
   assert.strictEqual(finalPlan.planVersion, '2.0');
   assert.deepStrictEqual(
     structuralProjection(finalPlan),
@@ -103,7 +103,7 @@ for (const totalBets of [5, 8, 16, 32, 75]) {
 
   assert.strictEqual('artifactType' in finalPlan, false);
   assert.strictEqual('artifactVersion' in finalPlan, false);
-  assert.strictEqual(JSON.stringify(finalPlan).includes('FACT_PARTS_V2_1'), false, 'Final scene plan must not contain copy-stage protocol metadata');
+  assert.strictEqual(JSON.stringify(finalPlan).includes('FACT_PARTS_V2_2'), false, 'Final scene plan must not contain copy-stage protocol metadata');
   assert.strictEqual(JSON.stringify(finalPlan).includes('"type":"fact"'), false, 'Final scene plan must not contain fact parts');
 
   const result = buildRecap({ bettings, scenePlan: finalPlan });
@@ -146,4 +146,4 @@ for (const totalBets of [5, 8, 16, 32, 75]) {
   );
 }
 
-console.log('FACT_PARTS_V2_1 final scene-plan merge and Builder compatibility tests passed.');
+console.log('FACT_PARTS_V2_2 final scene-plan merge and Builder compatibility tests passed.');
