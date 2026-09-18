@@ -1,5 +1,5 @@
 {
-  "contractVersion": "2.0.18",
+  "contractVersion": "2.0.19",
   "companionContracts": [
     "contracts/bettings.schema.json",
     "contracts/scene-plan.schema.json",
@@ -27,7 +27,7 @@
     "semanticValidationBoundary": "Kubrick V2 deterministic planner code exclusively owns scene structure, chronology, Scene 2/5/8 grouping, replay selection, Scene 3 placement, Scene 4 presence/placement/checkpoint, midpoint choice and duration feasibility. The LLM copy stage receives the completed deterministic scene structure and may generate only fields whose source is LLM. It cannot add, remove, duplicate, reorder, regroup or repair scenes and cannot change any structural field. LLM copy is validated before deterministic merge, then the completed scene plan is schema- and semantic-validated before storage. The builder independently repeats deterministic schema/semantic validation before rendering.",
     "wordCountAlgorithm": "Trim the string, split on whitespace, and count only tokens containing at least one Unicode letter or digit. Standalone punctuation does not count as a word.",
     "llmNarrativeNumericPolicy": "Numbers and numeric facts are allowed in LLM-owned prose only when directly supported by validated bettings.json or deterministically implied by it. Every value must preserve exact value and semantic meaning; stakes, returns, profit/loss, running P&L, odds, counts, race numbers and percentages must never be invented, rounded, swapped or mislabelled. Natural grounded phrasing such as two bets or eight races down is allowed when correct.",
-    "llmMarkupPolicy": "LLM-owned prose must not contain HTML/markup angle brackets.",
+    "llmMarkupPolicy": "LLM prose is untrusted display text. Builder template substitution HTML-escapes it; markup-like characters are rendered literally and are not storage-fatal.",
     "productionAssembly": "Follow runtime-contract.json exactly.",
     "builderInputs": [
       "validated bettings.json",
@@ -51,9 +51,9 @@
       "rule": "Stable day/bet facts are supplied once in a recap-wide factCatalog. Each scene phase carries a deterministic allowedGlobalFactIdsByPhase scope derived from chronology, while scene-specific aggregates remain local factAtomsByPhase. The model may use only fact IDs allowed by the current phase. Fact atoms ending in sentence punctuation are complete clause atoms and must stand as sentence segments; short inline atoms may compose naturally with text.",
       "scopePolicy": "PRE_RESULT_DAY exposes pre-result facts only; PRE_RESULT and PRE_RESULT_BLOCK expose all pre-result facts plus outcomes already completed before that point; POST_RESULT and POST_RESULT_BLOCK add outcomes through the completed bet/block; POST_COMPLETED_BETS and PRE_FUTURE_RESULTS expose outcomes only through the deterministic checkpoint; POST_RESULT_BY_BET advances row-by-row; POST_DAY exposes all stable facts from the completed day.",
       "semanticDistinction": "A winning bet is not necessarily a race-winning runner. Race-win wording requires finishingPosition=1; bet-result wording follows the wager result.",
-      "validation": "Planner hard-fails only on objective machine-verifiable correctness: malformed response structure/parts, missing required fields, unknown or chronologically out-of-scope fact IDs, invalid enums/cardinality, forbidden markup, and downstream contract violations. Narrative semantics are never hard-rejected: digits, money/odds symbols, runner/meeting names, finishing-position wording, grammar, capitalization, sentence flow and copy-length targets are prompt-quality concerns only.",
+      "validation": "Planner hard-fails only on objective machine-verifiable correctness: missing/invalid scenes, missing required fields, invalid required enums/cardinality, malformed required fact references, unknown or chronologically out-of-scope fact IDs, and downstream deterministic structure/contract violations. Harmless extra response fields/part metadata are ignored. Narrative semantics, grammar, capitalization, factual-looking wording, markup characters and copy-length targets are non-fatal.",
       "finalPlan": "Fact IDs, part objects, factCatalog and grounding metadata are copy-stage-only and are stripped before scene.json. Builder interface remains unchanged.",
-      "prosePolicy": "Fact parts remain the preferred path for exact factual content and are strongly scoped by chronology. Narrative text is accepted as non-empty prose and is not semantically interpreted by JavaScript. This prevents regex or language heuristics from becoming a second planner and causing whack-a-mole failures."
+      "prosePolicy": "Fact parts remain the preferred path for exact factual content and are strongly scoped by chronology. Narrative text is treated as untrusted display text, not semantically interpreted by JavaScript. Builder rendering HTML-escapes template substitutions, so markup-like characters in prose are rendered as text rather than executed or used as a reason to fail the recap."
     }
   },
   "fieldSources": {
