@@ -29,8 +29,8 @@ function goodResponse() {
   };
 }
 
-assert.strictEqual(input.copyInputVersion, '3.0');
-assert.strictEqual(input.groundingProtocol, 'FACT_TEMPLATES_V3_0');
+assert.strictEqual(input.copyInputVersion, '4.0');
+assert.strictEqual(input.groundingProtocol, 'FACT_SEMANTICS_V4_0');
 
 const parsed = parseJsonObject(JSON.stringify(goodResponse()));
 const normalized = validateCopyResponse(input, parsed);
@@ -68,15 +68,19 @@ const groupedPostAtoms = groupedScene.context.factAtomsByPhase.POST_RESULT_BLOCK
 const groupedFirst = groupedScene.betSequences[0];
 const groupedSecond = groupedScene.betSequences[1];
 
+const groupedPnlId = Object.keys(groupedPostAtoms).find(id =>
+  /^BLOCK_(?:PROFIT_AMOUNT|LOSS_AMOUNT|BREAK_EVEN_AMOUNT)$/u.test(id)
+);
+assert.ok(groupedPnlId);
 const groundedGroup = goodResponse();
 groundedGroup.scenes[groupedIndex].contextLine =
-  '<B' + groupedFirst + '_FINISH> then <B' + groupedSecond + '_FINISH>. Net <BLOCK_PROFIT_LOSS>.';
+  '<B' + groupedFirst + '_FINISH> then <B' + groupedSecond + '_FINISH>. Net <' + groupedPnlId + '>.';
 const groundedGroupNormalized = validateCopyResponse(input, groundedGroup);
 assert.strictEqual(
   groundedGroupNormalized.scenes[groupedIndex].contextLine,
   groupedPostAtoms['B' + groupedFirst + '_FINISH'] + ' then ' +
     groupedPostAtoms['B' + groupedSecond + '_FINISH'] + '. Net ' +
-    groupedPostAtoms.BLOCK_PROFIT_LOSS + '.'
+    groupedPostAtoms[groupedPnlId] + '.'
 );
 
 const dayIndex = input.scenes.findIndex(scene => scene.sceneType === 6);
@@ -117,13 +121,17 @@ assert.throws(() => validateCopyResponse(input, futureResultLeak), /unknown or w
 const finalSceneIndex = input.scenes.findIndex(scene => scene.sceneType === 7);
 assert.ok(finalSceneIndex >= 0);
 
+const b8PnlId = Object.keys(input.factCatalog).find(id =>
+  /^B8_(?:PROFIT_AMOUNT|LOSS_AMOUNT|BREAK_EVEN_AMOUNT)$/u.test(id)
+);
+assert.ok(b8PnlId);
 const crossSceneFinalFact = goodResponse();
 crossSceneFinalFact.scenes[finalSceneIndex].shareCaption =
-  '<B8_RUNNER> finished <B8_FINISH> with <B8_PROFIT_LOSS> on the bet.';
+  '<B8_RUNNER> finished <B8_FINISH> with <' + b8PnlId + '> on the bet.';
 const crossSceneFinalNormalized = validateCopyResponse(input, crossSceneFinalFact);
 assert.ok(crossSceneFinalNormalized.scenes[finalSceneIndex].shareCaption.includes(fixture.bets[7].runnerName));
 assert.ok(crossSceneFinalNormalized.scenes[finalSceneIndex].shareCaption.includes(input.factCatalog.B8_FINISH));
-assert.ok(crossSceneFinalNormalized.scenes[finalSceneIndex].shareCaption.includes(input.factCatalog.B8_PROFIT_LOSS));
+assert.ok(crossSceneFinalNormalized.scenes[finalSceneIndex].shareCaption.includes(input.factCatalog[b8PnlId]));
 
 const unknownGlobalFact = goodResponse();
 unknownGlobalFact.scenes[finalSceneIndex].shareCaption = '<B999_RUNNER>';
@@ -179,4 +187,4 @@ for (const phrase of semanticToleranceCases) {
   );
 }
 
-console.log('FACT_TEMPLATES_V3_0 compact grounded-text response validation tests passed.');
+console.log('FACT_SEMANTICS_V4_0 compact grounded-text response validation tests passed.');
