@@ -55,7 +55,9 @@ function assertNoLegacySemanticAtoms(payload) {
 function assertTypedMoneyText(id, value) {
   assert.match(id, /_(?:PROFIT_TEXT|LOSS_TEXT|BREAK_EVEN_TEXT)$/u);
   assert.match(String(value), /^\$\d+(?:\.\d+)? (?:profit|loss|break-even)$/u);
-  assert.strictEqual(String(value).startsWith('+
+  assert.strictEqual(String(value).startsWith('+\$'), false);
+  assert.strictEqual(String(value).startsWith('-\$'), false);
+}
 
 function assertGroundingScopes(payload) {
   for (const scene of payload.scenes) {
