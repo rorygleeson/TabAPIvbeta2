@@ -1,5 +1,7 @@
 # TAB Pass 2 Enrichment Logic Specification
 
+> Component/reference specification for the standalone Pass-2 enrichment harness. The current integrated local Normaliser direction is documented in `docs/NORMALISER-LOGIC-SPEC.md` and implemented in `tests/normaliser/normaliser.py`. Keep this file for enrichment provenance; do not treat it as the end-to-end Normaliser status document.
+
 Status: **PASS 2 v0.1 TEST CANDIDATE**  
 Pass 1 dependency: **normaliserSchemaVersion = 1.7 (frozen/proven baseline)**  
 Implementation: `tests/enrichment/enrich_pass2.py`
