@@ -113,7 +113,7 @@
     "freshGenerationRequiresHeadlineCategory": true,
     "enforcementClass": "COPY_STAGE_QUALITY_RULE",
     "freshGenerationQualityGate": "Every fresh Scene 8 copy response must provide headlineCategory and headline wording consistent with the deterministic block facts, category eligibility, category meaning and recap-level diversity policy. The copy stage may not alter Scene 8 structure to satisfy this rule.",
-    "noSpoilerBoundary": "Scene 8 headlines are pre-result. Mechanically provable spoilers are storage-fatal, including obvious grouped outcome language, outcome-only grouped money values, and explicit grouped finishing-position leaks. Subtle semantic implications that cannot be proved safely with deterministic checks remain prompt and live-inspection responsibilities.",
+    "noSpoilerBoundary": "Scene 8 headlines are PRE_RESULT_BLOCK and follow the same no-spoiler guidance as every PRE_* field. Fact-part chronology is mechanically enforced; semantic spoiler wording inside narrative text is prompt-owned and non-fatal.",
     "generationProcedure": [
       "Using only the already-determined Scene 8 blocks, determine the eligible headline categories for every Scene 8 block.",
       "Allocate one headlineCategory to every Scene 8 block across the recap as one global copy decision; do not alter grouping or chronology.",
