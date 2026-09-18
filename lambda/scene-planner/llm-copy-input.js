@@ -282,7 +282,10 @@ function scene4Context(bettings, checkpoint) {
   return {
     factAtomsByPhase: {
       POST_COMPLETED_BETS: checkpointAtoms(bettings, completed),
-      PRE_FUTURE_RESULTS: mergeAtoms(...future.map(preBetAtoms))
+      PRE_FUTURE_RESULTS: mergeAtoms(
+        { CHECKPOINT_BETS_REMAINING: String(remaining) },
+        ...future.map(preBetAtoms)
+      )
     },
     protectedTerms: protectedTerms(bettings, [...completed, ...future])
   };

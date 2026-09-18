@@ -245,6 +245,17 @@ for (const totalBets of [5, 8, 16, 32, 75]) {
   assert.strictEqual(Object.prototype.hasOwnProperty.call(day, 'DAY_FINAL_PNL'), false);
 }
 
+// Historical failure backfeed: Scene 4 looking-ahead copy may state how many bets remain.
+{
+  const bettings = readJson('bettings-50.json');
+  const payload = buildLlmCopyInput(bettings, buildDeterministicScenePlan(bettings));
+  const checkpoint = payload.scenes.find(scene => scene.sceneType === 4);
+  assert.ok(checkpoint, 'Expected Scene 4 checkpoint in 50-bet fixture');
+  const futureFacts = checkpoint.context.factAtomsByPhase.PRE_FUTURE_RESULTS;
+  assert.strictEqual(futureFacts.CHECKPOINT_BETS_REMAINING, '24');
+  assert.strictEqual(Object.prototype.hasOwnProperty.call(futureFacts, 'BLOCK_BETS_REMAINING_AFTER'), false);
+}
+
 // Historical failure backfeed: replay narrative has no race-action evidence.
 {
   const bettings = readJson('bettings-16.json');
