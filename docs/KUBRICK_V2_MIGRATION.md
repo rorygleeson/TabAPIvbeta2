@@ -1,6 +1,6 @@
 # Kubrick V2 Migration
 
-Last updated: 2026-09-17
+Last updated: 2026-09-18
 
 ## Objective
 
@@ -197,7 +197,7 @@ ordered scene skeleton
 ONE LLM CALL FOR COPY ONLY
     |
     v
-validate + expand phase-scoped FACT_ATOMS_V1 placeholders
+validate + expand phase-scoped FACT_PARTS_V2 fact/text parts
     |
     v
 merge LLM copy into code-owned skeleton
@@ -227,7 +227,7 @@ The key principle is:
 
 > The LLM does not implement the contract. The software implements the contract.
 
-Fresh Kubrick V2 copy uses a grounded-copy boundary: deterministic code supplies approved factual atoms; the LLM writes one recap-wide response using those atoms plus non-factual narrative language; planner validation expands the atoms before final merge. A winning bet and a race-winning runner remain distinct semantics. This adds no additional LLM calls and does not change the downstream Builder contract.
+Fresh Kubrick V2 copy uses a grounded-copy boundary: deterministic code supplies approved factual atoms; the LLM writes one recap-wide response as structured `fact` and `text` parts; planner validation expands fact IDs and joins the parts into ordinary strings before final merge. Narrative text remains LLM-written, while factual wording comes from deterministic atoms. A winning bet and a race-winning runner remain distinct semantics. This adds no additional LLM calls and does not change the downstream Builder contract.
 
 ## Scene policy still to define before coding
 
