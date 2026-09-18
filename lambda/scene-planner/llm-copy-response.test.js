@@ -33,8 +33,8 @@ function goodResponse() {
   };
 }
 
-assert.strictEqual(input.copyInputVersion, '2.1');
-assert.strictEqual(input.groundingProtocol, 'FACT_PARTS_V2');
+assert.strictEqual(input.copyInputVersion, '2.2');
+assert.strictEqual(input.groundingProtocol, 'FACT_PARTS_V2_1');
 
 const parsed = parseJsonObject(JSON.stringify(goodResponse()));
 const normalized = validateCopyResponse(input, parsed);
@@ -82,18 +82,37 @@ const group67Index = input.scenes.findIndex(scene =>
 assert.ok(group67Index >= 0);
 
 const groundedGroup = goodResponse();
-groundedGroup.scenes[group67Index].payoffHeadline = [
-  fact('B6_FINISH'),
-  textPart(', while '),
-  fact('B7_FINISH')
-];
+groundedGroup.scenes[group67Index].payoffHeadline = text('A tough double landed.');
 groundedGroup.scenes[group67Index].contextLine = [
+  fact('B6_FINISH'),
+  fact('B7_FINISH'),
   fact('BLOCK_PROFIT_LOSS'),
-  textPart(' and the pressure was building.')
+  textPart(' The pressure was building.')
 ];
 const groundedGroupNormalized = validateCopyResponse(input, groundedGroup);
-assert.strictEqual(groundedGroupNormalized.scenes[group67Index].payoffHeadline, 'GIN AND BARE IT finished 4th, while INSAIN CHAOS finished 2nd');
-assert.strictEqual(groundedGroupNormalized.scenes[group67Index].contextLine, 'the block lost $85 and the pressure was building.');
+assert.strictEqual(groundedGroupNormalized.scenes[group67Index].contextLine, 'GIN AND BARE IT finished 4th. INSAIN CHAOS finished 2nd. The block lost $85. The pressure was building.');
+
+const badPrefixIntoClause = goodResponse();
+badPrefixIntoClause.scenes[group67Index].contextLine = [
+  textPart('That result was '),
+  fact('BLOCK_PROFIT_LOSS')
+];
+assert.throws(() => validateCopyResponse(input, badPrefixIntoClause), /must start a new sentence/);
+
+const badSuffixFromClause = goodResponse();
+badSuffixFromClause.scenes[group67Index].contextLine = [
+  fact('BLOCK_PROFIT_LOSS'),
+  textPart(' turned the day around.')
+];
+assert.throws(() => validateCopyResponse(input, badSuffixFromClause), /must start a new sentence/);
+
+const goodClauseNarrative = goodResponse();
+goodClauseNarrative.scenes[group67Index].contextLine = [
+  fact('BLOCK_PROFIT_LOSS'),
+  textPart(' That changed the mood.')
+];
+const goodClauseNarrativeNormalized = validateCopyResponse(input, goodClauseNarrative);
+assert.strictEqual(goodClauseNarrativeNormalized.scenes[group67Index].contextLine, 'The block lost $85. That changed the mood.');
 
 const falseCollectiveFinish = goodResponse();
 falseCollectiveFinish.scenes[group67Index].payoffHeadline = text('Both runners second');
@@ -174,4 +193,4 @@ assert.strictEqual(require('./llm-copy-response').__test.containsProtectedTerm('
 assert.strictEqual(require('./llm-copy-response').__test.containsProtectedTerm('al is next', 'al'), true);
 assert.strictEqual(require('./llm-copy-response').__test.containsProtectedTerm('back at te aroha today', 'te aroha'), true);
 
-console.log('FACT_PARTS_V2 LLM copy response validation tests passed.');
+console.log('FACT_PARTS_V2_1 LLM copy response validation tests passed.');
