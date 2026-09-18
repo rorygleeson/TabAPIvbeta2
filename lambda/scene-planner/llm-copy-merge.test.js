@@ -124,6 +124,11 @@ for (const totalBets of [5, 8, 16, 32, 75]) {
   const deterministicPlan = buildDeterministicScenePlan(bettings);
   const copyInput = buildLlmCopyInput(bettings, deterministicPlan);
   const fallbackCopy = buildFallbackCopy(copyInput);
+  assert.strictEqual(
+    /\bblock\b/iu.test(JSON.stringify(fallbackCopy)),
+    false,
+    'Deterministic fallback must not expose internal block terminology'
+  );
   const finalPlan = mergeCopyIntoPlan(deterministicPlan, fallbackCopy);
   const result = buildRecap({ bettings, scenePlan: finalPlan });
 
