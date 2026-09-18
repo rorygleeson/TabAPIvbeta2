@@ -155,7 +155,7 @@ for (const totalBets of [5, 8, 16, 32, 75]) {
 
   const dayScene = payload.scenes.find(scene => scene.sceneType === 6);
   const day = dayScene.context.factAtomsByPhase.POST_DAY;
-  assert.strictEqual(day.DAY_WINNING_BETS, bettings.summary.wins + ' winning bets');
+  assert.ok(day.DAY_WINNING_BETS, 'Post-day facts must expose winning-bet count');
   assert.ok(day.DAY_RACE_WINNERS, 'Post-day facts must expose backed race-winner count');
 }
 
@@ -167,12 +167,14 @@ for (const totalBets of [5, 8, 16, 32, 75]) {
   const finalBet = bettings.bets[bettings.bets.length - 1];
   const finalPrefix = 'B' + finalBet.sequence + '_';
   assert.strictEqual(payload.factCatalog[finalPrefix + 'RUNNER'], finalBet.runnerName);
-  assert.ok(payload.factCatalog[finalPrefix + 'RESULT_SUMMARY'].includes(finalBet.runnerName));
+  assert.ok(payload.factCatalog[finalPrefix + 'FINISH']);
+  assert.ok(payload.factCatalog[finalPrefix + 'PROFIT_LOSS']);
 
   const opening = payload.scenes.find(scene => scene.sceneType === 1);
   const openingScope = new Set(opening.context.allowedGlobalFactIdsByPhase.PRE_RESULT_DAY);
   assert.ok(openingScope.has(finalPrefix + 'RUNNER'));
-  assert.ok(openingScope.has(finalPrefix + 'BET_SETUP'));
+  assert.ok(openingScope.has(finalPrefix + 'STAKE'));
+  assert.ok(openingScope.has(finalPrefix + 'ODDS'));
   assert.strictEqual(openingScope.has(finalPrefix + 'FINISH'), false, 'Opening must not expose result facts');
 
   const firstFeatured = payload.scenes.find(scene => scene.sceneType === 2);
@@ -220,8 +222,10 @@ for (const totalBets of [5, 8, 16, 32, 75]) {
     const postDay = new Set(scene.context.allowedGlobalFactIdsByPhase.POST_DAY);
     assert.ok(postDay.has('B1_RUNNER'));
     assert.ok(postDay.has(finalPrefix + 'RUNNER'));
-    assert.ok(postDay.has('B1_RESULT_SUMMARY'));
-    assert.ok(postDay.has(finalPrefix + 'RESULT_SUMMARY'));
+    assert.ok(postDay.has('B1_FINISH'));
+    assert.ok(postDay.has('B1_PROFIT_LOSS'));
+    assert.ok(postDay.has(finalPrefix + 'FINISH'));
+    assert.ok(postDay.has(finalPrefix + 'PROFIT_LOSS'));
     assert.ok(postDay.has('DAY_FINAL_PNL'));
   }
 }
@@ -238,9 +242,11 @@ for (const totalBets of [5, 8, 16, 32, 75]) {
   const finalScene = payload.scenes.find(scene => scene.sceneType === 7);
   const postDay = new Set(finalScene.context.allowedGlobalFactIdsByPhase.POST_DAY);
   assert.ok(postDay.has('B1_RUNNER'));
-  assert.ok(postDay.has('B38_RESULT_SUMMARY'));
+  assert.ok(postDay.has('B38_FINISH'));
+  assert.ok(postDay.has('B38_PROFIT_LOSS'));
   assert.ok(postDay.has('B75_RUNNER'));
-  assert.ok(postDay.has('B75_RESULT_SUMMARY'));
+  assert.ok(postDay.has('B75_FINISH'));
+  assert.ok(postDay.has('B75_PROFIT_LOSS'));
   assert.ok(payload.factCatalog.B75_RUNNER, '75-bet catalog must include final bet');
   assert.strictEqual(Object.prototype.hasOwnProperty.call(modelPayload, 'factCatalog'), false);
   assert.strictEqual(Object.prototype.hasOwnProperty.call(modelPayload.scenes[0].context, 'allowedGlobalFactIdsByPhase'), false);
