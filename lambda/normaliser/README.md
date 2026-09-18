@@ -1,7 +1,9 @@
 # TAB CSV Normaliser Logic Specification
 
+> Component/reference specification for the standalone Pass-1 harness. The current integrated local Normaliser direction is documented in `docs/NORMALISER-LOGIC-SPEC.md` and implemented in `tests/normaliser/normaliser.py`. Keep this file for Pass-1 provenance; do not treat it as the end-to-end Normaliser status document.
+
 Status: **PASS 1 v1.7 HARDENED CANDIDATE**  
-Repository: `rorygleeson/TabAPIvbeta1`  
+Repository: `rorygleeson/TabAPIvbeta2`  
 Implementation: `tests/normaliser/normalise_pass1.py`  
 Schema: `normaliserSchemaVersion = 1.7`
 
