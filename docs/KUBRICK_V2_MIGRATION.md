@@ -146,7 +146,7 @@ buildLlmCopyInput()
 buildLlmModelPayload()
   |
   v
-FACT_PARTS_COMPACT_V1
+FACT_TEMPLATE_COMPACT_V1
   |
   v
 ONE Bedrock copy call
@@ -256,14 +256,14 @@ The rich internal copy input remains deterministic and is used for validation/me
 Current rich protocol:
 
 ```text
-groundingProtocol = FACT_PARTS_V2_3
-copyInputVersion = 2.4
+groundingProtocol = FACT_TEMPLATES_V3_0
+copyInputVersion = 3.0
 ```
 
 The Bedrock request remains a compact projection:
 
 ```text
-groundingProtocol = FACT_PARTS_COMPACT_V1
+groundingProtocol = FACT_TEMPLATE_COMPACT_V1
 modelPayloadVersion = 1.0
 ```
 
@@ -271,7 +271,9 @@ This compaction was required because the earlier rich 75-bet payload exceeded th
 
 The compact payload sends only scene-relevant phase-scoped facts and requested copy rules.
 
-The model returns `fact` and `text` parts. Fact IDs are expanded deterministically.
+The earlier fact/text-part response encoding was itself too verbose at scale. Live evidence showed 32 bets completing at 5,706 output tokens, 50 bets completing generation at 7,614 tokens but falling back after an invented `BLOCK_MEETING_COUNT` atom reference, and 75 bets stopping at the configured 8,000-token ceiling. The response wire format is therefore now `FACT_TEMPLATE_COMPACT_V1`: normal strings with validated `<ATOM_ID>` references instead of arrays of `{"type":"text"}` / `{"type":"fact"}` objects.
+
+The model returns compact grounded strings such as `"<B3_RUNNER> finished <B3_FINISH>."`. Every `<ATOM_ID>` is validated against the deterministic phase scope and then substituted with the exact fact value.
 
 The copy interface now follows one explicit ownership rule:
 
@@ -328,7 +330,7 @@ Do not hard-fail for:
 - capitalization;
 - repeated words;
 - prose length targets;
-- clumsy fact/text joins;
+- clumsy fact/grammar joins;
 - customer-unfriendly internal terminology;
 - semantic quality that cannot be safely verified mechanically.
 
