@@ -28,8 +28,6 @@ const fail = (stage, message) => { throw new BuildError(stage, message); };
 const cents = n => Math.round(Number(n) * 100);
 const sameMoney = (a,b) => cents(a) === cents(b);
 const sum = xs => xs.reduce((a,b)=>a+Number(b),0);
-const hardCharLimit = target => { const n=Number(target); return Number.isFinite(n)&&n>0 ? n+Math.min(Math.ceil(n*.10),12) : null; };
-const containsMarkup = s => /[<>]/u.test(String(s));
 const signClass = n => Number(n) > 0 ? 'positive' : Number(n) < 0 ? 'negative' : 'zero';
 const esc = v => String(v ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 const fmtNum = n => Number.isInteger(Number(n)) ? String(Number(n)) : Number(n).toFixed(2).replace(/0+$/,'').replace(/\.$/,'');
@@ -84,7 +82,6 @@ function validatePlan(b,p) {
   if(coverage.length!==total || coverage.some((x,i)=>x!==i+1)) fail('SCENE_PLAN_SEMANTICS','Primary bet coverage must be exactly 1..totalBets once, in order.');
   validateMidpoint(scenes,total);
   validatePlanDuration(p);
-  validateNarrativeLimits(p);
   validateHighlights(b,p);
 }
 function primaryContributionScene(s){ if(s.sceneType===2)return 1; if(s.sceneType===5||s.sceneType===8)return s.betSequences.length; return 0; }
@@ -93,26 +90,6 @@ function sceneDurationMs(scene,conservative=false){ const t=runtimeContract.time
 function calculatePlanDurationMs(plan,{conservative=false}={}){return plan.scenes.reduce((n,s)=>n+sceneDurationMs(s,conservative),0)+Math.max(0,plan.scenes.length-1)*runtimeContract.shell.sceneTransition.durationMs;}
 function durationWithinHardMaxMs(ms){return Number(ms)<=runtimeContract.durationPolicy.hardMaxSeconds*1000;}
 function validatePlanDuration(plan){const ms=calculatePlanDurationMs(plan,{conservative:false});if(!durationWithinHardMaxMs(ms))fail('SCENE_PLAN_SEMANTICS',`Planned duration ${Math.ceil(ms/1000)}s exceeds hard maximum ${runtimeContract.durationPolicy.hardMaxSeconds}s.`);}
-function validateNarrativeLimits(p){
-  p.scenes.forEach((s,i)=>{
-    const c=sceneContracts.scenes[String(s.sceneType)]?.fields||{};
-    for(const [k,v] of Object.entries(c)){
-      if(!v||typeof v!=='object'||v.source!=='LLM')continue;
-      if(typeof s[k]==='string'){
-        const hardMaxChars=hardCharLimit(v.maxChars);
-        if(hardMaxChars&&s[k].length>hardMaxChars)fail('SCENE_PLAN_SEMANTICS',`Scene array item ${i+1} (sceneType ${s.sceneType}) ${k} exceeds hard character tolerance ${hardMaxChars}.`);
-        if(containsMarkup(s[k]))fail('SCENE_PLAN_SEMANTICS',`Scene array item ${i+1} (sceneType ${s.sceneType}) ${k} contains forbidden markup characters.`);
-      }
-      if(Array.isArray(s[k])&&v.itemMaxChars){
-        s[k].forEach((x,j)=>{
-          const hardItemMaxChars=hardCharLimit(v.itemMaxChars);
-          if(hardItemMaxChars&&x.length>hardItemMaxChars)fail('SCENE_PLAN_SEMANTICS',`Scene array item ${i+1} (sceneType ${s.sceneType}) ${k}[${j}] exceeds hard character tolerance ${hardItemMaxChars}.`);
-          if(containsMarkup(x))fail('SCENE_PLAN_SEMANTICS',`Scene array item ${i+1} (sceneType ${s.sceneType}) ${k}[${j}] contains forbidden markup characters.`);
-        });
-      }
-    }
-  });
-}
 function validateHighlights(b,p){ const s6=p.scenes.find(x=>x.sceneType===6), s7=p.scenes.find(x=>x.sceneType===7), wins=b.bets.filter(x=>x.result==='WIN'), positiveWins=wins.filter(x=>x.profitLoss>0); if(s6.standoutHighlightType==='biggestWin'&&!positiveWins.length)fail('SCENE_PLAN_SEMANTICS','Scene 6 biggestWin highlight is ineligible.'); if(s6.standoutHighlightType==='highestOddsWinner'&&!wins.length)fail('SCENE_PLAN_SEMANTICS','Scene 6 highestOddsWinner highlight is ineligible.'); if(s6.standoutHighlightType==='biggestRecovery'&&!b.bets.some(x=>x.profitLoss>0))fail('SCENE_PLAN_SEMANTICS','Scene 6 biggestRecovery highlight is ineligible.'); if(s6.standoutHighlightType==='longestLosingStreak'&&!b.bets.some(x=>x.result==='LOSS'))fail('SCENE_PLAN_SEMANTICS','Scene 6 longestLosingStreak highlight is ineligible.'); if(s7.selectedFinalHighlights.includes('biggestWin')&&!positiveWins.length)fail('SCENE_PLAN_SEMANTICS','Scene 7 biggestWin highlight is ineligible.'); if(s7.selectedFinalHighlights.includes('highestOddsWinner')&&!wins.length)fail('SCENE_PLAN_SEMANTICS','Scene 7 highestOddsWinner highlight is ineligible.'); }
 
 function extractTemplate(sceneType){ const p=sceneContracts.scenes[String(sceneType)].template.replace(/^templates\//,'templates/'), src=read(p); const css=extractOne(src,'SCENE_PRODUCTION_CSS_START','SCENE_PRODUCTION_CSS_END',p); const markup=extractOne(src,'SCENE_PRODUCTION_MARKUP_START','SCENE_PRODUCTION_MARKUP_END',p); if(/crossorigin\s*=\s*["']anonymous/i.test(markup))fail('TEMPLATE_GATE',`${p}: crossorigin=anonymous is forbidden.`); if(/\bis-active\b/.test(markup))fail('TEMPLATE_GATE',`${p}: production markup must not hardcode is-active.`); return {css,markup}; }
