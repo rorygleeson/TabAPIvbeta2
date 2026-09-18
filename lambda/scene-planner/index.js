@@ -11,6 +11,7 @@ const { buildDeterministicScenePlan } = require('./scene-planner');
 const { buildLlmCopyInput } = require('./llm-copy-input');
 const { parseJsonObject, validateCopyResponse } = require('./llm-copy-response');
 const { mergeCopyIntoPlan } = require('./llm-copy-merge');
+const { buildFallbackCopy } = require('./llm-copy-fallback');
 const { loadContract, loadContractText } = require('./contract-loader');
 
 const REGION = process.env.AWS_REGION || 'ap-southeast-2';
@@ -163,32 +164,43 @@ async function markFailed(jobId, attemptId, error) {
 }
 
 async function invokeCopyModel(copyInput) {
-  const response = await bedrock.send(new ConverseCommand({
-    modelId: PLANNER_MODEL_ID,
-    system: [{ text: plannerPrompt }],
-    messages: [{
-      role: 'user',
-      content: [{ text: 'copyInput:\n' + JSON.stringify(copyInput) }]
-    }],
-    inferenceConfig: {
-      maxTokens: 8000,
-      temperature: 0.35
-    }
-  }));
+  try {
+    const response = await bedrock.send(new ConverseCommand({
+      modelId: PLANNER_MODEL_ID,
+      system: [{ text: plannerPrompt }],
+      messages: [{
+        role: 'user',
+        content: [{ text: 'copyInput:\n' + JSON.stringify(copyInput) }]
+      }],
+      inferenceConfig: {
+        maxTokens: 8000,
+        temperature: 0.35
+      }
+    }));
 
-  const outputText = (response.output?.message?.content || []).map(x => x.text || '').join('').trim();
-  const parsed = parseJsonObject(outputText);
-  const validatedCopy = validateCopyResponse(copyInput, parsed);
+    const outputText = (response.output?.message?.content || []).map(x => x.text || '').join('').trim();
+    const parsed = parseJsonObject(outputText);
+    const validatedCopy = validateCopyResponse(copyInput, parsed);
 
-  console.log(JSON.stringify({
-    event: 'llm-copy-completed',
-    inputTokens: response.usage?.inputTokens,
-    outputTokens: response.usage?.outputTokens,
-    totalTokens: response.usage?.totalTokens,
-    latencyMs: response.metrics?.latencyMs
-  }));
+    console.log(JSON.stringify({
+      event: 'llm-copy-completed',
+      fallbackUsed: false,
+      inputTokens: response.usage?.inputTokens,
+      outputTokens: response.usage?.outputTokens,
+      totalTokens: response.usage?.totalTokens,
+      latencyMs: response.metrics?.latencyMs
+    }));
 
-  return validatedCopy;
+    return validatedCopy;
+  } catch (error) {
+    const fallbackCopy = buildFallbackCopy(copyInput);
+    console.warn(JSON.stringify({
+      event: 'llm-copy-fallback',
+      fallbackUsed: true,
+      reason: String(error?.message || error).slice(0, 1000)
+    }));
+    return fallbackCopy;
+  }
 }
 
 async function processMessage(context) {
