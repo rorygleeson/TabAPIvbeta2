@@ -468,3 +468,10 @@ The current repository proves the planner/Builder boundary and contains ongoing 
 - further rendered-HTML regression with the new real fixtures;
 - Normaliser integration into canonical `bettings.json`;
 - complete upload/orchestration/status/delivery product path.
+
+### TECH DEBT / CLEANUP
+
+- Canonical contract files are currently duplicated under `lambda/builder-recap/contracts/`, while CI only checks that those copies have not drifted from `contracts/`.
+- This creates manual synchronization work and can cause unrelated CI failures when a canonical contract is changed without updating the Builder copy.
+- Future cleanup should make `contracts/` the single source of truth and have build/deploy packaging copy the required contracts into the Builder package automatically.
+- Do not perform this cleanup during planner/copy-quality stabilization; treat it as a separate controlled change.
