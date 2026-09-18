@@ -90,13 +90,13 @@ for (const totalBets of [5, 8, 16, 32, 75]) {
   const payload = buildLlmCopyInput(bettings, deterministicPlan);
   const modelPayload = buildLlmModelPayload(payload);
 
-  assert.strictEqual(payload.copyInputVersion, '2.3');
+  assert.strictEqual(payload.copyInputVersion, '2.4');
   assert.strictEqual(modelPayload.modelPayloadVersion, '1.0');
   assert.strictEqual(modelPayload.groundingProtocol, 'FACT_PARTS_COMPACT_V1');
   assert.strictEqual(modelPayload.scenes.length, deterministicPlan.scenes.length);
   assert.strictEqual(Object.prototype.hasOwnProperty.call(modelPayload, 'factCatalog'), false);
   assert.strictEqual(Object.prototype.hasOwnProperty.call(modelPayload, 'protectedTerms'), false);
-  assert.strictEqual(payload.groundingProtocol, 'FACT_PARTS_V2_2');
+  assert.strictEqual(payload.groundingProtocol, 'FACT_PARTS_V2_3');
   assert.strictEqual(payload.scenes.length, deterministicPlan.scenes.length);
   assert.ok(payload.factCatalog && typeof payload.factCatalog === 'object');
   assert.ok(Array.isArray(payload.protectedTerms));
@@ -263,7 +263,7 @@ for (const totalBets of [5, 8, 16, 32, 75]) {
   console.log('75-bet payload bytes: rich=' + richBytes + ' compact=' + compactBytes);
 }
 
-console.log('FACT_PARTS_V2_2 local validation input + FACT_PARTS_COMPACT_V1 Bedrock payload regression tests passed.');
+console.log('FACT_PARTS_V2_3 local validation input + FACT_PARTS_COMPACT_V1 Bedrock payload regression tests passed.');
 ), true);
   assert.match(payload.factCatalog[firstPrefix + 'ODDS'], /^\d+(?:\.\d+)?$/u);
   assert.match(payload.factCatalog[firstPrefix + 'FINISH'], /^\d+(?:st|nd|rd|th)$/u);
@@ -368,7 +368,7 @@ console.log('FACT_PARTS_V2_2 local validation input + FACT_PARTS_COMPACT_V1 Bedr
   console.log('75-bet payload bytes: rich=' + richBytes + ' compact=' + compactBytes);
 }
 
-console.log('FACT_PARTS_V2_2 local validation input + FACT_PARTS_COMPACT_V1 Bedrock payload regression tests passed.');
+console.log('FACT_PARTS_V2_3 local validation input + FACT_PARTS_COMPACT_V1 Bedrock payload regression tests passed.');
 ), true);
   assert.match(post.BLOCK_PROFIT_LOSS, /^(?:[+-]\$|\$0$)/u);
   assert.match(post.BLOCK_WINNING_BETS, /^\d+$/u);
@@ -469,4 +469,4 @@ console.log('FACT_PARTS_V2_2 local validation input + FACT_PARTS_COMPACT_V1 Bedr
   console.log('75-bet payload bytes: rich=' + richBytes + ' compact=' + compactBytes);
 }
 
-console.log('FACT_PARTS_V2_2 local validation input + FACT_PARTS_COMPACT_V1 Bedrock payload regression tests passed.');
+console.log('FACT_PARTS_V2_3 local validation input + FACT_PARTS_COMPACT_V1 Bedrock payload regression tests passed.');
