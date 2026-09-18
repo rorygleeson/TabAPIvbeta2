@@ -567,7 +567,7 @@
           "maxWords": 6,
           "maxChars": 80,
           "phase": "PRE_RESULT",
-          "noSpoiler": "Must not reveal or imply any grouped result, win/loss count, finishing position, return, profit/loss, running P&L direction or later outcome before the staggered reveals. Planner code hard-rejects mechanically provable leaks including obvious grouped outcome language, outcome-only grouped money values and explicit grouped finishing positions; subtler semantic implications remain prompt/live-inspection enforced."
+          "noSpoiler": "PRE_RESULT_BLOCK: do not reveal or imply grouped outcomes. Fact-part chronology is mechanically enforced; semantic spoiler wording in narrative text is prompt-owned and non-fatal."
         },
         "headlineCategory": {
           "source": "LLM",
