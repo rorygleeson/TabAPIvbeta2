@@ -17,9 +17,9 @@ const FIELD_PHASES = {
 function buildLlmCopyInput(bettings, deterministicPlan, contracts = sceneContracts) {
   validateInputs(bettings, deterministicPlan, contracts);
   return {
-    copyInputVersion: '2.0',
+    copyInputVersion: '2.1',
     contractVersion: contracts.contractVersion,
-    groundingProtocol: 'FACT_ATOMS_V1',
+    groundingProtocol: 'FACT_PARTS_V2',
     scenes: deterministicPlan.scenes.map((scene, sceneIndex) =>
       buildSceneCopyInput(scene, sceneIndex, bettings, contracts)
     )
@@ -68,6 +68,9 @@ function requiredLlmFields(sceneType, contracts) {
       if (definition[key] !== undefined) rule[key] = definition[key];
     }
     if (Array.isArray(definition.enum)) rule.enum = [...definition.enum];
+    if (rule.enum) rule.responseType = 'enum';
+    else if (definition.minItems !== undefined || definition.maxItems !== undefined) rule.responseType = 'partsArray';
+    else rule.responseType = 'parts';
     required[name] = rule;
   }
   return required;
