@@ -12,10 +12,6 @@ const fixture = JSON.parse(fs.readFileSync(path.join(ROOT, 'tests', 'fixtures', 
 const plan = buildDeterministicScenePlan(fixture);
 const input = buildLlmCopyInput(fixture, plan);
 
-const text = value => [{ type: 'text', text: value }];
-const fact = id => ({ type: 'fact', id });
-const textPart = value => ({ type: 'text', text: value });
-
 function goodResponse() {
   return {
     scenes: input.scenes.map(scene => {
@@ -24,17 +20,17 @@ function goodResponse() {
         if (field === 'standoutHighlightType') out[field] = scene.context.standoutOptions[0].type;
         else if (field === 'selectedFinalHighlights') out[field] = scene.context.availableFinalHighlights.slice(0, 3).map(x => x.type);
         else if (field === 'headlineCategory') out[field] = rule.enum[0];
-        else if (field === 'replayComments') out[field] = [text('Go now'), text('Get there')];
-        else if (field === 'comments') out[field] = scene.betSequences.map(() => text('Result locked in'));
-        else out[field] = text('Clean recap copy');
+        else if (field === 'replayComments') out[field] = ['Go now', 'Get there'];
+        else if (field === 'comments') out[field] = scene.betSequences.map(() => 'Result locked in');
+        else out[field] = 'Clean recap copy';
       }
       return out;
     })
   };
 }
 
-assert.strictEqual(input.copyInputVersion, '2.4');
-assert.strictEqual(input.groundingProtocol, 'FACT_PARTS_V2_3');
+assert.strictEqual(input.copyInputVersion, '3.0');
+assert.strictEqual(input.groundingProtocol, 'FACT_TEMPLATES_V3_0');
 
 const parsed = parseJsonObject(JSON.stringify(goodResponse()));
 const normalized = validateCopyResponse(input, parsed);
@@ -44,35 +40,22 @@ const unexpected = goodResponse();
 unexpected.scenes[0].sceneType = 1;
 unexpected.debugNote = 'harmless model metadata';
 assert.doesNotThrow(() => validateCopyResponse(input, unexpected));
-const unexpectedNormalized = validateCopyResponse(input, unexpected);
-assert.strictEqual(Object.prototype.hasOwnProperty.call(unexpectedNormalized.scenes[0], 'sceneType'), false);
+assert.strictEqual(Object.prototype.hasOwnProperty.call(validateCopyResponse(input, unexpected).scenes[0], 'sceneType'), false);
 
 const missing = goodResponse();
 delete missing.scenes[0].openingTeaser;
 assert.throws(() => validateCopyResponse(input, missing), /missing field openingTeaser/);
 
 const wordTargetOvershoot = goodResponse();
-wordTargetOvershoot.scenes[0].openingTeaser = text('one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen');
+wordTargetOvershoot.scenes[0].openingTeaser = 'one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen';
 assert.doesNotThrow(() => validateCopyResponse(input, wordTargetOvershoot));
 
 const replayIndex = input.scenes.findIndex(scene => scene.sceneType === 3);
 assert.ok(replayIndex >= 0, '8-bet fixture must contain a replay scene');
 
-const withinCharTolerance = goodResponse();
-withinCharTolerance.scenes[replayIndex].replayLabel = text('x'.repeat(71));
-assert.doesNotThrow(() => validateCopyResponse(input, withinCharTolerance));
-
-const overCharTolerance = goodResponse();
-overCharTolerance.scenes[replayIndex].replayLabel = text('x'.repeat(200));
-assert.doesNotThrow(() => validateCopyResponse(input, overCharTolerance));
-
-const withinItemCharTolerance = goodResponse();
-withinItemCharTolerance.scenes[replayIndex].replayComments[0] = text('x'.repeat(71));
-assert.doesNotThrow(() => validateCopyResponse(input, withinItemCharTolerance));
-
-const overItemCharTolerance = goodResponse();
-overItemCharTolerance.scenes[replayIndex].replayComments[0] = text('x'.repeat(200));
-assert.doesNotThrow(() => validateCopyResponse(input, overItemCharTolerance));
+const longCopy = goodResponse();
+longCopy.scenes[replayIndex].replayLabel = 'x'.repeat(200);
+assert.doesNotThrow(() => validateCopyResponse(input, longCopy));
 
 const badIndex = goodResponse();
 badIndex.scenes[1].sceneIndex = 99;
@@ -86,214 +69,114 @@ const groupedFirst = groupedScene.betSequences[0];
 const groupedSecond = groupedScene.betSequences[1];
 
 const groundedGroup = goodResponse();
-groundedGroup.scenes[groupedIndex].payoffHeadline = text('A tough double landed.');
-groundedGroup.scenes[groupedIndex].contextLine = [
-  fact('B' + groupedFirst + '_FINISH'),
-  fact('B' + groupedSecond + '_FINISH'),
-  fact('BLOCK_PROFIT_LOSS'),
-  textPart(' The pressure was building.')
-];
+groundedGroup.scenes[groupedIndex].contextLine =
+  '<B' + groupedFirst + '_FINISH> then <B' + groupedSecond + '_FINISH>. Net <BLOCK_PROFIT_LOSS>.';
 const groundedGroupNormalized = validateCopyResponse(input, groundedGroup);
 assert.strictEqual(
   groundedGroupNormalized.scenes[groupedIndex].contextLine,
-  groupedPostAtoms['B' + groupedFirst + '_FINISH'] + ' ' +
-    groupedPostAtoms['B' + groupedSecond + '_FINISH'] + ' ' +
-    groupedPostAtoms.BLOCK_PROFIT_LOSS + ' The pressure was building.'
+  groupedPostAtoms['B' + groupedFirst + '_FINISH'] + ' then ' +
+    groupedPostAtoms['B' + groupedSecond + '_FINISH'] + '. Net ' +
+    groupedPostAtoms.BLOCK_PROFIT_LOSS + '.'
 );
 
-const tolerantPrefixIntoClause = goodResponse();
-tolerantPrefixIntoClause.scenes[groupedIndex].contextLine = [
-  textPart('That result was '),
-  fact('BLOCK_PROFIT_LOSS')
-];
-const tolerantPrefixNormalized = validateCopyResponse(input, tolerantPrefixIntoClause);
-assert.strictEqual(tolerantPrefixNormalized.scenes[groupedIndex].contextLine, 'That result was ' + groupedPostAtoms.BLOCK_PROFIT_LOSS);
-
-const tolerantSuffixFromClause = goodResponse();
-tolerantSuffixFromClause.scenes[groupedIndex].contextLine = [
-  fact('BLOCK_PROFIT_LOSS'),
-  textPart(' turned the day around.')
-];
-const tolerantSuffixNormalized = validateCopyResponse(input, tolerantSuffixFromClause);
-assert.strictEqual(tolerantSuffixNormalized.scenes[groupedIndex].contextLine, groupedPostAtoms.BLOCK_PROFIT_LOSS + ' turned the day around.');
-
-const goodClauseNarrative = goodResponse();
-goodClauseNarrative.scenes[groupedIndex].contextLine = [
-  fact('BLOCK_PROFIT_LOSS'),
-  textPart(' That changed the mood.')
-];
-const goodClauseNarrativeNormalized = validateCopyResponse(input, goodClauseNarrative);
-assert.strictEqual(goodClauseNarrativeNormalized.scenes[groupedIndex].contextLine, groupedPostAtoms.BLOCK_PROFIT_LOSS + ' That changed the mood.');
-
-const falseCollectiveFinish = goodResponse();
-falseCollectiveFinish.scenes[groupedIndex].payoffHeadline = text('Both runners second');
-assert.doesNotThrow(() => validateCopyResponse(input, falseCollectiveFinish));
-
-const ordinaryNarrativeOrdinal = goodResponse();
-ordinaryNarrativeOrdinal.scenes[0].openingTeaser = text('The first chapter is about to unfold.');
-assert.doesNotThrow(() => validateCopyResponse(input, ordinaryNarrativeOrdinal));
-
 const dayIndex = input.scenes.findIndex(scene => scene.sceneType === 6);
-const wageringVocabulary = [
-  'That win changed the mood.',
-  'The losses were starting to bite.',
-  'Profit was back in the conversation.',
-  'The return gave the story another twist.',
-  'The stake was on and the tension was building.',
-  'The odds looked tempting.'
-];
-for (const phrase of wageringVocabulary) {
-  const response = goodResponse();
-  response.scenes[dayIndex].dayVerdict = text(phrase);
-  assert.doesNotThrow(() => validateCopyResponse(input, response), phrase);
-}
-
-const rawNumber = goodResponse();
-rawNumber.scenes[dayIndex].dayVerdict = text('Three winners became 3 winners.');
-assert.doesNotThrow(() => validateCopyResponse(input, rawNumber));
-
 const groundedWinningBets = goodResponse();
-groundedWinningBets.scenes[dayIndex].dayVerdict = [
-  fact('DAY_WINNING_BETS'),
-  textPart(' shaped the day.')
-];
+groundedWinningBets.scenes[dayIndex].dayVerdict = '<DAY_WINNING_BETS> winning bets shaped the day.';
 const groundedDayNormalized = validateCopyResponse(input, groundedWinningBets);
 assert.strictEqual(
   groundedDayNormalized.scenes[dayIndex].dayVerdict,
-  input.scenes[dayIndex].context.factAtomsByPhase.POST_DAY.DAY_WINNING_BETS + ' shaped the day.'
+  input.scenes[dayIndex].context.factAtomsByPhase.POST_DAY.DAY_WINNING_BETS + ' winning bets shaped the day.'
 );
 
 const bet3SceneIndex = input.scenes.findIndex(scene => scene.sceneType === 2 && scene.betSequence === 3);
-const rawMoney = goodResponse();
-rawMoney.scenes[dayIndex].dayVerdict = text('The day finished $20 up.');
-assert.doesNotThrow(() => validateCopyResponse(input, rawMoney));
-
-const explicitPosition = goodResponse();
-explicitPosition.scenes[groupedIndex].payoffHeadline = text('Both runners finished second');
-assert.doesNotThrow(() => validateCopyResponse(input, explicitPosition));
-
+assert.ok(bet3SceneIndex >= 0);
 const bet3Runner = fixture.bets[2].runnerName;
-const protectedRunner = goodResponse();
-protectedRunner.scenes[bet3SceneIndex].tensionLine = text(bet3Runner + ' is ready to go');
-assert.doesNotThrow(() => validateCopyResponse(input, protectedRunner));
 
 const groundedRunner = goodResponse();
-groundedRunner.scenes[bet3SceneIndex].tensionLine = [
-  fact('B3_RUNNER'),
-  textPart(' is ready to go')
-];
-const groundedRunnerNormalized = validateCopyResponse(input, groundedRunner);
-assert.strictEqual(groundedRunnerNormalized.scenes[bet3SceneIndex].tensionLine, bet3Runner + ' is ready to go');
-
-const safeMissingSpaces = goodResponse();
-safeMissingSpaces.scenes[0].openingTeaser = [
-  textPart('Backed'),
-  fact('DAY_TOTAL_BETS'),
-  textPart('bets across'),
-  fact('DAY_MEETING_COUNT'),
-  textPart('meetings.')
-];
-const safeMissingSpacesNormalized = validateCopyResponse(input, safeMissingSpaces);
+groundedRunner.scenes[bet3SceneIndex].tensionLine = '<B3_RUNNER> is ready to go';
 assert.strictEqual(
-  safeMissingSpacesNormalized.scenes[0].openingTeaser,
-  'Backed ' + fixture.bets.length + ' bets across ' +
-    new Set(fixture.bets.map(bet => bet.meeting)).size + ' meetings.'
+  validateCopyResponse(input, groundedRunner).scenes[bet3SceneIndex].tensionLine,
+  bet3Runner + ' is ready to go'
 );
 
-const safeAttachedPunctuation = goodResponse();
-safeAttachedPunctuation.scenes[bet3SceneIndex].tensionLine = [
-  fact('B3_RUNNER'),
-  textPart(','),
-  textPart('next at'),
-  fact('B3_MEETING'),
-  textPart('.')
-];
-const safeAttachedPunctuationNormalized = validateCopyResponse(input, safeAttachedPunctuation);
+const attachedPunctuation = goodResponse();
+attachedPunctuation.scenes[bet3SceneIndex].tensionLine = '<B3_RUNNER>, next at <B3_MEETING>.';
 assert.strictEqual(
-  safeAttachedPunctuationNormalized.scenes[bet3SceneIndex].tensionLine,
+  validateCopyResponse(input, attachedPunctuation).scenes[bet3SceneIndex].tensionLine,
   fixture.bets[2].runnerName + ', next at ' + fixture.bets[2].meeting + '.'
 );
 
-const textPartWithExtraMetadata = goodResponse();
-textPartWithExtraMetadata.scenes[bet3SceneIndex].tensionLine = [{ type: 'text', text: '<b>ROCEM</b> at $5 is still just display text.', note: 'ignore me' }];
-const textMetadataNormalized = validateCopyResponse(input, textPartWithExtraMetadata);
-assert.strictEqual(textMetadataNormalized.scenes[bet3SceneIndex].tensionLine, '<b>ROCEM</b> at $5 is still just display text.');
-
-const blankTextFragment = goodResponse();
-blankTextFragment.scenes[groupedIndex].contextLine = [
-  fact('BLOCK_PROFIT_LOSS'),
-  textPart('   '),
-  textPart(' The pressure remained.')
-];
-const blankTextNormalized = validateCopyResponse(input, blankTextFragment);
-assert.strictEqual(blankTextNormalized.scenes[groupedIndex].contextLine, groupedPostAtoms.BLOCK_PROFIT_LOSS + ' The pressure remained.');
-
 const wrongPhaseAtom = goodResponse();
-wrongPhaseAtom.scenes[bet3SceneIndex].tensionLine = [
-  fact('B3_FINISH'),
-  textPart(' is the story')
-];
+wrongPhaseAtom.scenes[bet3SceneIndex].tensionLine = '<B3_FINISH> is the story';
 assert.throws(() => validateCopyResponse(input, wrongPhaseAtom), /unknown or wrong-phase fact atom B3_FINISH/);
+
+const futureResultLeak = goodResponse();
+futureResultLeak.scenes[bet3SceneIndex].tensionLine = '<B8_FINISH>';
+assert.throws(() => validateCopyResponse(input, futureResultLeak), /unknown or wrong-phase fact atom B8_FINISH/);
 
 const finalSceneIndex = input.scenes.findIndex(scene => scene.sceneType === 7);
 assert.ok(finalSceneIndex >= 0);
 
 const crossSceneFinalFact = goodResponse();
-crossSceneFinalFact.scenes[finalSceneIndex].shareCaption = [
-  fact('B8_RUNNER'),
-  textPart(' finished '),
-  fact('B8_FINISH'),
-  textPart(' with '),
-  fact('B8_PROFIT_LOSS'),
-  textPart(' on the bet.')
-];
+crossSceneFinalFact.scenes[finalSceneIndex].shareCaption =
+  '<B8_RUNNER> finished <B8_FINISH> with <B8_PROFIT_LOSS> on the bet.';
 const crossSceneFinalNormalized = validateCopyResponse(input, crossSceneFinalFact);
 assert.ok(crossSceneFinalNormalized.scenes[finalSceneIndex].shareCaption.includes(fixture.bets[7].runnerName));
 assert.ok(crossSceneFinalNormalized.scenes[finalSceneIndex].shareCaption.includes(input.factCatalog.B8_FINISH));
 assert.ok(crossSceneFinalNormalized.scenes[finalSceneIndex].shareCaption.includes(input.factCatalog.B8_PROFIT_LOSS));
 
-const futureResultLeak = goodResponse();
-futureResultLeak.scenes[bet3SceneIndex].tensionLine = [
-  fact('B8_FINISH')
-];
-assert.throws(() => validateCopyResponse(input, futureResultLeak), /unknown or wrong-phase fact atom B8_FINISH/);
-
 const unknownGlobalFact = goodResponse();
-unknownGlobalFact.scenes[finalSceneIndex].shareCaption = [
-  fact('B999_RUNNER')
-];
+unknownGlobalFact.scenes[finalSceneIndex].shareCaption = '<B999_RUNNER>';
 assert.throws(() => validateCopyResponse(input, unknownGlobalFact), /unknown or wrong-phase fact atom B999_RUNNER/);
 
-const legacyPlaceholder = goodResponse();
-legacyPlaceholder.scenes[bet3SceneIndex].tensionLine = '{{B3_RUNNER}} is ready';
-assert.throws(() => validateCopyResponse(input, legacyPlaceholder), /non-empty array of text\/fact parts/);
+const inventedPlausibleAtom = goodResponse();
+inventedPlausibleAtom.scenes[groupedIndex].setupHeadline = '<BLOCK_MEETING_COUNT> meetings in play';
+assert.throws(() => validateCopyResponse(input, inventedPlausibleAtom), /unknown or wrong-phase fact atom BLOCK_MEETING_COUNT/);
 
-const factPartWithExtraMetadata = goodResponse();
-factPartWithExtraMetadata.scenes[bet3SceneIndex].tensionLine = [{ type: 'fact', id: 'B3_RUNNER', note: 'harmless metadata' }];
-const extraMetadataNormalized = validateCopyResponse(input, factPartWithExtraMetadata);
-assert.strictEqual(extraMetadataNormalized.scenes[bet3SceneIndex].tensionLine, bet3Runner);
+const malformedPlaceholder = goodResponse();
+malformedPlaceholder.scenes[bet3SceneIndex].tensionLine = '<B3_RUNNER is ready';
+assert.throws(() => validateCopyResponse(input, malformedPlaceholder), /malformed fact placeholder syntax/);
 
+const htmlMarkup = goodResponse();
+htmlMarkup.scenes[bet3SceneIndex].tensionLine = '<b>Big moment</b>';
+assert.throws(() => validateCopyResponse(input, htmlMarkup), /malformed fact placeholder syntax/);
 
+const legacyParts = goodResponse();
+legacyParts.scenes[bet3SceneIndex].tensionLine = [{ type: 'fact', id: 'B3_RUNNER' }];
+assert.throws(() => validateCopyResponse(input, legacyParts), /non-empty grounded string/);
 
+const scene8Index = input.scenes.findIndex(scene => scene.sceneType === 8);
+if (scene8Index >= 0) {
+  const scene8 = input.scenes[scene8Index];
+  const groundedRows = goodResponse();
+  groundedRows.scenes[scene8Index].comments = scene8.betSequences.map(seq => '<B' + seq + '_RUNNER> finished <B' + seq + '_FINISH>');
+  const rows = validateCopyResponse(input, groundedRows).scenes[scene8Index].comments;
+  assert.strictEqual(rows.length, scene8.betSequences.length);
 
-{
-  const semanticToleranceCases = [
-    'Two chances remain.',
-    'The day finished $20 up.',
-    'Backed ' + bet3Runner + ' at 5.',
-    'Both runners finished second.',
-    'Three winning bets from 8 bets.',
-    'Odds @ 3 looked short.',
-    'Profit moved to +$25.'
-  ];
-  for (const phrase of semanticToleranceCases) {
-    const response = goodResponse();
-    response.scenes[dayIndex].dayVerdict = text(phrase);
-    assert.doesNotThrow(
-      () => validateCopyResponse(input, response),
-      'Narrative text semantics must be non-fatal: ' + phrase
-    );
-  }
+  const wrongRowScope = goodResponse();
+  const firstSeq = scene8.betSequences[0];
+  const secondSeq = scene8.betSequences[1];
+  wrongRowScope.scenes[scene8Index].comments[0] = '<B' + secondSeq + '_FINISH>';
+  assert.throws(
+    () => validateCopyResponse(input, wrongRowScope),
+    new RegExp('unknown or wrong-phase fact atom B' + secondSeq + '_FINISH')
+  );
+  assert.ok(firstSeq !== secondSeq);
 }
 
-console.log('FACT_PARTS_V2_3 LLM copy response validation tests passed with prose-quality tolerance.');
+const semanticToleranceCases = [
+  'Two chances remain.',
+  'The day finished $20 up.',
+  'Both runners finished second.',
+  'Profit was back in the conversation.'
+];
+for (const phrase of semanticToleranceCases) {
+  const response = goodResponse();
+  response.scenes[dayIndex].dayVerdict = phrase;
+  assert.doesNotThrow(
+    () => validateCopyResponse(input, response),
+    'Narrative prose semantics remain non-fatal: ' + phrase
+  );
+}
+
+console.log('FACT_TEMPLATES_V3_0 compact grounded-text response validation tests passed.');

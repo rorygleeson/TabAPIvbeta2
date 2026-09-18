@@ -85,85 +85,43 @@ function validateCopyResponse(copyInput, response) {
 function normalizeGroundedValue(value, rule, source, sceneIndex, field, copyInput) {
   if (rule.responseType === 'enum' || rule.enum) return clone(value);
 
-  if (rule.responseType === 'parts') {
-    return composeParts(value, source, rule.phase, null, sceneIndex, field, copyInput);
+  if (rule.responseType === 'groundedText') {
+    return expandGroundedText(value, source, rule.phase, null, sceneIndex, field, copyInput);
   }
 
-  if (rule.responseType === 'partsArray') {
+  if (rule.responseType === 'groundedTextArray') {
     if (!Array.isArray(value)) {
-      throw new Error('Scene ' + sceneIndex + ' field ' + field + ' must be an array of part arrays.');
+      throw new Error('Scene ' + sceneIndex + ' field ' + field + ' must be an array of grounded strings.');
     }
-    return value.map((parts, itemIndex) =>
-      composeParts(parts, source, rule.phase, itemIndex, sceneIndex, field, copyInput)
+    return value.map((item, itemIndex) =>
+      expandGroundedText(item, source, rule.phase, itemIndex, sceneIndex, field, copyInput)
     );
   }
 
   throw new Error('Scene ' + sceneIndex + ' field ' + field + ' has unsupported responseType.');
 }
 
-function composeParts(parts, source, phase, itemIndex, sceneIndex, field, copyInput) {
+function expandGroundedText(value, source, phase, itemIndex, sceneIndex, field, copyInput) {
   const label = 'Scene ' + sceneIndex + ' field ' + field + (itemIndex === null ? '' : '[' + itemIndex + ']');
-  if (!Array.isArray(parts) || parts.length === 0) {
-    throw new Error(label + ' must be a non-empty array of text/fact parts.');
+  if (typeof value !== 'string' || !value.trim()) {
+    throw new Error(label + ' must be a non-empty grounded string.');
+  }
+
+  // Grounded facts use compact <ATOM_ID> references. Any other angle-bracket
+  // syntax is rejected so malformed placeholders or markup cannot leak through.
+  const placeholderPattern = /<([A-Z][A-Z0-9_]*)>/gu;
+  const withoutValidPlaceholders = value.replace(placeholderPattern, '');
+  if (/[<>]/u.test(withoutValidPlaceholders)) {
+    throw new Error(label + ' contains malformed fact placeholder syntax.');
   }
 
   const atomMap = atomsForPhase(source, phase, itemIndex, copyInput);
-  const rendered = [];
-
-  parts.forEach((part, partIndex) => {
-    if (!part || typeof part !== 'object' || Array.isArray(part)) {
-      throw new Error(label + ' part ' + partIndex + ' must be an object.');
+  return value.replace(placeholderPattern, (token, id) => {
+    if (!ATOM_ID_PATTERN.test(id) || !Object.prototype.hasOwnProperty.call(atomMap, id)) {
+      throw new Error(label + ' references unknown or wrong-phase fact atom ' + id + '.');
     }
-
-    if (part.type === 'fact') {
-      if (typeof part.id !== 'string' || !ATOM_ID_PATTERN.test(part.id)) {
-        throw new Error(label + ' fact part ' + partIndex + ' has invalid atom id.');
-      }
-      if (!Object.prototype.hasOwnProperty.call(atomMap, part.id)) {
-        throw new Error(label + ' references unknown or wrong-phase fact atom ' + part.id + '.');
-      }
-      const text = String(atomMap[part.id]);
-      rendered.push({ kind: 'fact', text, partIndex });
-      return;
-    }
-
-    if (part.type === 'text') {
-      if (typeof part.text !== 'string') {
-        throw new Error(label + ' text part ' + partIndex + ' text must be a string.');
-      }
-      if (!part.text.trim()) return;
-      rendered.push({ kind: 'text', text: part.text, partIndex });
-      return;
-    }
-
-    throw new Error(label + ' part ' + partIndex + ' has unsupported type.');
+    return String(atomMap[id]);
   });
-
-
-  let output = '';
-  rendered.forEach(part => {
-    output = appendWithSafeBoundary(output, part.text);
-  });
-
-  if (!output.trim()) throw new Error(label + ' must not resolve to empty text.');
-  return output;
-}
-
-function appendWithSafeBoundary(current, next) {
-  const left = String(current || '');
-  const right = String(next || '');
-  if (!left || !right) return left + right;
-
-  if (/\s$/u.test(left) || /^\s/u.test(right)) return left + right;
-
-  // Preserve punctuation that is intentionally attached to the adjacent value.
-  if (/[([{/@#$]$/u.test(left)) return left + right;
-  if (/^[.,!?;:%)\]}']/u.test(right)) return left + right;
-
-  // Fact atoms are now atomic values/units rather than pre-written clauses.
-  // If neither side supplied whitespace or attaching punctuation, insert one
-  // mechanically so exact parts can never collapse into e.g. "backed5".
-  return left + ' ' + right;
 }
 
 function atomsForPhase(source, phase, itemIndex, copyInput) {
@@ -246,7 +204,6 @@ module.exports = {
   hardCharLimit,
   __test: {
     atomsForPhase,
-    composeParts,
-    appendWithSafeBoundary
+    expandGroundedText
   }
 };

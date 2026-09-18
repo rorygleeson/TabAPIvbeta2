@@ -18,9 +18,7 @@ function readJson(name) {
   return JSON.parse(fs.readFileSync(path.join(FIXTURE_DIR, name), 'utf8'));
 }
 
-const text = value => [{ type: 'text', text: value }];
-const fact = id => ({ type: 'fact', id });
-const textPart = value => ({ type: 'text', text: value });
+const text = value => value;
 
 function mockCopyFromInput(copyInput) {
   return {
@@ -50,13 +48,13 @@ function mockCopyFromInput(copyInput) {
           item.contextLine = text('Those races moved the running position again.');
           break;
         case 6:
-          item.dayVerdict = [fact('DAY_WINNING_BETS'), textPart(' shaped a day with several swings.')];
+          item.dayVerdict = '<DAY_WINNING_BETS> winning bets shaped a day with several swings.';
           item.standoutHighlightType = 'totalReturned';
           item.standoutCopy = text('That was the clearest single turning point of the day.');
           break;
         case 7:
           item.selectedFinalHighlights = ['totalBets', 'wins', 'finalPnl'];
-          item.finalSummary = [fact('DAY_FINAL_PNL'), textPart(' when it was all done.')];
+          item.finalSummary = '<DAY_FINAL_PNL> when it was all done.';
           item.shareCaption = text('My full racing-day recap, from the opening move to the closing chapter.');
           break;
         case 8:
@@ -93,8 +91,8 @@ for (const totalBets of [5, 8, 16, 32, 75]) {
   const validatedCopy = validateCopyResponse(copyInput, copyResponse);
   const finalPlan = mergeCopyIntoPlan(deterministicPlan, validatedCopy);
 
-  assert.strictEqual(copyInput.copyInputVersion, '2.4');
-  assert.strictEqual(copyInput.groundingProtocol, 'FACT_PARTS_V2_3');
+  assert.strictEqual(copyInput.copyInputVersion, '3.0');
+  assert.strictEqual(copyInput.groundingProtocol, 'FACT_TEMPLATES_V3_0');
   assert.strictEqual(finalPlan.planVersion, '2.0');
   assert.deepStrictEqual(
     structuralProjection(finalPlan),
@@ -104,8 +102,8 @@ for (const totalBets of [5, 8, 16, 32, 75]) {
 
   assert.strictEqual('artifactType' in finalPlan, false);
   assert.strictEqual('artifactVersion' in finalPlan, false);
-  assert.strictEqual(JSON.stringify(finalPlan).includes('FACT_PARTS_V2_3'), false, 'Final scene plan must not contain copy-stage protocol metadata');
-  assert.strictEqual(JSON.stringify(finalPlan).includes('"type":"fact"'), false, 'Final scene plan must not contain fact parts');
+  assert.strictEqual(JSON.stringify(finalPlan).includes('FACT_TEMPLATES_V3_0'), false, 'Final scene plan must not contain copy-stage protocol metadata');
+  assert.strictEqual(JSON.stringify(finalPlan).includes('<DAY_'), false, 'Final scene plan must not contain unresolved fact placeholders');
 
   const result = buildRecap({ bettings, scenePlan: finalPlan });
   assert.ok(result.html.includes('data-scene-type='));
@@ -170,4 +168,4 @@ for (const totalBets of [5, 8, 16, 32, 75]) {
   );
 }
 
-console.log('FACT_PARTS_V2_3 merge, deterministic fallback and Builder compatibility tests passed.');
+console.log('FACT_TEMPLATES_V3_0 merge, deterministic fallback and Builder compatibility tests passed.');

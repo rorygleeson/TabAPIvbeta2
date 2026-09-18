@@ -90,13 +90,13 @@ for (const totalBets of [5, 8, 16, 32, 75]) {
   const payload = buildLlmCopyInput(bettings, deterministicPlan);
   const modelPayload = buildLlmModelPayload(payload);
 
-  assert.strictEqual(payload.copyInputVersion, '2.4');
+  assert.strictEqual(payload.copyInputVersion, '3.0');
   assert.strictEqual(modelPayload.modelPayloadVersion, '1.0');
-  assert.strictEqual(modelPayload.groundingProtocol, 'FACT_PARTS_COMPACT_V1');
+  assert.strictEqual(modelPayload.groundingProtocol, 'FACT_TEMPLATE_COMPACT_V1');
   assert.strictEqual(modelPayload.scenes.length, deterministicPlan.scenes.length);
   assert.strictEqual(Object.prototype.hasOwnProperty.call(modelPayload, 'factCatalog'), false);
   assert.strictEqual(Object.prototype.hasOwnProperty.call(modelPayload, 'protectedTerms'), false);
-  assert.strictEqual(payload.groundingProtocol, 'FACT_PARTS_V2_3');
+  assert.strictEqual(payload.groundingProtocol, 'FACT_TEMPLATES_V3_0');
   assert.strictEqual(payload.scenes.length, deterministicPlan.scenes.length);
   assert.ok(payload.factCatalog && typeof payload.factCatalog === 'object');
   assert.ok(Array.isArray(payload.protectedTerms));
@@ -117,7 +117,7 @@ for (const totalBets of [5, 8, 16, 32, 75]) {
     assert.strictEqual(scene.sceneType, deterministicPlan.scenes[index].sceneType);
     assert.ok(Object.keys(scene.requiredFields).length > 0, 'Scene ' + index + ' must request LLM fields');
     for (const rule of Object.values(scene.requiredFields)) {
-      assert.ok(['parts', 'partsArray', 'enum'].includes(rule.responseType), 'Every LLM field must declare responseType');
+      assert.ok(['groundedText', 'groundedTextArray', 'enum'].includes(rule.responseType), 'Every LLM field must declare responseType');
     }
   });
 
@@ -276,4 +276,4 @@ for (const totalBets of [5, 8, 16, 32, 75]) {
   console.log('75-bet payload bytes: rich=' + richBytes + ' compact=' + compactBytes);
 }
 
-console.log('FACT_PARTS_V2_3 local validation input + FACT_PARTS_COMPACT_V1 Bedrock payload regression tests passed.');
+console.log('FACT_TEMPLATES_V3_0 local validation input + FACT_TEMPLATE_COMPACT_V1 Bedrock payload regression tests passed.');

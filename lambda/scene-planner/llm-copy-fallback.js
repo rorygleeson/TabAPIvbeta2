@@ -57,7 +57,7 @@ function buildFallbackCopy(copyInput) {
       for (const [field, rule] of Object.entries(scene.requiredFields || {})) {
         if (rule.responseType === 'enum' || rule.enum) {
           out[field] = fallbackEnum(scene, field, rule);
-        } else if (rule.responseType === 'partsArray') {
+        } else if (rule.responseType === 'groundedTextArray') {
           out[field] = fallbackArray(scene, field, rule);
         } else {
           out[field] = fallbackText(field);
