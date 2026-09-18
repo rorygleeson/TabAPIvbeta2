@@ -329,10 +329,7 @@ function groupedContext(bettings, sequences, scene8) {
       },
       semanticContextByPhase: {
         PRE_RESULT_BLOCK: preSemantics,
-        POST_RESULT_BY_BET: bets.map(bet => ({
-          ...betSemanticContext(bet, true),
-          groupPosition: position
-        }))
+        POST_RESULT_BY_BET: bets.map(bet => betSemanticContext(bet, true))
       },
       protectedTerms: protectedTerms(bettings, bets)
     };
@@ -620,7 +617,6 @@ function pnlDirection(value) {
 
 function betSemanticContext(bet, includeResult) {
   const semantic = {
-    sequence: bet.sequence,
     oddsFormat: 'DECIMAL',
     currentResultAvailable: Boolean(includeResult),
     raceActionEvidence: 'NONE'
