@@ -18,9 +18,9 @@ function buildLlmCopyInput(bettings, deterministicPlan, contracts = sceneContrac
   validateInputs(bettings, deterministicPlan, contracts);
   const factCatalog = buildGlobalFactCatalog(bettings);
   return {
-    copyInputVersion: '2.3',
+    copyInputVersion: '2.4',
     contractVersion: contracts.contractVersion,
-    groundingProtocol: 'FACT_PARTS_V2_2',
+    groundingProtocol: 'FACT_PARTS_V2_3',
     factCatalog,
     protectedTerms: protectedTerms(bettings, bettings.bets),
     scenes: deterministicPlan.scenes.map((scene, sceneIndex) =>
