@@ -1,12 +1,23 @@
 # TAB Recap Regression Gates
 
-Last updated: 2026-09-18
+Last updated: 2026-09-19
 
 This document describes the **current Kubrick V2 regression expectations** for `rorygleeson/TabAPIvbeta2`.
 
 The old vbeta1 planner repair-loop tests are historical and are no longer the acceptance model for Kubrick V2.
 
-## 1. Planner architecture under test
+## 1. Kubrick architecture under test
+
+Kubrick is the complete backend:
+
+```text
+Kubrick
+  = Orchestrator
+  + Planner
+  + Builder / Renderer
+```
+
+The Planner path remains:
 
 ```text
 bettings.json
@@ -16,10 +27,26 @@ bettings.json
        -> valid: merge copy
        -> copy-stage failure: deterministic fallback
   -> scene.json
-  -> existing Builder
+  -> Builder / Renderer
 ```
 
 Code owns structure. The LLM owns copy only.
+
+The public Kubrick path is:
+
+```text
+POST /jobs
+-> Orchestrator
+-> Planning SQS
+-> Planner
+-> Rendering SQS
+-> Builder / Renderer
+-> READY
+-> GET /jobs/{jobId}
+-> recapUrl
+```
+
+The CSV Normaliser is not under this Kubrick regression boundary. It is an isolated sample client that may produce the canonical input.
 
 There is:
 - no LLM structural planning;
@@ -200,7 +227,44 @@ The Builder remains downstream-compatible and should continue to prove:
 
 The Builder must not become a second planner or a prose semantic validator.
 
-## 10. Working rule
+## 10. Public API regression gate
+
+The deployed API harness is:
+
+```cmd
+tests\tools\run-orchestrator-test.cmd <size>
+```
+
+Supported fixture sizes:
+
+```text
+5 / 8 / 16 / 32 / 50 / 75
+```
+
+The harness exercises both public Kubrick endpoints:
+
+```text
+POST /jobs
+GET /jobs/{jobId}
+```
+
+Acceptance behaviour:
+
+1. POST canonical fixture JSON using the configured `x-api-key`.
+2. Require HTTP acceptance with a generated UUID `jobId` and `RECEIVED`.
+3. Poll GET with the same API key.
+4. Observe processing until a terminal state.
+5. Require `READY`.
+6. Require a returned `recapUrl`.
+7. Download final `recap.html` from that URL.
+
+The API key value is a local secret and must never be committed to the repository.
+
+The API harness has been live-proven across multiple fixture sizes up to 75 bets.
+
+The soundtrack/browser path has also been checked against live API output after the CORS/runtime fix.
+
+## 11. Working rule
 
 For every significant change:
 
