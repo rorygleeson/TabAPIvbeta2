@@ -754,6 +754,8 @@ NORMALISER = PARKED / LOCAL PROVEN CANDIDATE
 
 Do not silently deploy it into the existing AWS runtime.
 
-Productionisation is a separate controlled step and should preserve the agreed target shape: one Python Normaliser Lambda with internal Pass 1 / Pass 2 / Pass 3 stages, producing canonical `bettings.json` for Kubrick V2.
+Productionisation is a separate controlled step and should preserve the agreed target shape: one Python Normaliser Lambda with internal Pass 1 / Pass 2 / Pass 3 stages, producing canonical `bettings.json`.
 
-Until that productionisation step is explicitly started, the implemented Kubrick V2 planner remains independently testable from canonical fixtures.
+That Lambda would act as a **client of Kubrick**, submitting the canonical JSON through `POST /jobs` and polling `GET /jobs/{jobId}` for the final `recapUrl`. It should remain deployable and evolvable independently from Kubrick.
+
+Kubrick itself remains independently testable from canonical fixtures and can be consumed by clients that do not use the Normaliser at all.
