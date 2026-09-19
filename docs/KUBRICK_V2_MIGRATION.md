@@ -458,6 +458,31 @@ GET  /jobs/{jobId}
 
 Both methods require the API Gateway `x-api-key` header. This is a shared POC key, not end-user authentication. The key value is never stored in GitHub or repository documentation.
 
+### Admission contract to implement
+
+Before job creation, the Orchestrator must synchronously:
+
+```text
+parse JSON
+-> validate canonical schema
+-> validate deterministic semantic invariants
+-> reject invalid input directly
+```
+
+This admission work is deliberately local and deterministic; no Bedrock or external enrichment/API call belongs in this phase.
+
+Only after validation succeeds may Kubrick generate a job ID and begin durable job creation. `202 Accepted` is returned only after:
+
+```text
+canonical input persisted
+-> DynamoDB job created
+-> Planning SQS submission confirmed
+```
+
+If any of those creation/handoff steps fail, the caller must not receive a successful `202`. Partial internal writes require cleanup/reconciliation and will be covered by the resiliency audit.
+
+This strict admission behaviour is **documented/locked but not yet implemented** in the current Orchestrator source.
+
 ### POST /jobs
 
 ```text
@@ -595,6 +620,11 @@ The soundtrack path is also live-proven after the existing CloudFront MP3 path w
 
 ### IN PROGRESS / PLANNED
 
+- implement strict Orchestrator canonical schema + semantic admission validation before job creation;
+- implement stable direct API error codes for admission failures;
+- instrument payload size / bet count / validation duration at admission;
+- define and test partial job-creation rollback/reconciliation before returning 202;
+- complete the end-to-end resiliency audit covering API/Lambda timeouts, SQS visibility/retries/DLQs and DynamoDB terminal failure state;
 - productionising the isolated Normaliser as a client remains a separate future step;
 - future client applications may consume the same Kubrick API directly;
 - production-grade user authentication/authorization can replace the shared POC API key later if required.
