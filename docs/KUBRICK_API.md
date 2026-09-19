@@ -116,6 +116,87 @@ The Planner still performs defensive validation internally, but Planner validati
 
 **Implementation note:** this strict Orchestrator admission validation is the next controlled implementation step. The API contract is being locked here before the code change.
 
+### Admission timing and execution rules
+
+Admission validation is intentionally **synchronous, deterministic and local to the Orchestrator**.
+
+The POST request must complete this admission sequence before a Kubrick job is accepted:
+
+```text
+API Gateway API-key check
+  -> parse JSON
+  -> validate canonical schema
+  -> validate deterministic semantic invariants
+  -> only then begin job creation
+```
+
+Admission validation must not call Bedrock, TAB APIs, historical-result services, enrichment services or any other external business-data service. It must not perform planning or rendering.
+
+For the currently supported recap sizes, this work is expected to be CPU-local and fast. Validation latency should be instrumented so unusually slow admission can be detected rather than silently consuming the Orchestrator/API timeout budget.
+
+Recommended admission telemetry:
+
+```text
+requestId
+payloadBytes
+betCount
+validationDurationMs
+validationResult
+```
+
+A client waits synchronously for this admission result. There are only two public outcomes from `POST /jobs`:
+
+```text
+REJECTED
+  -> direct HTTP error + errorCode
+  -> no jobId returned
+  -> client does not poll
+
+ACCEPTED
+  -> HTTP 202 Accepted
+  -> jobId + status RECEIVED
+  -> client begins polling
+```
+
+HTTP `202` is deliberate: Kubrick has accepted asynchronous work, but the recap has not completed yet.
+
+### Durable acceptance boundary
+
+Kubrick must return `202 Accepted` **only after the validated request has been durably handed to the asynchronous processing pipeline**.
+
+The intended creation order is:
+
+```text
+validated canonical payload
+  -> generate UUID jobId
+  -> persist working/<jobId>/bettings.json
+  -> persist DynamoDB job state
+  -> successfully submit Planning SQS message
+  -> return HTTP 202
+```
+
+A successful `202` therefore means all of the following are true:
+
+- canonical admission validation passed;
+- the canonical input was durably persisted;
+- a DynamoDB job record exists;
+- the planning message was accepted by SQS;
+- the client can safely begin polling the returned `jobId`.
+
+If any job-creation step fails before Planning SQS confirms submission, the POST must **not** return `202`.
+
+Partial internal writes are an implementation/resiliency concern and must not be confused with an accepted client job. The implementation must perform rollback/reconciliation where practical, log the precise failure, and must not expose a successful admission response until the queue handoff has succeeded.
+
+This is especially important for failures such as:
+
+```text
+S3 write succeeds
+DynamoDB write succeeds
+Planning SQS send fails
+```
+
+That condition must never be reported to the caller as an accepted job. The resiliency audit will define the exact cleanup/reconciliation behaviour for every partial-creation failure path.
+
 ### Success response
 
 HTTP `202 Accepted`:
@@ -140,7 +221,7 @@ Orchestrator
   -> return 202 immediately
 ```
 
-The POST request is asynchronous. A successful `202` means the job was accepted, not that the recap is already complete.
+The POST request starts asynchronous processing. A successful `202` means Kubrick has completed synchronous admission, durably created the job and successfully handed it to Planning SQS; it does **not** mean the recap is complete.
 
 ### Pre-job API/admission failures
 
@@ -457,7 +538,9 @@ Accepted job failure
 
 This separation is mandatory for all future resiliency work.
 
-The next implementation step is to make the Orchestrator enforce the strict canonical admission contract and stable error envelope defined above. After that, Kubrick's queue/Lambda timeout, retry, DLQ and DynamoDB failure-state behaviour will be audited and documented separately.
+Admission validation must remain comfortably inside the synchronous API/Orchestrator timeout envelope. If validation latency approaches infrastructure timeouts, that is treated as a defect to investigate rather than a reason to move canonical admission behind SQS.
+
+The next implementation step is to make the Orchestrator enforce the strict canonical admission contract, telemetry and stable error envelope defined above. After that, Kubrick's queue/Lambda timeout, retry, DLQ, partial-creation reconciliation and DynamoDB failure-state behaviour will be audited and documented separately.
 
 ## Test harness
 
