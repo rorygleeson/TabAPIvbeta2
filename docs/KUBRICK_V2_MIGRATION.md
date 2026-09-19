@@ -415,26 +415,13 @@ The 50-bet end-to-end run exposed a missing Scene 4 future-count atom. `CHECKPOI
 
 The 75-bet proof confirms both the full Planner/Builder path and that missing replay URLs do not break planning.
 
-## Current remaining issue
+## Copy-quality status
 
-The planner is structurally stable.
+The planner is structurally stable and the semantic V4 copy interface has been implemented and live-tested.
 
-The remaining visible issue is **copy quality**, for example:
+Historical copy-quality failures such as repeated nouns, return-versus-profit confusion, false final-group wording, unsupported race-action storytelling and ambiguous strongest-finish ranges are now covered by the V4 grounding/interface design and regression tests.
 
-```text
-Both runners missed, The block lost $45.
-profit for the day day.
-Backed 8 backed runners won their races.
-delivered The bet made $2800 profit.
-```
-
-The internal word `block` should not leak into customer copy.
-
-This is not justification for architecture changes.
-
-The preferred next experiment is a very small prompt-only wording refinement, followed by 5- and 75-bet comparison tests.
-
-No new validator, repair loop or second model call should be added for copy polish.
+Residual awkward prose remains a **non-fatal copy-quality concern**, not an architectural or availability defect. It must not justify a structural repair loop, a second model call or homemade grammar/prose validators.
 
 ## POC Orchestrator / API architecture
 
@@ -458,9 +445,9 @@ GET  /jobs/{jobId}
 
 Both methods require the API Gateway `x-api-key` header. This is a shared POC key, not end-user authentication. The key value is never stored in GitHub or repository documentation.
 
-### Admission contract to implement
+### Admission contract — implemented
 
-Before job creation, the Orchestrator must synchronously:
+Before job creation, the Orchestrator synchronously:
 
 ```text
 parse JSON
@@ -469,7 +456,9 @@ parse JSON
 -> reject invalid input directly
 ```
 
-This admission work is deliberately local and deterministic; no Bedrock or external enrichment/API call belongs in this phase.
+This admission work is local and deterministic; no Bedrock or external enrichment/API call belongs in this phase.
+
+The Orchestrator packages the root `contracts/bettings.schema.json` and the shared `shared/canonical-bettings-validator.js`. The same shared semantic validator is also packaged into the Builder, avoiding duplicate semantic-rule implementations.
 
 Only after validation succeeds may Kubrick generate a job ID and begin durable job creation. `202 Accepted` is returned only after:
 
@@ -479,9 +468,9 @@ canonical input persisted
 -> Planning SQS submission confirmed
 ```
 
-If any of those creation/handoff steps fail, the caller must not receive a successful `202`. Partial internal writes require cleanup/reconciliation and will be covered by the resiliency audit.
+Invalid JSON and invalid canonical payloads are returned synchronously using stable Orchestrator-owned `errorCode` envelopes with `requestId`. Admission telemetry records payload size, bet count, validation duration and acceptance/rejection result.
 
-This strict admission behaviour is **documented/locked but not yet implemented** in the current Orchestrator source.
+Partial internal writes after S3/DynamoDB success but before SQS handoff remain a resiliency concern. The caller is not returned `202` when a creation/handoff exception occurs, but cleanup/reconciliation of partial state is still planned.
 
 ### POST /jobs
 
@@ -562,6 +551,8 @@ and then downloads the final HTML from the returned `recapUrl`.
 
 Live API tests have succeeded across multiple fixture sizes up to the 75-bet maximum.
 
+Strict admission is also live-proven. On 2026-09-19, `tests\\tools\\run-orchestrator-test.cmd 8 bad` submitted a temporary semantic mismatch where `summary.totalBets` did not equal `bets.length`. The deployed API returned HTTP 400 with `KUBRICK_INVALID_PAYLOAD`, a `requestId`, validation `details`, no `jobId`, and the client correctly did not poll.
+
 The soundtrack path is also live-proven after the existing CloudFront MP3 path was configured for CORS and the Builder runtime was changed to set `audio.crossOrigin='anonymous'` before the soundtrack `src`. No other Web Audio/Apple compatibility logic was redesigned.
 
 ## Working rules
@@ -597,6 +588,7 @@ The soundtrack path is also live-proven after the existing CloudFront MP3 path w
 - both `POST /jobs` and `GET /jobs/{jobId}` are live-proven through the orchestrator harness;
 - public API -> Orchestrator -> Planner -> Builder/Renderer -> READY -> presigned `recapUrl` is live-proven across multiple sizes up to 75 bets;
 - final recap HTML has been opened/checked from live API outputs;
+- strict Orchestrator admission is live-proven for a semantic mismatch: HTTP 400 + `KUBRICK_INVALID_PAYLOAD` + `requestId` + validation details + no `jobId`;
 - soundtrack playback is live-proven with the existing CloudFront MP3 path plus anonymous CORS mode.
 
 ### LOCKED

@@ -1,17 +1,20 @@
 #!/usr/bin/env python3
-"""TAB CSV normaliser v0.9 local-only test harness.
+"""TAB Daily Recap local Normaliser client.
 
-LOCAL-ONLY standalone Normaliser with:
-- Pass 1: frozen v1.7 parsing behaviour + post-parse horse-only classification
-- Pass 2: horse-only historical enrichment + persistent local meeting resolution
-- Pass 3: best-effort daily bettings.json construction
+Current controlled milestone:
+- Stage 0: scan monthly CSVs and select one horse-racing day
+- Pass 1: retain the proven v1.7/v0.9 parsing and horse-only classification
+- Filter: keep only the selected eventDate
+- Pass 2: retain historical enrichment + persistent local meeting resolution
+- Candidate output: build and validate the exact Kubrick v1 canonical payload
+- STOP before POST /jobs; print/save the payload for inspection
 
 Persistent learned meeting aliases are stored in a local JSON file beside the
 test root. No DynamoDB, boto3, AWS CLI, IAM, or AWS credentials are required.
 """
 from __future__ import annotations
 
-import argparse, csv, hashlib, json, re, shutil, sys
+import argparse, csv, hashlib, json, re, shutil, subprocess, sys
 from collections import Counter, defaultdict
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
@@ -1101,11 +1104,17 @@ def enrichment_impact(bet):
 
 
 def expected_enrichment_fields(bet):
-    """Expected race facts by bet shape; excludes genuinely optional IDs/replay."""
+    """Race facts required before a normal single-runner bet can be Kubrick-ready.
+
+    replayUrl remains genuinely optional because Kubrick permits null. Exotics are
+    retained through enrichment for evidence but are not forced into a false
+    single-runner identity; the authoritative Kubrick validator will quarantine
+    them until the Kubrick contract explicitly supports multi-runner selections.
+    """
     base = ["raceTime", "raceName", "meeting", "state", "raceNumber"]
     if bet.get("betType") in ("TRIFECTA", "FIRST_4"):
         return base
-    return base + ["runnerNumber", "runnerName"]
+    return base + ["runnerNumber", "runnerName", "finishingPosition"]
 
 
 def enrichment_missing_fields(bet, enrichment):
@@ -1312,6 +1321,14 @@ def enrich_one_bet(bet, api, store):
             "finishingPosition": raw_position if raw_position and raw_position > 0 else None,
         })
 
+        # Simple Tote WIN/PLACE needs the official historical dividend because
+        # losing Tote bets cannot derive a positive Kubrick odds value from CSV.
+        if bet.get("pricingType") == "TOTE" and bet.get("betType") in ("WIN", "PLACE"):
+            tote = runner.get("parimutuel") if isinstance(runner.get("parimutuel"), dict) else {}
+            dividend_key = "returnWin" if bet.get("betType") == "WIN" else "returnPlace"
+            tote_dividend = enrich_to_decimal(tote.get(dividend_key))
+            enrichment["toteDividend"] = float(tote_dividend) if tote_dividend is not None and tote_dividend > 0 else None
+
         if bet.get("betType") == "TOTE_WIN_PLACE":
             win_stake = enrich_money2(bet.get("winStake"))
             place_stake = enrich_money2(bet.get("placeStake"))
@@ -1319,6 +1336,8 @@ def enrich_one_bet(bet, api, store):
             tote = runner.get("parimutuel") if isinstance(runner.get("parimutuel"), dict) else {}
             win_dividend = enrich_to_decimal(tote.get("returnWin"))
             place_dividend = enrich_to_decimal(tote.get("returnPlace"))
+            enrichment["toteWinDividend"] = float(win_dividend) if win_dividend is not None and win_dividend > 0 else None
+            enrichment["totePlaceDividend"] = float(place_dividend) if place_dividend is not None and place_dividend > 0 else None
             resolution = {
                 "reconciled": False,
                 "winReturn": None,
@@ -1437,6 +1456,346 @@ def enrich_normalised_payload(normalised, api, store):
 
 
 # =============================================================================
+# STAGE 0 — LOCAL CSV/DAY DISCOVERY
+# =============================================================================
+
+def scan_racing_days(files):
+    """Return selectable horse-racing days without calling the historical API."""
+    days = []
+    scan_errors = []
+    for path in files:
+        try:
+            normalised, _, _ = normalise_csv(path, f"scan-{path.stem}", path.name)
+            counts = Counter(
+                str(b.get("eventDate"))
+                for b in normalised.get("bets", [])
+                if valid_date(str(b.get("eventDate") or ""))
+            )
+            for day, count in counts.items():
+                days.append({
+                    "selectedDate": day,
+                    "sourceCsvPath": path,
+                    "displayDate": datetime.strptime(day, "%Y-%m-%d").strftime("%A %d %b %Y"),
+                    "eligibleHorseBetCount": count,
+                })
+        except Exception as ex:
+            scan_errors.append({"sourceFile": path.name, "error": str(ex)})
+    days.sort(key=lambda item: (item["selectedDate"], item["sourceCsvPath"].name.lower()), reverse=True)
+    return days, scan_errors
+
+
+def choose_racing_day(days):
+    print("\nAvailable racing days:\n")
+    for index, item in enumerate(days, 1):
+        print(f"  [{index}]  {item['displayDate']:<24} {item['eligibleHorseBetCount']:>3} bets")
+    while True:
+        try:
+            raw = input(f"\nSelect racing day [1-{len(days)}]: ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print("\n\nSelection cancelled.")
+            return None
+        if raw.isdigit():
+            choice = int(raw)
+            if 1 <= choice <= len(days):
+                return days[choice - 1]
+        print(f"Invalid selection. Enter a number from 1 to {len(days)}.")
+
+
+def filter_normalised_to_day(normalised, selected_date):
+    filtered = [b for b in normalised.get("bets", []) if str(b.get("eventDate")) == selected_date]
+    for index, bet in enumerate(filtered, 1):
+        bet["sequence"] = index
+    result = dict(normalised)
+    result["bets"] = filtered
+    result["selectedDate"] = selected_date
+    result["domainSummary"] = dict(normalised.get("domainSummary", {}))
+    result["domainSummary"]["selectedDayHorseBets"] = len(filtered)
+    return result
+
+
+# =============================================================================
+# CANDIDATE KUBRICK PAYLOAD — BUILD + LOCAL CONTRACT VALIDATION
+# =============================================================================
+
+KUBRICK_REQUIRED_BET_FIELDS = (
+    "sequence", "betTime", "raceTime", "raceName", "meeting", "state",
+    "raceNumber", "runnerNumber", "runnerName", "betType", "stake",
+    "odds", "result", "finishingPosition", "return", "profitLoss", "runningPnl",
+    "replayUrl",
+)
+
+KUBRICK_OPTIONAL_BET_FIELDS = ("raceId", "runnerId")
+KUBRICK_ALLOWED_BET_FIELDS = KUBRICK_REQUIRED_BET_FIELDS + KUBRICK_OPTIONAL_BET_FIELDS
+
+
+def candidate_odds(bet):
+    """Return the canonical positive odds value without fabricating source facts."""
+    if bet.get("odds") is not None and float(bet["odds"]) > 0:
+        return float(bet["odds"])
+
+    e = bet.get("enrichment", {})
+    if e.get("toteDividend") is not None and float(e["toteDividend"]) > 0:
+        return float(e["toteDividend"])
+
+    if bet.get("betType") == "TOTE_WIN_PLACE":
+        stake = best_effort_stake(bet)
+        returned = best_effort_return(bet)
+
+        # Preferred rule for a returned composite: effective whole-transaction
+        # multiple actually achieved by the customer.
+        if stake is not None and float(stake) > 0 and returned is not None and float(returned) > 0:
+            return round(float(returned) / float(stake), 6)
+
+        # For a settled loss, return/stake is zero and cannot satisfy Kubrick's
+        # positive-odds contract. Use only official historical component Tote
+        # dividends when both are available; weight them by the actual component
+        # stakes to produce one deterministic composite multiple.
+        win_dividend = e.get("toteWinDividend")
+        place_dividend = e.get("totePlaceDividend")
+        win_stake = bet.get("winStake")
+        place_stake = bet.get("placeStake")
+        total_stake = bet.get("totalStake")
+        if all(v is not None for v in (win_dividend, place_dividend, win_stake, place_stake, total_stake)):
+            total_stake = float(total_stake)
+            if total_stake > 0:
+                effective = (
+                    float(win_stake) * float(win_dividend)
+                    + float(place_stake) * float(place_dividend)
+                ) / total_stake
+                if effective > 0:
+                    return round(effective, 6)
+
+        # Never manufacture a positive number merely to pass Kubrick. This
+        # transaction will be quarantined by exact validation if the historical
+        # evidence cannot support a positive composite odds value.
+        return None
+
+    return None
+
+
+def candidate_return(bet):
+    value = best_effort_return(bet)
+    return float(value) if value is not None else None
+
+
+def candidate_stake(bet):
+    value = best_effort_stake(bet)
+    return float(value) if value is not None else None
+
+
+def build_candidate_kubrick_payload(enriched_payload, selected_date, first_name="Customer", timezone_name="Australia/Melbourne"):
+    bets = sorted(enriched_payload.get("bets", []), key=lambda b: b.get("sequence") or 999999)
+    final_bets = []
+    running = 0.0
+    for sequence, bet in enumerate(bets, 1):
+        e = bet.get("enrichment", {})
+        stake = candidate_stake(bet)
+        returned = candidate_return(bet)
+        pnl = round(returned - stake, 2) if stake is not None and returned is not None else None
+        if pnl is None or running is None:
+            running = None
+        else:
+            running = round(running + pnl, 2)
+        record = {
+            "sequence": sequence,
+            "betTime": bet.get("betTime"),
+            "raceTime": e.get("raceTime"),
+            "raceName": e.get("raceName"),
+            "meeting": e.get("meeting") or bet.get("meeting"),
+            "state": e.get("state"),
+            "raceNumber": e.get("raceNumber") or bet.get("raceNumber"),
+            "runnerNumber": e.get("runnerNumber") or bet.get("runnerNumber"),
+            "runnerName": e.get("runnerName") or bet.get("runnerName"),
+            "betType": bet.get("betType"),
+            "stake": stake,
+            "odds": candidate_odds(bet),
+            "result": bet.get("betResult"),
+            "finishingPosition": e.get("finishingPosition"),
+            "return": returned,
+            "profitLoss": pnl,
+            "runningPnl": running,
+            "replayUrl": e.get("replayUrl"),
+        }
+        if e.get("raceId") not in (None, ""):
+            record["raceId"] = e.get("raceId")
+        if e.get("runnerId") not in (None, ""):
+            record["runnerId"] = e.get("runnerId")
+        final_bets.append(record)
+
+    stakes = [b["stake"] for b in final_bets if isinstance(b.get("stake"), (int, float))]
+    returns = [b["return"] for b in final_bets if isinstance(b.get("return"), (int, float))]
+    wins = [b for b in final_bets if b.get("result") == "WIN"]
+    losses = [b for b in final_bets if b.get("result") == "LOSS"]
+    meetings = {b.get("meeting") for b in final_bets if b.get("meeting")}
+
+    def earliest_extreme(items, key, highest=True):
+        usable = [b for b in items if isinstance(b.get(key), (int, float))]
+        if not usable:
+            return None
+        target = (max if highest else min)(b[key] for b in usable)
+        return min(b["sequence"] for b in usable if b[key] == target)
+
+    positive_wins = [b for b in wins if isinstance(b.get("profitLoss"), (int, float)) and b["profitLoss"] > 0]
+    negative_losses = [b for b in losses if isinstance(b.get("profitLoss"), (int, float)) and b["profitLoss"] < 0]
+
+    return {
+        "schemaVersion": "1.0",
+        "user": {"firstName": first_name},
+        "day": {"date": selected_date, "timezone": timezone_name},
+        "bets": final_bets,
+        "summary": {
+            "totalBets": len(final_bets),
+            "totalStaked": round(sum(stakes), 2) if len(stakes) == len(final_bets) else None,
+            "totalReturned": round(sum(returns), 2) if len(returns) == len(final_bets) else None,
+            "wins": len(wins),
+            "losses": len(losses),
+            "finalPnl": final_bets[-1]["runningPnl"] if final_bets else None,
+            "meetings": len(meetings),
+            "biggestStake": max(stakes) if len(stakes) == len(final_bets) and stakes else None,
+            "biggestWinSequence": earliest_extreme(positive_wins, "profitLoss", True),
+            "biggestLossSequence": earliest_extreme(negative_losses, "profitLoss", False),
+            "highestOddsWinnerSequence": earliest_extreme(wins, "odds", True),
+        },
+    }
+
+
+def run_authoritative_kubrick_validator(payload_path, root):
+    """Run the exact schema + semantic validator used by the Kubrick Orchestrator."""
+    helper = root / "validate-kubrick.js"
+    if not helper.exists():
+        return {
+            "valid": False,
+            "validatorError": True,
+            "errorCode": "KUBRICK_VALIDATOR_HELPER_MISSING",
+            "message": f"Authoritative validator helper not found: {helper}",
+            "details": [],
+        }
+
+    try:
+        completed = subprocess.run(
+            ["node", str(helper), str(payload_path)],
+            cwd=str(root),
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except FileNotFoundError:
+        return {
+            "valid": False,
+            "validatorError": True,
+            "errorCode": "NODE_NOT_FOUND",
+            "message": "Node.js is required to run the exact Kubrick validator but 'node' was not found in PATH.",
+            "details": [],
+        }
+    except Exception as ex:
+        return {
+            "valid": False,
+            "validatorError": True,
+            "errorCode": "KUBRICK_VALIDATOR_EXECUTION_FAILED",
+            "message": str(ex),
+            "details": [],
+        }
+
+    raw = (completed.stdout or completed.stderr or "").strip()
+    try:
+        result = json.loads(raw)
+    except Exception:
+        return {
+            "valid": False,
+            "validatorError": True,
+            "errorCode": "KUBRICK_VALIDATOR_BAD_RESPONSE",
+            "message": "Authoritative validator returned an unreadable response.",
+            "details": [raw[:1000]] if raw else [],
+        }
+
+    if completed.returncode not in (0, 1) and not result.get("validatorError"):
+        result["validatorError"] = True
+    return result
+
+
+def transaction_groups_for_validation(enriched_payload):
+    """Keep source transactions atomic while preserving original day order."""
+    groups = []
+    by_key = {}
+    for index, bet in enumerate(
+        sorted(enriched_payload.get("bets", []), key=lambda b: b.get("sequence") or 999999),
+        1,
+    ):
+        tx = bet.get("transactionNumber")
+        key = str(tx) if tx not in (None, "") else f"NO_TX_{index}"
+        if key not in by_key:
+            item = {"key": key, "transactionNumber": tx, "bets": []}
+            by_key[key] = item
+            groups.append(item)
+        by_key[key]["bets"].append(bet)
+    return groups
+
+
+def authoritative_transaction_partition(
+    enriched_payload,
+    selected_date,
+    first_name,
+    timezone_name,
+    root,
+    candidate_dir,
+):
+    """Quarantine only source transactions that cannot satisfy Kubrick.
+
+    Fixed W&P components share a transaction number and are therefore kept or
+    excluded together. Tote W&P is already one combined transaction record.
+    """
+    validation_dir = candidate_dir / "transaction-validation"
+    validation_dir.mkdir(parents=True, exist_ok=True)
+
+    included = []
+    quarantined = []
+
+    for ordinal, group in enumerate(transaction_groups_for_validation(enriched_payload), 1):
+        transaction_payload = dict(enriched_payload)
+        transaction_payload["bets"] = list(group["bets"])
+        candidate = build_candidate_kubrick_payload(
+            transaction_payload,
+            selected_date,
+            first_name,
+            timezone_name,
+        )
+        candidate_path = validation_dir / f"{ordinal:03d}-{group['key']}.json"
+        write_json(candidate_path, candidate)
+        result = run_authoritative_kubrick_validator(candidate_path, root)
+
+        if result.get("validatorError"):
+            raise RuntimeError(
+                f"Authoritative Kubrick validator could not run: "
+                f"{result.get('errorCode')}: {result.get('message')}"
+            )
+
+        if result.get("valid"):
+            included.extend(group["bets"])
+            continue
+
+        quarantined.append({
+            "transactionNumber": group.get("transactionNumber"),
+            "canonicalIds": [b.get("canonicalId") for b in group["bets"]],
+            "betTypes": [b.get("betType") for b in group["bets"]],
+            "enrichmentStatuses": [
+                b.get("enrichment", {}).get("status") for b in group["bets"]
+            ],
+            "missingEnrichmentFields": [
+                {
+                    "canonicalId": b.get("canonicalId"),
+                    "fields": enrichment_missing_fields(b, b.get("enrichment", {})),
+                }
+                for b in group["bets"]
+            ],
+            "errorCode": result.get("errorCode"),
+            "message": result.get("message"),
+            "details": result.get("details") or [],
+        })
+
+    return included, quarantined
+
+
+# =============================================================================
 # PASS 3 — HORSE-ONLY BEST-EFFORT DAILY bettings.json
 # This intentionally approximates the current v1.0 contract. It does not fabricate
 # unavailable API facts and it does not yet fully model MULTI/exotic structures.
@@ -1498,12 +1857,10 @@ def map_to_final_bet(bet, sequence, running_pnl, running_complete):
         "sequence": sequence,
         "betTime": bet.get("betTime"),
         "raceTime": e.get("raceTime"),
-        "raceId": e.get("raceId"),
         "raceName": e.get("raceName"),
         "meeting": e.get("meeting") or bet.get("meeting"),
         "state": e.get("state"),
         "raceNumber": e.get("raceNumber") or bet.get("raceNumber"),
-        "runnerId": e.get("runnerId"),
         "runnerNumber": e.get("runnerNumber") or bet.get("runnerNumber"),
         "runnerName": e.get("runnerName") or bet.get("runnerName"),
         "betType": bet.get("betType"),
@@ -1524,6 +1881,10 @@ def map_to_final_bet(bet, sequence, running_pnl, running_complete):
         "enrichmentReason": e.get("reason"),
         "missingEnrichmentFields": missing,
     }
+    if e.get("raceId") not in (None, ""):
+        record["raceId"] = e.get("raceId")
+    if e.get("runnerId") not in (None, ""):
+        record["runnerId"] = e.get("runnerId")
     return record, running_pnl, running_complete
 
 def build_daily_bettings(enriched_payload, first_name="Customer", timezone="Australia/Melbourne"):
@@ -1604,39 +1965,52 @@ def build_daily_bettings(enriched_payload, first_name="Customer", timezone="Aust
 
 
 # =============================================================================
-# COMBINED LOCAL HARNESS — one process, one future Lambda
+# COMBINED LOCAL CLIENT — CURRENT MILESTONE STOPS BEFORE KUBRICK POST
 # =============================================================================
 
-def process(path, root, index, total, api, store, first_name, timezone):
-    """Process one source CSV while preserving completed-stage evidence on failure."""
+def process_selected_day(path, selected_date, root, api, store, first_name, timezone_name):
     jid = job_id(path)
     job_dir = root / "working" / jid
     source_dir = job_dir / "source"
     normaliser_dir = job_dir / "normaliser"
     enrichment_dir = job_dir / "enrichment"
-    final_dir = job_dir / "final"
-    source_dir.mkdir(parents=True)
-    normaliser_dir.mkdir()
-    enrichment_dir.mkdir()
-    final_dir.mkdir()
+    candidate_dir = job_dir / "candidate"
+    for directory in (source_dir, normaliser_dir, enrichment_dir, candidate_dir):
+        directory.mkdir(parents=True, exist_ok=True)
+
     source_copy = source_dir / "original.csv"
     shutil.copy2(path, source_copy)
-    print(f"\n[{index}/{total}] {path.name}\n      Job ID : {jid}")
+    write_json(job_dir / "selection.json", {
+        "jobId": jid,
+        "sourceFile": path.name,
+        "selectedDate": selected_date,
+    })
 
     stage = "PASS_1_NORMALISE"
     try:
+        print("\n[PASS 1] Parsing selected monthly statement...")
         normalised, pass1_exceptions, pass1_summary = normalise_csv(source_copy, jid, path.name)
-        write_json(normaliser_dir / "normalised-bets.json", normalised)
+        selected = filter_normalised_to_day(normalised, selected_date)
+        write_json(normaliser_dir / "normalised-bets.json", selected)
         write_json(normaliser_dir / "exceptions.json", {"jobId": jid, "exceptions": pass1_exceptions})
-        pass1_summary["pass1Status"] = "COMPLETE"
+        pass1_summary.update({
+            "pass1Status": "COMPLETE",
+            "selectedDate": selected_date,
+            "selectedDayHorseBets": len(selected.get("bets", [])),
+        })
         write_json(normaliser_dir / "summary.json", pass1_summary)
-        print(f"      PASS 1 : {pass1_summary['recognisedLogicalBetTransactions']} recognised transactions -> {pass1_summary['canonicalBetRecords']} canonical records; {pass1_summary['exceptionCount']} exceptions")
+
+        if not selected.get("bets"):
+            raise RuntimeError(f"No eligible horse-racing bets remained for selected date {selected_date}.")
+        print(f"[PASS 1] Complete: {len(selected['bets'])} selected-day horse bet(s).")
 
         stage = "PASS_2_ENRICH"
-        enriched, pass2_exceptions, pass2_summary = enrich_normalised_payload(normalised, api, store)
+        print("\n[PASS 2] Enriching historical race data...")
+        enriched, pass2_exceptions, pass2_summary = enrich_normalised_payload(selected, api, store)
         write_json(enrichment_dir / "enriched-bets.json", enriched)
         write_json(enrichment_dir / "exceptions.json", {"jobId": jid, "exceptions": pass2_exceptions})
         pass2_summary.update({
+            "selectedDate": selected_date,
             "dateApiCallsCumulative": api.date_calls,
             "raceApiCallsCumulative": api.race_calls,
             "apiCacheHitsCumulative": api.cache_hits,
@@ -1647,50 +2021,140 @@ def process(path, root, index, total, api, store, first_name, timezone):
             "localLookupErrorsCumulative": store.errors,
         })
         write_json(enrichment_dir / "summary.json", pass2_summary)
-        print(f"      PASS 2 : ENRICHED={pass2_summary['enriched']} PARTIAL={pass2_summary['partial']} UNRESOLVED={pass2_summary['unresolved']} NOT_APPLICABLE={pass2_summary['notApplicable']}")
+        print(
+            f"[PASS 2] Complete: {pass2_summary['enriched']} enriched, "
+            f"{pass2_summary['partial']} partial, {pass2_summary['unresolved']} unresolved."
+        )
 
-        stage = "PASS_3_BUILD"
-        daily_outputs, unassigned = build_daily_bettings(enriched, first_name, timezone)
-        for day, payload in daily_outputs.items():
-            day_dir = final_dir / day
-            day_dir.mkdir(parents=True, exist_ok=True)
-            write_json(day_dir / "bettings.json", payload)
-        write_json(final_dir / "summary.json", {
+        stage = "KUBRICK_CANDIDATE"
+        print("\n[FINALISATION] Testing source transactions against the exact Kubrick validator...")
+        included_bets, quarantined = authoritative_transaction_partition(
+            enriched,
+            selected_date,
+            first_name,
+            timezone_name,
+            root,
+            candidate_dir,
+        )
+
+        quarantine_path = candidate_dir / "quarantined-transactions.json"
+        write_json(quarantine_path, {
             "jobId": jid,
-            "dailyFiles": sorted(daily_outputs.keys()),
-            "dailyFileCount": len(daily_outputs),
-            "unassignedBetCount": len(unassigned),
-            "pass3Status": "BEST_EFFORT_COMPLETE",
+            "selectedDate": selected_date,
+            "inputBetRecords": len(enriched.get("bets", [])),
+            "includedBetRecords": len(included_bets),
+            "quarantinedTransactionCount": len(quarantined),
+            "quarantined": quarantined,
         })
-        if unassigned:
-            write_json(final_dir / "unassigned-bets.json", {"bets": unassigned})
-        print(f"      PASS 3 : {len(daily_outputs)} daily bettings.json file(s); unassigned={len(unassigned)}")
-        print(f"      Output : {job_dir}")
-        return True, pass2_summary
+
+        print(
+            f"[FINALISATION] {len(enriched.get('bets', []))} bet record(s) processed; "
+            f"{len(included_bets)} Kubrick-ready; "
+            f"{len(quarantined)} transaction(s) quarantined."
+        )
+        for item in quarantined:
+            tx = item.get("transactionNumber") or "<unknown>"
+            details = item.get("details") or [item.get("message") or "validation failed"]
+            print(f"  [QUARANTINED] Transaction {tx}: {details[0]}")
+
+        if not included_bets:
+            write_json(candidate_dir / "validation.json", {
+                "jobId": jid,
+                "selectedDate": selected_date,
+                "valid": False,
+                "errorCode": "NO_KUBRICK_READY_TRANSACTIONS",
+                "message": "No source transaction survived authoritative Kubrick validation.",
+                "quarantinedTransactionCount": len(quarantined),
+            })
+            print("\nNOT READY TO SEND TO KUBRICK")
+            print("No valid transactions remain after quarantine.")
+            print("Kubrick request not sent.")
+            return False
+
+        final_source = dict(enriched)
+        final_source["bets"] = included_bets
+        candidate = build_candidate_kubrick_payload(
+            final_source,
+            selected_date,
+            first_name,
+            timezone_name,
+        )
+        candidate_path = candidate_dir / "bettings.json"
+        write_json(candidate_path, candidate)
+
+        print("\n[VALIDATION] Running final payload through Kubrick's exact validator...")
+        validation = run_authoritative_kubrick_validator(candidate_path, root)
+        write_json(candidate_dir / "validation.json", {
+            "jobId": jid,
+            "selectedDate": selected_date,
+            **validation,
+            "inputBetRecords": len(enriched.get("bets", [])),
+            "includedBetRecords": len(included_bets),
+            "quarantinedTransactionCount": len(quarantined),
+        })
+
+        if validation.get("validatorError"):
+            raise RuntimeError(
+                f"Authoritative Kubrick validator could not run: "
+                f"{validation.get('errorCode')}: {validation.get('message')}"
+            )
+
+        if not validation.get("valid"):
+            print("[VALIDATION] FINAL PAYLOAD FAILED.")
+            for detail in validation.get("details") or [validation.get("message")]:
+                print(f"  - {detail}")
+            print(f"\nEvidence: {job_dir}")
+            print("\nNOT READY TO SEND TO KUBRICK")
+            print("Kubrick request not sent.")
+            return False
+
+        print("[VALIDATION] Kubrick payload valid.")
+        if quarantined:
+            print(
+                f"[VALIDATION] WARNING: recap contains {len(included_bets)} of "
+                f"{len(enriched.get('bets', []))} enriched bet record(s); "
+                f"{len(quarantined)} source transaction(s) were quarantined."
+            )
+        print("\n============================================================")
+        print("CANDIDATE KUBRICK PAYLOAD")
+        print("============================================================")
+        print(json.dumps(candidate, indent=2, ensure_ascii=False))
+        print("\n============================================================")
+        print("READY TO SEND TO KUBRICK")
+        print("Kubrick request not sent in this build.")
+        print("============================================================")
+        print(f"Payload saved: {candidate_path}")
+        if quarantined:
+            print(f"Quarantine evidence: {quarantine_path}")
+        return True
 
     except Exception as ex:
-        fail = {
+        write_json(job_dir / "job-error.json", {
             "jobId": jid,
             "sourceFile": path.name,
+            "selectedDate": selected_date,
             "status": "SOURCE_PROCESSING_EXCEPTION",
             "stage": stage,
             "error": str(ex),
-        }
-        # Never overwrite evidence from an earlier stage that already completed.
-        write_json(job_dir / "job-error.json", fail)
-        print(f"      ERROR  : stage={stage}: {ex}\n      Output : {job_dir}")
-        return False, None
+        })
+        print("\n============================================================")
+        print("NORMALISER ERROR")
+        print("============================================================")
+        print(f"Stage   : {stage}")
+        print(f"Problem : {ex}")
+        print(f"Evidence: {job_dir}")
+        print("The script stopped safely; no Kubrick request was sent.")
+        return False
 
 
 def main():
-    parser = argparse.ArgumentParser(description="TAB Normaliser v0.9 local-only horse filter + local meeting lookup + best-effort bettings.json")
+    parser = argparse.ArgumentParser(description="TAB Daily Recap local Normaliser client")
     parser.add_argument("--root", type=Path, default=Path(__file__).resolve().parent)
-    parser.add_argument("--file")
     parser.add_argument("--base-url", default=ENRICH_BASE_URL)
     parser.add_argument("--jurisdiction", default=ENRICH_JURISDICTION)
     parser.add_argument("--timeout", type=int, default=ENRICH_TIMEOUT)
     parser.add_argument("--retries", type=int, default=ENRICH_RETRIES)
-    parser.add_argument("--lookup-file", default="meeting-resolution.json", help="Persistent local learned meeting lookup JSON (default: <root>/meeting-resolution.json)")
+    parser.add_argument("--lookup-file", default="meeting-resolution.json")
     parser.add_argument("--first-name", default="Customer")
     parser.add_argument("--timezone", default="Australia/Melbourne")
     args = parser.parse_args()
@@ -1700,56 +2164,67 @@ def main():
     working_dir = root / "working"
     input_dir.mkdir(parents=True, exist_ok=True)
     working_dir.mkdir(parents=True, exist_ok=True)
-    files = [input_dir / args.file] if args.file else sorted(input_dir.glob("*.csv"), key=lambda p: p.name.lower())
-    files = [p for p in files if p.exists() and p.is_file()]
+    files = sorted((p for p in input_dir.glob("*.csv") if p.is_file()), key=lambda p: p.name.lower())
 
-    api = TabHistoricalApi(args.base_url, args.jurisdiction, args.timeout, args.retries)
-    lookup_path = Path(args.lookup_file)
-    if not lookup_path.is_absolute():
-        lookup_path = root / lookup_path
-    store = MeetingResolutionStore(lookup_path)
-
-    print("=== TAB NORMALISER v0.9 — LOCAL ONLY + HORSE ONLY + LOCAL LOOKUP ===")
-    print(f"Root         : {root}")
-    print(f"Input        : {input_dir}")
-    print(f"Working      : {working_dir}")
-    print(f"CSV files    : {len(files)}")
-    print(f"TAB API      : {args.base_url}")
-    print(f"Jurisdiction : {args.jurisdiction}")
-    print(f"Lookup file  : {store.file_path}")
+    print("============================================================")
+    print("TAB DAILY RECAP - LOCAL NORMALISER")
+    print("============================================================")
+    print(f"Input   : {input_dir}")
+    print(f"Working : {working_dir}")
 
     if not files:
-        print("\nNo CSV files found in input\\")
+        print("\n[STAGE 0] No CSV files found in input\\.")
+        print("Add one or more monthly TAB account-history CSV files and run the script again.")
         return 1
 
-    succeeded = 0
-    pass2_totals = Counter()
-    for index, path in enumerate(files, 1):
-        ok, summary = process(path, root, index, len(files), api, store, args.first_name, args.timezone)
-        if ok:
-            succeeded += 1
-            if summary:
-                for key in ("enriched", "partial", "unresolved", "notApplicable", "requiredFinalisationUnresolved"):
-                    pass2_totals[key] += summary.get(key, 0)
+    print(f"\n[STAGE 0] Scanning {len(files)} input CSV file(s)...")
+    days, scan_errors = scan_racing_days(files)
+    if scan_errors:
+        print(f"[STAGE 0] Warning: {len(scan_errors)} file(s) could not be scanned:")
+        for error in scan_errors:
+            print(f"  - {error['sourceFile']}: {error['error']}")
 
-    print("\n=== RUN COMPLETE ===")
-    print(f"Jobs            : {len(files)}")
-    print(f"Succeeded       : {succeeded}")
-    print(f"Source failures : {len(files) - succeeded}")
-    print(f"Enriched        : {pass2_totals['enriched']}")
-    print(f"Partial         : {pass2_totals['partial']}")
-    print(f"Unresolved      : {pass2_totals['unresolved']}")
-    print(f"Not applicable  : {pass2_totals['notApplicable']}")
-    print(f"Required pending: {pass2_totals['requiredFinalisationUnresolved']}")
-    print(f"Date API calls  : {api.date_calls}")
-    print(f"Race API calls  : {api.race_calls}")
-    print(f"API cache hits  : {api.cache_hits}")
-    print(f"Lookup hits     : {store.hits}")
-    print(f"Lookup misses   : {store.misses}")
-    print(f"Lookup ambiguous: {store.ambiguous}")
-    print(f"Lookup writes   : {store.writes}")
-    print(f"Lookup errors   : {store.errors}")
-    return 0 if succeeded == len(files) else 2
+    if not days:
+        print("\n[STAGE 0] No eligible horse-racing days were found.")
+        print("No Kubrick request was sent.")
+        return 1
+
+    print(f"[STAGE 0] Found {len(days)} racing day(s).")
+    selection = choose_racing_day(days)
+    if selection is None:
+        return 1
+
+    selected_path = selection["sourceCsvPath"]
+    selected_date = selection["selectedDate"]
+    print("\n[STAGE 0] Selected:")
+    print(f"  Date : {selection['displayDate']}")
+    print(f"  Bets : {selection['eligibleHorseBetCount']}")
+    print(f"  CSV  : {selected_path.name}")
+
+    try:
+        api = TabHistoricalApi(args.base_url, args.jurisdiction, args.timeout, args.retries)
+        lookup_path = Path(args.lookup_file)
+        if not lookup_path.is_absolute():
+            lookup_path = root / lookup_path
+        store = MeetingResolutionStore(lookup_path)
+    except Exception as ex:
+        print("\n============================================================")
+        print("NORMALISER ERROR")
+        print("============================================================")
+        print(f"Problem : Could not initialise enrichment: {ex}")
+        print("No Kubrick request was sent.")
+        return 2
+
+    ok = process_selected_day(
+        selected_path,
+        selected_date,
+        root,
+        api,
+        store,
+        args.first_name,
+        args.timezone,
+    )
+    return 0 if ok else 2
 
 
 if __name__ == "__main__":

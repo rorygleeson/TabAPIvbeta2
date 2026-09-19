@@ -30,8 +30,8 @@
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "sequence", "betTime", "raceTime", "raceId", "raceName", "meeting", "state", "raceNumber",
-        "runnerId", "runnerNumber", "runnerName", "betType", "stake", "odds", "result", "finishingPosition",
+        "sequence", "betTime", "raceTime", "raceName", "meeting", "state", "raceNumber",
+        "runnerNumber", "runnerName", "betType", "stake", "odds", "result", "finishingPosition",
         "return", "profitLoss", "runningPnl", "replayUrl"
       ],
       "properties": {

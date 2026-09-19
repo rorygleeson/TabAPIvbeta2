@@ -223,20 +223,17 @@ def extract_id(obj: dict, keys: Tuple[str, ...]) -> Optional[str]:
 
 
 def runner_id(runner: dict) -> Tuple[Optional[str], Optional[str]]:
-    explicit = extract_id(runner, ("runnerId", "runnerID", "id", "propositionId", "propositionID"))
+    explicit = extract_id(runner, ("runnerId", "runnerID", "id"))
     if explicit:
         return explicit, "API_EXPLICIT"
-    fixed = runner.get("fixedOdds")
-    if isinstance(fixed, dict) and fixed.get("propositionNumber") not in (None, ""):
-        return str(fixed["propositionNumber"]), "FIXED_ODDS_PROPOSITION_NUMBER"
     return None, None
 
 
-def race_id(race: dict, jurisdiction: str, date: str, venue: str, race_type: str, race_number: int) -> Tuple[str, str]:
+def race_id(race: dict, jurisdiction: str, date: str, venue: str, race_type: str, race_number: int) -> Tuple[Optional[str], Optional[str]]:
     explicit = extract_id(race, ("raceId", "raceID", "id"))
     if explicit:
         return explicit, "API_EXPLICIT"
-    return f"{jurisdiction}:{date}:{venue}:{race_type}:{race_number}", "DERIVED_CANONICAL_KEY"
+    return None, None
 
 
 def recursive_urls(value: Any, key_path: str = "") -> List[str]:
@@ -473,8 +470,8 @@ def enrich_bet(bet: dict, api: TabApi, aliases: Dict[str, str]) -> Tuple[dict, O
             enrich["toteWinPlaceResolution"] = component
 
         required_final_fields = (
-            enrich.get("raceTime"), enrich.get("raceId"), enrich.get("raceName"),
-            enrich.get("meeting"), enrich.get("state"), enrich.get("runnerId"),
+            enrich.get("raceTime"), enrich.get("raceName"),
+            enrich.get("meeting"), enrich.get("state"),
             enrich.get("runnerNumber"), enrich.get("runnerName"), enrich.get("finishingPosition"),
         )
         if all(v not in (None, "") for v in required_final_fields):
@@ -484,9 +481,9 @@ def enrich_bet(bet: dict, api: TabApi, aliases: Dict[str, str]) -> Tuple[dict, O
 
         missing_final = [
             name for name, value in (
-                ("raceTime", enrich.get("raceTime")), ("raceId", enrich.get("raceId")),
+                ("raceTime", enrich.get("raceTime")),
                 ("raceName", enrich.get("raceName")), ("meeting", enrich.get("meeting")),
-                ("state", enrich.get("state")), ("runnerId", enrich.get("runnerId")),
+                ("state", enrich.get("state")),
                 ("runnerNumber", enrich.get("runnerNumber")), ("runnerName", enrich.get("runnerName")),
                 ("finishingPosition", enrich.get("finishingPosition")),
             ) if value in (None, "")

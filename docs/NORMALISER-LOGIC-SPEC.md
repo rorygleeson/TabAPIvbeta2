@@ -441,15 +441,17 @@ A source-confirmed total loss with no payout may retain total return 0 because t
 
 ## 12. IDs
 
-Do not fabricate IDs to satisfy the old strict schema.
+`raceId` and `runnerId` are optional in canonical Kubrick input.
 
 ```text
-API genuine raceId available   -> use it
-otherwise                      -> null
+API genuine raceId available   -> preserve it
+otherwise                      -> omit raceId
 
-API genuine runnerId available -> use it
-otherwise                      -> null
+API genuine runnerId available -> preserve it
+otherwise                      -> omit runnerId
 ```
+
+Missing optional IDs must not downgrade an otherwise complete enrichment to PARTIAL.
 
 Do not synthesize raceId from route coordinates.
 
@@ -526,12 +528,10 @@ Every record emits the familiar current fields:
 sequence
 betTime
 raceTime
-raceId
 raceName
 meeting
 state
 raceNumber
-runnerId
 runnerNumber
 runnerName
 betType

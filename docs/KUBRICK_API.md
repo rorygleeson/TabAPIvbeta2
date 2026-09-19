@@ -134,7 +134,7 @@ Admission validation must not call Bedrock, TAB APIs, historical-result services
 
 For the currently supported recap sizes, this work is expected to be CPU-local and fast. Validation latency should be instrumented so unusually slow admission can be detected rather than silently consuming the Orchestrator/API timeout budget.
 
-Recommended admission telemetry:
+Admission telemetry currently records:
 
 ```text
 requestId
@@ -242,20 +242,18 @@ The stable public error envelope is:
 
 `details` is optional and is intended for safe validation detail. Clients must make decisions using `errorCode`, not by parsing the human-readable `message`.
 
-The POC admission/error catalogue is:
+The current **Orchestrator-owned** admission/error catalogue is:
 
 | HTTP | errorCode | Meaning | Job created? |
 | ---: | --- | --- | --- |
-| 403 | `KUBRICK_API_KEY_REQUIRED` | No API key supplied | No |
-| 403 | `KUBRICK_API_KEY_INVALID` | API key supplied but not accepted | No |
 | 400 | `KUBRICK_INVALID_JSON` | Request body is not valid JSON | No |
 | 400 | `KUBRICK_INVALID_PAYLOAD` | JSON is parseable but fails canonical schema or semantic validation | No |
 | 400 | `KUBRICK_INVALID_REQUEST` | Request is structurally invalid, such as a missing required jobId on a status lookup | No |
-| 404 | `KUBRICK_ROUTE_NOT_FOUND` | Requested API route does not exist | No |
-| 429 | `KUBRICK_RATE_LIMITED` | API Gateway throttling/usage-plan limit reached | No |
-| 500 | `KUBRICK_INTERNAL_ERROR` | Unexpected server-side admission/service failure | No |
+| 404 | `KUBRICK_ROUTE_NOT_FOUND` | Requested Orchestrator route does not exist | No |
+| 404 | `KUBRICK_JOB_NOT_FOUND` | Requested job does not exist | No |
+| 500 | `KUBRICK_INTERNAL_ERROR` | Unexpected Orchestrator/service failure | No |
 
-API-key and throttling faults originate at API Gateway, because those requests are rejected before the Orchestrator runs. The external contract should nevertheless use stable Kubrick error codes so clients see one coherent API.
+API-key rejection and usage-plan throttling originate at API Gateway **before the Orchestrator runs**. The current infrastructure requires the key and applies throttling, but does not define custom API Gateway `GatewayResponse` mappings. Therefore clients must not yet assume Gateway-owned 403/429 responses use the Kubrick JSON envelope or distinct `KUBRICK_API_KEY_REQUIRED`, `KUBRICK_API_KEY_INVALID` and `KUBRICK_RATE_LIMITED` codes. Regardless of body shape, these Gateway rejections create no Kubrick job.
 
 For `POST /jobs`, the hard rule is:
 
@@ -546,7 +544,7 @@ This separation is mandatory for all future resiliency work.
 
 Admission validation must remain comfortably inside the synchronous API/Orchestrator timeout envelope. If validation latency approaches infrastructure timeouts, that is treated as a defect to investigate rather than a reason to move canonical admission behind SQS.
 
-The next implementation step is to make the Orchestrator enforce the strict canonical admission contract, telemetry and stable error envelope defined above. After that, Kubrick's queue/Lambda timeout, retry, DLQ, partial-creation reconciliation and DynamoDB failure-state behaviour will be audited and documented separately.
+Strict Orchestrator admission, telemetry and Orchestrator-owned stable error envelopes are implemented and live-proven. The remaining backend reliability work is the separate resiliency audit: queue/Lambda timeout behaviour, retry/DLQ handling, partial-creation cleanup/reconciliation and prevention of accepted jobs becoming permanently stuck in non-terminal DynamoDB states.
 
 ## Test harness
 
@@ -575,6 +573,14 @@ GET /jobs/{jobId}
 ```
 
 It then uses the returned `recapUrl` to download the final `recap.html`.
+
+Bad-mode admission testing is also supported:
+
+```cmd
+tests\tools\run-orchestrator-test.cmd 8 bad
+```
+
+On 2026-09-19 this live test returned HTTP 400 with `KUBRICK_INVALID_PAYLOAD`, `requestId`, semantic validation `details`, no `jobId`, and correctly performed no polling.
 
 Only the API key is expected as a local secret:
 
