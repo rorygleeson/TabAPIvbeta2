@@ -1547,7 +1547,10 @@ def build_candidate_kubrick_payload(enriched_payload, selected_date, first_name=
         stake = candidate_stake(bet)
         returned = candidate_return(bet)
         pnl = round(returned - stake, 2) if stake is not None and returned is not None else None
-        running = round(running + pnl, 2) if pnl is not None else None if running is None else None
+        if pnl is None or running is None:
+            running = None
+        else:
+            running = round(running + pnl, 2)
         final_bets.append({
             "sequence": sequence,
             "betTime": bet.get("betTime"),
