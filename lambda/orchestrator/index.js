@@ -71,6 +71,19 @@ function apiErrorResponse(error, requestId) {
   return jsonResponse(error.statusCode, body);
 }
 
+function failedJobPublicFields(item) {
+  const failedStage = item.sceneS3Key?.S ? 'RENDERING' : 'PLANNING';
+  return {
+    failureCode: failedStage === 'RENDERING'
+      ? 'KUBRICK_RENDERING_FAILED'
+      : 'KUBRICK_PLANNING_FAILED',
+    failedStage,
+    message: failedStage === 'RENDERING'
+      ? 'Kubrick could not complete rendering.'
+      : 'Kubrick could not complete planning.'
+  };
+}
+
 function decodeRequestBody(event) {
   if (typeof event?.body !== 'string' || !event.body.trim()) {
     throw new ApiError(
@@ -239,14 +252,7 @@ async function getJobStatus(event, requestId) {
   const body = { jobId, status };
 
   if (status === 'FAILED') {
-    const failedStage = response.Item.sceneS3Key?.S ? 'RENDERING' : 'PLANNING';
-    body.failureCode = failedStage === 'RENDERING'
-      ? 'KUBRICK_RENDERING_FAILED'
-      : 'KUBRICK_PLANNING_FAILED';
-    body.failedStage = failedStage;
-    body.message = failedStage === 'RENDERING'
-      ? 'Kubrick could not complete rendering.'
-      : 'Kubrick could not complete planning.';
+    Object.assign(body, failedJobPublicFields(response.Item));
   }
 
   if (status === 'READY' && response.Item.recapS3Key?.S) {
@@ -276,6 +282,7 @@ exports.__test = {
   ApiError,
   jsonResponse,
   apiErrorResponse,
+  failedJobPublicFields,
   parseCanonicalBettings,
   admitCanonicalBettings,
   route
