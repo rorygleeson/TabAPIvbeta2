@@ -193,7 +193,7 @@ The deterministic planner currently:
 1. validates chronological canonical input;
 2. derives planner facts;
 3. interpolates target duration;
-4. ranks replay-eligible bets;
+4. groups replay-eligible bets by exact replayUrl and ranks unique replay videos by absolute net race P&L;
 5. selects a replay count within policy;
 6. ranks additional Scene 2 candidates;
 7. builds grouped primary scenes;
@@ -263,19 +263,27 @@ Desired replay count by recap size:
 absolute max -> 5
 ```
 
-For recaps above 40 bets, at least 3 replays are retained when at least 3 eligible replay bets exist.
+For recaps above 40 bets, at least 3 replays are retained when at least 3 unique eligible replay videos exist.
 
 Replay eligibility is:
 
 ```text
-bet.result == "WIN"
-AND
 replayUrl is valid HTTPS
+WIN and LOSS bets are both eligible
 ```
 
-Replay candidates are ranked deterministically using the scoring policy.
+Replay identity is the exact replayUrl. Bets sharing the same replayUrl are one replay candidate and the same video may be selected at most once.
 
-Every selected replay bet is also a Scene 2, and Scene 3 must immediately follow that Scene 2.
+For each unique replay candidate:
+
+```text
+raceNetPnl = sum(profitLoss for all bets sharing replayUrl)
+replayImportance = abs(raceNetPnl)
+```
+
+Candidates rank by highest replayImportance first. If the replay quota cuts through an equal-importance tie, the later replay group is preferred. The existing replay-count/runtime policy still decides how many videos are included.
+
+Each selected replay group uses one representative bet for its Scene 2/Scene 3 attachment; Scene 3 must immediately follow that Scene 2.
 
 ### Scene 2 allowance
 
@@ -363,7 +371,7 @@ These weights affect presentation richness only. They never change factual bet d
 ### Scene 3 — Replay
 
 - optional
-- only for replay-eligible winning bets
+- for a replay-eligible WIN or LOSS bet selected as the representative of a unique replay video
 - matching Scene 2 must exist
 - must immediately follow matching Scene 2
 - replay URL remains factual input
