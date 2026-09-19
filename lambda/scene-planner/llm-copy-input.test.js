@@ -160,6 +160,26 @@ for (const totalBets of [5, 8, 16, 32, 75]) {
   console.log('OK semantic V4 copy input ' + totalBets + ': scenes=' + payload.scenes.length);
 }
 
+// TAB historical results use finishingPosition=0 for an unplaced runner when the exact
+// finishing rank is not supplied. Kubrick must ground that as UNPLACED, never 0th.
+{
+  const bettings = readJson('bettings-5.json');
+  assert.strictEqual(bettings.bets[0].finishingPosition, 0);
+
+  const plan = {
+    artifactType: 'deterministicScenePlan',
+    artifactVersion: '1.0',
+    scenes: [{ sceneType: 2, betSequence: 1 }]
+  };
+  const payload = buildLlmCopyInput(bettings, plan);
+  const scene = payload.scenes[0];
+
+  assert.strictEqual(payload.factCatalog.B1_FINISH, 'UNPLACED');
+  assert.strictEqual(scene.context.factAtomsByPhase.POST_RESULT.B1_FINISH, 'UNPLACED');
+  assert.strictEqual(scene.context.semanticContextByPhase.POST_RESULT.raceWinner, false);
+  assert.doesNotMatch(JSON.stringify(payload), /0th/iu);
+}
+
 // Historical failure backfeed: signed P&L ambiguity and odds typing.
 {
   const bettings = readJson('bettings-5.json');
