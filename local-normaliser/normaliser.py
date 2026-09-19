@@ -14,7 +14,7 @@ test root. No DynamoDB, boto3, AWS CLI, IAM, or AWS credentials are required.
 """
 from __future__ import annotations
 
-import argparse, csv, hashlib, json, re, shutil, subprocess, sys
+import argparse, csv, hashlib, json, re, shutil, sys
 from collections import Counter, defaultdict
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
@@ -96,7 +96,10 @@ def payload(desc):
         if s and not re.match(r"^(Transaction Number|Event/Race Number|Event Date|Meeting Type|Meeting Venue|Stake):",s,re.I): out.append(s)
     return out
 
-def raw_view(row): return {k:row.get(k) for k in HEADER}|{"sourceRow":row.get("_sourceRow")}
+def raw_view(row):
+    out = {k: row.get(k) for k in HEADER}
+    out["sourceRow"] = row.get("_sourceRow")
+    return out
 def exc(kind,reason,tx,group,**extra):
     out={"type":kind,"reason":reason,"transactionNumber":tx,**extra}
     if group is not None: out["rawRecords"]=[raw_view(r) for r in group]
@@ -1653,58 +1656,253 @@ def build_candidate_kubrick_payload(enriched_payload, selected_date, first_name=
     }
 
 
-def run_authoritative_kubrick_validator(payload_path, root):
-    """Run the exact schema + semantic validator used by the Kubrick Orchestrator."""
-    helper = root / "validate-kubrick.js"
-    if not helper.exists():
+def validate_candidate_kubrick_payload(payload):
+    """Validate against the same Kubrick v1 contract using Python stdlib only.
+
+    The portable client intentionally has no Node/npm dependency. Kubrick itself
+    remains authoritative at POST time; this validator mirrors the current
+    bettings.schema.json constraints and canonical semantic rules so invalid
+    transactions can be quarantined before submission.
+    """
+    errors = []
+    required_top = ("schemaVersion", "user", "day", "bets", "summary")
+
+    if not isinstance(payload, dict):
+        return ["payload must be an object"]
+    if set(payload.keys()) != set(required_top):
+        errors.append(f"top-level fields must be exactly {required_top}")
+    if payload.get("schemaVersion") != "1.0":
+        errors.append("schemaVersion must equal '1.0'")
+
+    user = payload.get("user")
+    if (
+        not isinstance(user, dict)
+        or set(user.keys()) != {"firstName"}
+        or not isinstance(user.get("firstName"), str)
+        or not user.get("firstName")
+    ):
+        errors.append("user.firstName must be a non-empty string and user must contain no extra fields")
+
+    day = payload.get("day")
+    if not isinstance(day, dict) or set(day.keys()) != {"date", "timezone"}:
+        errors.append("day must contain exactly date and timezone")
+    else:
+        if not valid_date(day.get("date")):
+            errors.append("day.date must be YYYY-MM-DD")
+        if not isinstance(day.get("timezone"), str) or not day.get("timezone"):
+            errors.append("day.timezone must be a non-empty string")
+
+    bets = payload.get("bets")
+    if not isinstance(bets, list) or not bets:
+        errors.append("bets must contain at least one bet")
+        return errors
+
+    def is_number(value):
+        return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+    for index, bet in enumerate(bets, 1):
+        prefix = f"bet {index}"
+        if not isinstance(bet, dict):
+            errors.append(f"{prefix}: must be an object")
+            continue
+
+        if set(bet.keys()) != set(KUBRICK_BET_FIELDS):
+            missing = [field for field in KUBRICK_BET_FIELDS if field not in bet]
+            extra = [field for field in bet if field not in KUBRICK_BET_FIELDS]
+            if missing:
+                errors.append(f"{prefix}: missing fields: {', '.join(missing)}")
+            if extra:
+                errors.append(f"{prefix}: unexpected fields: {', '.join(extra)}")
+
+        for field in ("betTime", "raceTime", "raceId", "raceName", "meeting", "state", "runnerId", "runnerName", "betType"):
+            if not isinstance(bet.get(field), str) or not bet.get(field):
+                errors.append(f"{prefix}: {field} must be a non-empty string")
+
+        for field in ("sequence", "raceNumber", "runnerNumber", "finishingPosition"):
+            value = bet.get(field)
+            if not isinstance(value, int) or isinstance(value, bool) or value < 1:
+                errors.append(f"{prefix}: {field} must be an integer >= 1")
+
+        for field in ("stake", "return"):
+            value = bet.get(field)
+            if not is_number(value) or value < 0:
+                errors.append(f"{prefix}: {field} must be a number >= 0")
+
+        odds = bet.get("odds")
+        if not is_number(odds) or odds <= 0:
+            errors.append(f"{prefix}: odds must be a number > 0")
+
+        for field in ("profitLoss", "runningPnl"):
+            if not is_number(bet.get(field)):
+                errors.append(f"{prefix}: {field} must be a number")
+
+        if bet.get("result") not in ("WIN", "LOSS"):
+            errors.append(f"{prefix}: result must be WIN or LOSS")
+
+        replay = bet.get("replayUrl")
+        if replay is not None:
+            if not isinstance(replay, str) or not replay.strip():
+                errors.append(f"{prefix}: replayUrl must be a valid non-empty HTTPS URL or null")
+            else:
+                try:
+                    parsed = urllib.parse.urlparse(replay)
+                    if parsed.scheme.lower() != "https" or not parsed.netloc:
+                        raise ValueError("not HTTPS")
+                except Exception:
+                    errors.append(f"{prefix}: replayUrl must be a valid non-empty HTTPS URL or null")
+
+    sequences = [bet.get("sequence") for bet in bets if isinstance(bet, dict)]
+    if sequences != list(range(1, len(bets) + 1)):
+        errors.append("bets[].sequence must be ascending, unique and contiguous 1..N")
+
+    summary = payload.get("summary")
+    summary_fields = (
+        "totalBets", "totalStaked", "totalReturned", "wins", "losses", "finalPnl",
+        "meetings", "biggestStake", "biggestWinSequence", "biggestLossSequence",
+        "highestOddsWinnerSequence",
+    )
+    if not isinstance(summary, dict) or set(summary.keys()) != set(summary_fields):
+        errors.append("summary does not match the current Kubrick summary contract")
+        return errors
+
+    for field in ("totalBets", "wins", "losses", "meetings"):
+        value = summary.get(field)
+        minimum = 1 if field in ("totalBets", "meetings") else 0
+        if not isinstance(value, int) or isinstance(value, bool) or value < minimum:
+            errors.append(f"summary.{field} must be an integer >= {minimum}")
+
+    for field in ("totalStaked", "totalReturned", "biggestStake"):
+        value = summary.get(field)
+        if not is_number(value) or value < 0:
+            errors.append(f"summary.{field} must be a number >= 0")
+
+    if not is_number(summary.get("finalPnl")):
+        errors.append("summary.finalPnl must be a number")
+
+    for field in ("biggestWinSequence", "biggestLossSequence", "highestOddsWinnerSequence"):
+        value = summary.get(field)
+        if value is not None and (
+            not isinstance(value, int) or isinstance(value, bool) or value < 1
+        ):
+            errors.append(f"summary.{field} must be null or an integer >= 1")
+
+    def money_equal(left, right):
+        try:
+            return round(float(left) * 100) == round(float(right) * 100)
+        except (TypeError, ValueError):
+            return False
+
+    running = 0.0
+    semantics_possible = True
+    for index, bet in enumerate(bets, 1):
+        if not isinstance(bet, dict) or not all(
+            is_number(bet.get(field))
+            for field in ("stake", "return", "profitLoss", "runningPnl")
+        ):
+            semantics_possible = False
+            continue
+        expected_pnl = float(bet["return"]) - float(bet["stake"])
+        if not money_equal(bet["profitLoss"], expected_pnl):
+            errors.append(f"bet {index}: profitLoss must equal return - stake")
+        running += float(bet["profitLoss"])
+        if not money_equal(bet["runningPnl"], running):
+            errors.append(f"bet {index}: runningPnl does not match cumulative profitLoss")
+
+    if summary.get("totalBets") != len(bets):
+        errors.append("summary.totalBets must equal bets.length")
+
+    wins = [bet for bet in bets if isinstance(bet, dict) and bet.get("result") == "WIN"]
+    losses = [bet for bet in bets if isinstance(bet, dict) and bet.get("result") == "LOSS"]
+    if (
+        summary.get("wins") != len(wins)
+        or summary.get("losses") != len(losses)
+        or len(wins) + len(losses) != len(bets)
+    ):
+        errors.append("summary wins/losses do not match bet results")
+
+    meetings = {
+        bet.get("meeting")
+        for bet in bets
+        if isinstance(bet, dict) and bet.get("meeting")
+    }
+    if summary.get("meetings") != len(meetings):
+        errors.append("summary.meetings must equal unique meeting count")
+
+    if semantics_possible:
+        total_staked = sum(float(bet["stake"]) for bet in bets)
+        total_returned = sum(float(bet["return"]) for bet in bets)
+
+        if not money_equal(summary.get("totalStaked"), total_staked):
+            errors.append("summary.totalStaked must equal sum(stake)")
+        if not money_equal(summary.get("totalReturned"), total_returned):
+            errors.append("summary.totalReturned must equal sum(return)")
+        if not money_equal(summary.get("finalPnl"), total_returned - total_staked):
+            errors.append("summary.finalPnl must equal totalReturned - totalStaked")
+        if not money_equal(summary.get("finalPnl"), bets[-1].get("runningPnl")):
+            errors.append("summary.finalPnl must equal final runningPnl")
+
+        biggest_stake = max(float(bet["stake"]) for bet in bets)
+        if not money_equal(summary.get("biggestStake"), biggest_stake):
+            errors.append("summary.biggestStake must equal max(stake)")
+
+        def expected_sequence(items, key, highest):
+            if not items:
+                return None
+            target = (max if highest else min)(float(item[key]) for item in items)
+            return min(item["sequence"] for item in items if float(item[key]) == target)
+
+        positive_wins = [bet for bet in wins if float(bet["profitLoss"]) > 0]
+        negative_losses = [bet for bet in losses if float(bet["profitLoss"]) < 0]
+
+        if summary.get("biggestWinSequence") != expected_sequence(positive_wins, "profitLoss", True):
+            errors.append("summary.biggestWinSequence is inconsistent")
+        if summary.get("biggestLossSequence") != expected_sequence(negative_losses, "profitLoss", False):
+            errors.append("summary.biggestLossSequence is inconsistent")
+        if summary.get("highestOddsWinnerSequence") != expected_sequence(wins, "odds", True):
+            errors.append("summary.highestOddsWinnerSequence is inconsistent")
+
+    return errors
+
+
+def run_kubrick_contract_validator(payload_path, root):
+    """Portable Python-only Kubrick contract validation."""
+    schema_path = root / "bettings.schema.json"
+    if not schema_path.exists():
         return {
             "valid": False,
             "validatorError": True,
-            "errorCode": "KUBRICK_VALIDATOR_HELPER_MISSING",
-            "message": f"Authoritative validator helper not found: {helper}",
+            "errorCode": "KUBRICK_SCHEMA_MISSING",
+            "message": f"Kubrick schema file not found: {schema_path}",
             "details": [],
         }
 
     try:
-        completed = subprocess.run(
-            ["node", str(helper), str(payload_path)],
-            cwd=str(root),
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-    except FileNotFoundError:
-        return {
-            "valid": False,
-            "validatorError": True,
-            "errorCode": "NODE_NOT_FOUND",
-            "message": "Node.js is required to run the exact Kubrick validator but 'node' was not found in PATH.",
-            "details": [],
-        }
+        schema = json.loads(schema_path.read_text(encoding="utf-8"))
+        if schema.get("properties", {}).get("schemaVersion", {}).get("const") != "1.0":
+            raise ValueError("unexpected schemaVersion contract")
+        payload = json.loads(Path(payload_path).read_text(encoding="utf-8"))
     except Exception as ex:
         return {
             "valid": False,
             "validatorError": True,
-            "errorCode": "KUBRICK_VALIDATOR_EXECUTION_FAILED",
+            "errorCode": "KUBRICK_VALIDATOR_INPUT_ERROR",
             "message": str(ex),
             "details": [],
         }
 
-    raw = (completed.stdout or completed.stderr or "").strip()
-    try:
-        result = json.loads(raw)
-    except Exception:
-        return {
-            "valid": False,
-            "validatorError": True,
-            "errorCode": "KUBRICK_VALIDATOR_BAD_RESPONSE",
-            "message": "Authoritative validator returned an unreadable response.",
-            "details": [raw[:1000]] if raw else [],
-        }
+    errors = validate_candidate_kubrick_payload(payload)
+    return {
+        "valid": not errors,
+        "validatorError": False,
+        "errorCode": None if not errors else "KUBRICK_INVALID_PAYLOAD",
+        "message": (
+            "Payload passed Kubrick canonical schema and semantic validation."
+            if not errors
+            else "Payload failed canonical bettings.json validation."
+        ),
+        "details": errors,
+    }
 
-    if completed.returncode not in (0, 1) and not result.get("validatorError"):
-        result["validatorError"] = True
-    return result
 
 
 def transaction_groups_for_validation(enriched_payload):
@@ -1755,11 +1953,11 @@ def authoritative_transaction_partition(
         )
         candidate_path = validation_dir / f"{ordinal:03d}-{group['key']}.json"
         write_json(candidate_path, candidate)
-        result = run_authoritative_kubrick_validator(candidate_path, root)
+        result = run_kubrick_contract_validator(candidate_path, root)
 
         if result.get("validatorError"):
             raise RuntimeError(
-                f"Authoritative Kubrick validator could not run: "
+                f"Kubrick contract validator could not run: "
                 f"{result.get('errorCode')}: {result.get('message')}"
             )
 
@@ -2019,7 +2217,7 @@ def process_selected_day(path, selected_date, root, api, store, first_name, time
         )
 
         stage = "KUBRICK_CANDIDATE"
-        print("\n[FINALISATION] Testing source transactions against the exact Kubrick validator...")
+        print("\n[FINALISATION] Testing source transactions against the Kubrick contract validator...")
         included_bets, quarantined = authoritative_transaction_partition(
             enriched,
             selected_date,
@@ -2074,8 +2272,8 @@ def process_selected_day(path, selected_date, root, api, store, first_name, time
         candidate_path = candidate_dir / "bettings.json"
         write_json(candidate_path, candidate)
 
-        print("\n[VALIDATION] Running final payload through Kubrick's exact validator...")
-        validation = run_authoritative_kubrick_validator(candidate_path, root)
+        print("\n[VALIDATION] Running final payload through the Kubrick contract validator...")
+        validation = run_kubrick_contract_validator(candidate_path, root)
         write_json(candidate_dir / "validation.json", {
             "jobId": jid,
             "selectedDate": selected_date,
@@ -2087,7 +2285,7 @@ def process_selected_day(path, selected_date, root, api, store, first_name, time
 
         if validation.get("validatorError"):
             raise RuntimeError(
-                f"Authoritative Kubrick validator could not run: "
+                f"Kubrick contract validator could not run: "
                 f"{validation.get('errorCode')}: {validation.get('message')}"
             )
 
