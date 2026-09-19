@@ -221,17 +221,26 @@ Do not substitute `fixedOdds.propositionNumber` as runner identity. Missing opti
 
 ## 10. Finishing position
 
-Only positive API finishing positions are treated as final-schema-ready positions.
+Preserve the TAB historical-results API value when it is genuinely supplied.
 
-If TAB returns `0`, null or another non-positive value:
+Canonical semantics are:
 
 ```text
-apiFinishingPositionRaw = original API value
-finishingPosition       = null
-status                  = PARTIAL
+0  = unplaced / exact finishing position not supplied by TAB
+1+ = recorded finishing position supplied by TAB
 ```
 
-Pass 2 does not invent a numeric finishing position merely to satisfy the final schema.
+`result` remains the authoritative wager outcome (`WIN` / `LOSS`). `finishingPosition` is factual race context and must not determine or override that settlement result.
+
+Therefore:
+
+```text
+API finishingPosition = 0  -> finishingPosition = 0; do not mark PARTIAL for position alone
+API finishingPosition > 0  -> preserve the positive integer
+API position absent/null    -> finishingPosition remains unavailable
+```
+
+Pass 2 must never infer or fabricate an exact finishing position.
 
 ## 11. Replay/media
 
@@ -382,7 +391,7 @@ The deterministic lookup succeeded and all currently required ordinary-racing fi
 
 ### `PARTIAL`
 
-The meeting/race/runner match succeeded, but one or more final-contract fields are unavailable, for example a non-positive API finishing position or missing runner ID.
+The meeting/race/runner match succeeded, but one or more required final-contract facts are genuinely unavailable. A valid TAB `finishingPosition=0` is not missing data and must not make the wager `PARTIAL`. Optional `raceId` / `runnerId` are also not reasons for `PARTIAL`.
 
 For exotics, `PARTIAL` can also mean one of the selected runner numbers could not be resolved.
 
