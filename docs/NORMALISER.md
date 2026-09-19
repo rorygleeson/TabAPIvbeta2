@@ -90,29 +90,27 @@ Portable layout:
 ```text
 local-normaliser\
     normaliser.py
-    validate-kubrick.js
     bettings.schema.json
-    canonical-bettings-validator.js
-    package.json
-    setup.cmd
     run.cmd
     input\
     working\                  created automatically
     meeting-resolution.json   created automatically when needed
 ```
 
-The bundled `bettings.schema.json` and `canonical-bettings-validator.js` are copies of the authoritative Kubrick validation files so the standalone client can perform the same validation without requiring the full repository tree.
+The standalone client is intentionally **Python-only at runtime**.
 
-First-time setup on a Windows machine:
-
-```cmd
-setup.cmd
-```
+It uses only the Python standard library and the bundled copy of the current Kubrick `bettings.schema.json`. The local Python validation logic mirrors the current Kubrick schema constraints and canonical semantic rules so invalid source transactions can be quarantined before a later POST. Kubrick itself remains the final authoritative validator when API submission is enabled.
 
 Normal use:
 
 ```cmd
 run.cmd
+```
+
+or directly:
+
+```cmd
+python normaliser.py
 ```
 
 TAB monthly account-history CSV files are placed in:
@@ -121,7 +119,15 @@ TAB monthly account-history CSV files are placed in:
 input\
 ```
 
-Git is not required on the machine running the standalone client. Python, Node.js and npm are required for the current implementation.
+Runtime requirements for the current pre-POST client are:
+
+```text
+Windows CMD
+Python 3.8 or later
+network access to the TAB historical-results API for Pass 2 enrichment
+```
+
+Git, Node.js, npm, pip packages, AWS CLI, AWS credentials and a copy of the wider Kubrick repository are not required.
 
 ## 2. Local client operating model
 
