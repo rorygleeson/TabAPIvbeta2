@@ -7,14 +7,15 @@ Current controlled milestone:
 - Filter: keep only the selected eventDate
 - Pass 2: retain historical enrichment + persistent local meeting resolution
 - Candidate output: build and validate the exact Kubrick v1 canonical payload
-- STOP before POST /jobs; print/save the payload for inspection
+- Kubrick client: POST /jobs, poll until terminal state, return READY recapUrl
 
 Persistent learned meeting aliases are stored in a local JSON file beside the
-test root. No DynamoDB, boto3, AWS CLI, IAM, or AWS credentials are required.
+test root. Kubrick API access uses TAB_RECAP_API_KEY from the environment; no
+DynamoDB, boto3, AWS CLI, IAM, or AWS credentials are required.
 """
 from __future__ import annotations
 
-import argparse, csv, hashlib, json, re, shutil, sys
+import argparse, csv, hashlib, json, os, re, shutil, sys, time
 from collections import Counter, defaultdict
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
@@ -2196,10 +2197,130 @@ def build_daily_bettings(enriched_payload, first_name="Customer", timezone="Aust
 
 
 # =============================================================================
-# COMBINED LOCAL CLIENT — CURRENT MILESTONE STOPS BEFORE KUBRICK POST
+# COMBINED LOCAL CLIENT — NORMALISE -> VALIDATE -> KUBRICK -> READY URL
 # =============================================================================
 
-def process_selected_day(path, selected_date, root, api, store, first_name, timezone_name):
+DEFAULT_KUBRICK_API_URL = "https://fbhuqhy5cf.execute-api.ap-southeast-2.amazonaws.com/poc"
+
+
+def _decode_json_response(response_bytes):
+    text = response_bytes.decode("utf-8", errors="replace")
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        raise RuntimeError(f"Kubrick returned a non-JSON response: {text[:500]}")
+
+
+def kubrick_post_job(payload_path, api_url, api_key, evidence_dir):
+    url = api_url.rstrip("/") + "/jobs"
+    body = payload_path.read_bytes()
+    request = urllib.request.Request(
+        url,
+        data=body,
+        headers={
+            "Content-Type": "application/json",
+            "x-api-key": api_key,
+        },
+        method="POST",
+    )
+
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            status = response.getcode()
+            payload = _decode_json_response(response.read())
+    except urllib.error.HTTPError as ex:
+        payload = _decode_json_response(ex.read())
+        write_json(evidence_dir / "kubrick-create-response.json", payload)
+        details = payload.get("details") or []
+        detail_text = f" Details: {' | '.join(str(x) for x in details)}" if details else ""
+        raise RuntimeError(
+            f"Kubrick POST /jobs rejected the payload: HTTP {ex.code} "
+            f"{payload.get('errorCode') or ''} {payload.get('message') or ''}{detail_text}".strip()
+        ) from ex
+    except urllib.error.URLError as ex:
+        raise RuntimeError(f"Kubrick POST /jobs transport failure: {ex}") from ex
+
+    write_json(evidence_dir / "kubrick-create-response.json", payload)
+    if status != 202:
+        raise RuntimeError(f"Kubrick POST /jobs returned unexpected HTTP {status}.")
+    job_id = payload.get("jobId")
+    if not isinstance(job_id, str) or not job_id.strip():
+        raise RuntimeError("Kubrick POST /jobs returned HTTP 202 without a jobId.")
+    if payload.get("status") != "RECEIVED":
+        raise RuntimeError(
+            f"Kubrick POST /jobs returned jobId but unexpected initial status "
+            f"{payload.get('status')!r}."
+        )
+    return job_id
+
+
+def kubrick_poll_until_terminal(job_id, api_url, api_key, evidence_dir, poll_interval):
+    url = api_url.rstrip("/") + "/jobs/" + urllib.parse.quote(job_id)
+    last_status = None
+    poll_count = 0
+
+    while True:
+        poll_count += 1
+        request = urllib.request.Request(
+            url,
+            headers={"x-api-key": api_key},
+            method="GET",
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=30) as response:
+                http_status = response.getcode()
+                payload = _decode_json_response(response.read())
+        except urllib.error.HTTPError as ex:
+            payload = _decode_json_response(ex.read())
+            write_json(evidence_dir / "kubrick-status-response.json", payload)
+            raise RuntimeError(
+                f"Kubrick GET /jobs/{job_id} failed: HTTP {ex.code} "
+                f"{payload.get('errorCode') or ''} {payload.get('message') or ''}".strip()
+            ) from ex
+        except urllib.error.URLError as ex:
+            raise RuntimeError(f"Kubrick status polling transport failure: {ex}") from ex
+
+        write_json(evidence_dir / "kubrick-status-response.json", payload)
+        if http_status != 200:
+            raise RuntimeError(f"Kubrick status polling returned unexpected HTTP {http_status}.")
+
+        status = payload.get("status")
+        if status != last_status:
+            print(f"[KUBRICK] Status: {status}")
+            last_status = status
+
+        if status == "READY":
+            recap_url = payload.get("recapUrl")
+            if not isinstance(recap_url, str) or not recap_url.startswith("https://"):
+                raise RuntimeError("Kubrick READY response did not contain a valid HTTPS recapUrl.")
+            return payload
+
+        if status == "FAILED":
+            failure_code = payload.get("failureCode") or "KUBRICK_JOB_FAILED"
+            failed_stage = payload.get("failedStage") or "UNKNOWN"
+            message = payload.get("message") or "Kubrick could not complete the recap."
+            raise RuntimeError(
+                f"Kubrick job FAILED: {failure_code} at {failed_stage}: {message}"
+            )
+
+        if status not in ("RECEIVED", "PLANNING", "RENDERING"):
+            raise RuntimeError(f"Kubrick returned unexpected job status {status!r}.")
+
+        time.sleep(max(1, poll_interval))
+
+
+def process_selected_day(
+    path,
+    selected_date,
+    root,
+    api,
+    store,
+    first_name,
+    timezone_name,
+    kubrick_api_url,
+    kubrick_api_key,
+    kubrick_poll_interval,
+):
     jid = job_id(path)
     job_dir = root / "working" / jid
     source_dir = job_dir / "source"
@@ -2353,11 +2474,53 @@ def process_selected_day(path, selected_date, root, api, store, first_name, time
         print(json.dumps(candidate, indent=2, ensure_ascii=False))
         print("\n============================================================")
         print("READY TO SEND TO KUBRICK")
-        print("Kubrick request not sent in this build.")
         print("============================================================")
         print(f"Payload saved: {candidate_path}")
         if quarantined:
             print(f"Quarantine evidence: {quarantine_path}")
+
+        stage = "KUBRICK_POST"
+        if not kubrick_api_key:
+            print("\n============================================================")
+            print("KUBRICK NOT SENT")
+            print("============================================================")
+            print("TAB_RECAP_API_KEY is not set.")
+            print("Set it in CMD, then rerun the Normaliser:")
+            print("  set TAB_RECAP_API_KEY=<POC API KEY>")
+            return False
+
+        print("\n[KUBRICK] POST /jobs - submitting validated canonical bettings.json...")
+        kubrick_job_id = kubrick_post_job(
+            candidate_path,
+            kubrick_api_url,
+            kubrick_api_key,
+            candidate_dir,
+        )
+        print(f"[KUBRICK] Accepted. Job ID: {kubrick_job_id}")
+        print("[KUBRICK] Polling until READY or FAILED...")
+
+        stage = "KUBRICK_POLL"
+        ready = kubrick_poll_until_terminal(
+            kubrick_job_id,
+            kubrick_api_url,
+            kubrick_api_key,
+            candidate_dir,
+            kubrick_poll_interval,
+        )
+        recap_url = ready["recapUrl"]
+
+        write_json(candidate_dir / "kubrick-ready.json", {
+            "jobId": kubrick_job_id,
+            "status": "READY",
+            "recapUrl": recap_url,
+        })
+
+        print("\n============================================================")
+        print("KUBRICK RECAP READY")
+        print("============================================================")
+        print(f"Job ID    : {kubrick_job_id}")
+        print(f"Recap URL : {recap_url}")
+        print("============================================================")
         return True
 
     except Exception as ex:
@@ -2375,7 +2538,7 @@ def process_selected_day(path, selected_date, root, api, store, first_name, time
         print(f"Stage   : {stage}")
         print(f"Problem : {ex}")
         print(f"Evidence: {job_dir}")
-        print("The script stopped safely; no Kubrick request was sent.")
+        print("The script stopped safely.")
         return False
 
 
@@ -2389,6 +2552,8 @@ def main():
     parser.add_argument("--lookup-file", default="meeting-resolution.json")
     parser.add_argument("--first-name", default="Customer")
     parser.add_argument("--timezone", default="Australia/Melbourne")
+    parser.add_argument("--kubrick-api-url", default=DEFAULT_KUBRICK_API_URL)
+    parser.add_argument("--kubrick-poll-interval", type=int, default=3)
     args = parser.parse_args()
 
     root = args.root.resolve()
@@ -2455,6 +2620,9 @@ def main():
         store,
         args.first_name,
         args.timezone,
+        args.kubrick_api_url,
+        os.environ.get("TAB_RECAP_API_KEY", "").strip(),
+        args.kubrick_poll_interval,
     )
     return 0 if ok else 2
 
