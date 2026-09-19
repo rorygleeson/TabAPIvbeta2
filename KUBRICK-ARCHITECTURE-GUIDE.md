@@ -63,12 +63,12 @@ Canonical bet fields include:
 sequence
 betTime
 raceTime
-raceId
+raceId (optional; preserve only when genuinely supplied)
 raceName
 meeting
 state
 raceNumber
-runnerId
+runnerId (optional; preserve only when genuinely supplied)
 runnerNumber
 runnerName
 betType
