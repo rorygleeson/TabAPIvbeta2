@@ -98,13 +98,21 @@ hard max -> 300s
 max  -> 5
 ```
 
-For >40 bets, at least 3 replays are retained when at least 3 eligible replay bets exist.
+For >40 bets, at least 3 replays are retained when at least 3 unique eligible replay videos exist.
 
-Replay eligibility:
+Replay eligibility and ranking:
 
 ```text
-WIN + valid HTTPS replayUrl
+valid HTTPS replayUrl -> eligible for WIN or LOSS
+group by exact replayUrl
+raceNetPnl = sum(profitLoss for all bets sharing replayUrl)
+replayImportance = abs(raceNetPnl)
+rank highest replayImportance first
+equal-importance cutoff tie -> prefer later replay group
+same replayUrl -> at most one Scene 3
 ```
+
+The existing replay-count/runtime policy decides how many videos are included. Within a selected replay group, the representative bet is the bet with the largest absolute individual profitLoss; an exact tie uses the later bet sequence.
 
 ### Extra Scene 2 allowance
 
