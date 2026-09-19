@@ -1,5 +1,7 @@
 'use strict';
 
+const { URL } = require('url');
+
 function createDefaultFailure(message) {
   const error = new Error(message);
   error.name = 'CanonicalBettingsValidationError';
@@ -50,6 +52,18 @@ function validateCanonicalBettingsSemantics(bettings, onFailure = createDefaultF
 
     if (!sameMoney(bet.runningPnl, expectedRunningPnl)) {
       fail(`Bet ${bet.sequence}: runningPnl is inconsistent.`);
+    }
+
+    if (bet.replayUrl !== null) {
+      let replayUrl;
+      try {
+        replayUrl = new URL(bet.replayUrl);
+      } catch {
+        replayUrl = null;
+      }
+      if (!bet.replayUrl.trim() || !replayUrl || replayUrl.protocol !== 'https:') {
+        fail(`Bet ${bet.sequence}: replayUrl must be a valid non-empty HTTPS URL or null.`);
+      }
     }
   });
 
