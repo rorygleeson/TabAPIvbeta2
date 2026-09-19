@@ -150,6 +150,36 @@ for (const totalBets of [5, 8, 16, 32, 75]) {
   );
 }
 
+
+// Currency ranking must compare exact cents, not floating-point accumulation artifacts.
+{
+  const bettings = readJson('bettings-8.json');
+  const urls = {
+    high: 'https://example.com/replay-high.mp4',
+    earlierTie: 'https://example.com/replay-earlier-tie.mp4',
+    laterTie: 'https://example.com/replay-later-tie.mp4'
+  };
+
+  bettings.bets.forEach(bet => { bet.replayUrl = null; });
+  bettings.bets[0].replayUrl = urls.high;
+  bettings.bets[0].profitLoss = 50;
+
+  bettings.bets[1].replayUrl = urls.earlierTie;
+  bettings.bets[1].profitLoss = 10.1;
+  bettings.bets[2].replayUrl = urls.earlierTie;
+  bettings.bets[2].profitLoss = 10.2; // exact cents total = 20.30
+
+  bettings.bets[3].replayUrl = urls.laterTie;
+  bettings.bets[3].profitLoss = 20.3; // exact cents total = 20.30
+
+  const plan = buildDeterministicScenePlan(bettings);
+  assert.deepStrictEqual(
+    replaySequences(plan.scenes),
+    [1, 4],
+    'Equal monetary importance must tie exactly in cents and prefer the later replay group at the cutoff'
+  );
+}
+
 // Multiple bets sharing the exact replay URL must never schedule the video twice.
 {
   const bettings = readJson('bettings-8.json');
