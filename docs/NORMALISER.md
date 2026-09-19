@@ -316,9 +316,9 @@ candidate Kubrick payload fails validation
 
 Diagnostic evidence should still be written under `working\\` so failures remain inspectable.
 
-### 2.8 Known technical debt / open resolver issue
+### 2.8 Resolved HEALESVLL domain-verification case
 
-The 2025-06-27 validation run leaves one isolated unresolved source transaction:
+The 2025-06-27 source transaction:
 
 ```text
 source meeting: HEALESVLL
@@ -327,16 +327,28 @@ race: 2
 transaction: 32258734228769901
 ```
 
-Current behaviour:
+was independently proven against TAB historical results as:
 
 ```text
-DIRECT       -> no exact meetingName match for HEALESVLL
-LOCAL_LOOKUP -> miss
-DEEP_API     -> candidate evaluation stops because one candidate race lookup
-                (SAN ISIDRO) returns HTTP 404
+TAB meeting:    HEALESVILLE
+venueMnemonic:  E
+raceType:       G
+raceNumber:     2
+runnerNumber:   5
+runnerName:     NANDO BLAST
 ```
 
-This is logged as resolver technical debt, not a reason to weaken canonical validation or fabricate race facts. The deep resolver should be hardened so an isolated deterministic candidate lookup failure such as a 404 can be recorded and skipped while the remaining candidates continue to be evaluated. The exact identity/domain of the HEALESVLL/NANDO BLAST source record must still be proven before any alias or non-horse rule is added.
+The CSV record did not carry an explicit Greyhounds marker. Because the source meeting text was abbreviated, DIRECT exact meeting resolution missed it; the existing deep fallback was horse-only and therefore never considered the actual greyhound meeting.
+
+The targeted fix is a resolver/domain-verification step only. For ambiguous racing candidates with no explicit racing type, Pass 2 now checks TAB candidates across `R`, `G` and `H` for the requested date/race. It requires exact runner-name identity and, when supplied by the CSV, the same runner number. Exactly one surviving candidate is required.
+
+```text
+unique R match   -> continue normal horse enrichment
+unique G/H match -> EXCLUDED_NON_HORSE
+zero/multiple    -> keep existing fallback/unresolved safety behaviour
+```
+
+No fuzzy meeting matching, guessed alias or weakened Kubrick validation is introduced. Non-horse candidates are excluded before final Kubrick payload construction.
 
 ### 2.8 Kubrick API secret
 
