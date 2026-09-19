@@ -437,7 +437,21 @@ must reconcile to CSV combined payout to currency-cent precision.
 
 A source-confirmed total loss with no payout may retain total return 0 because the customer statement itself establishes the loss.
 
-`finishingPosition=0` from the historical API is treated as unavailable, never as proof of loss.
+Canonical finishing-position semantics are:
+
+```text
+result
+- authoritative betting outcome for the wager: WIN or LOSS
+
+finishingPosition
+- preserve the TAB historical-results API value
+- 0 = unplaced / exact finishing position not supplied by TAB
+- 1+ = recorded finishing position supplied by TAB
+- never infer or fabricate an exact finishing position
+- finishingPosition does not determine or override result
+```
+
+A source-confirmed loss remains a loss because of the authoritative result/settlement evidence, not because `finishingPosition` is 0.
 
 ## 12. IDs
 
