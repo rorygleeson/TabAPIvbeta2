@@ -61,8 +61,8 @@ TAB historical enrichment facts
 - state / location
 - race time
 - official race name
-- raceId
-- runnerId
+- raceId when genuinely exposed by the API (optional)
+- runnerId when genuinely exposed by the API (optional)
 - runner name where CSV only has runner number
 - runner number where CSV only has runner name
 - finishing position
@@ -634,17 +634,15 @@ Enrichment is useful/required only for facts not present in the statement, such 
 
 ```text
 raceTime
-raceId
 official raceName
 state
-runnerId
 runnerNumber
 finishingPosition
 replayUrl
 canonical meeting identity when parsing is ambiguous
 ```
 
-If the final Kubrick contract continues to require those fields, enrichment is technically required to satisfy the contract even though it is not required to determine the customer's financial outcome.
+Kubrick does not require raceId or runnerId. If the API genuinely exposes either identifier it may be preserved, but absence of either identifier must not make an otherwise complete bet partial or invalid.
 
 ### Record count
 
@@ -830,8 +828,6 @@ Enrichment is required for information the CSV does not contain, including:
 ```text
 runner name
 official Tote dividend / odds
-raceId
-runnerId
 raceTime
 raceName
 state
