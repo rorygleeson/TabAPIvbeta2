@@ -279,6 +279,7 @@ For each unique replay candidate:
 ```text
 raceNetPnl = sum(profitLoss for all bets sharing replayUrl)
 replayImportance = abs(raceNetPnl)
+implementation compares monetary values in integer cents to avoid floating-point tie drift
 ```
 
 Candidates rank by highest replayImportance first. If the replay quota cuts through an equal-importance tie, the later replay group is preferred. The existing replay-count/runtime policy still decides how many videos are included.
@@ -1031,14 +1032,15 @@ Template: `templates/scene-3-race-replay-template.html`
 | `betType` | BETTINGS | Canonical wager type |
 | `oddsDisplay` | BETTINGS DERIVED | Decimal odds formatted for display |
 
-Scene 3 also places two values into the runtime manifest rather than direct HTML placeholders:
+Scene 3 also places three values into the runtime manifest rather than direct HTML placeholders:
 
 | Runtime value | Ownership | Resolution |
 | --- | --- | --- |
 | `replayUrl` | BETTINGS | Exact validated replay media URL |
 | `replayComments[]` | **LLM** | Result-grounded replay comments |
+| `replayResult` | BETTINGS / BUILDER | Exact wager result (`WIN` or `LOSS`) used by runtime to suppress win-celebration FX on loss replays |
 
-LLM contribution: `replayLabel`, `replayComments[]`. The LLM never selects the replay media URL.
+LLM contribution: `replayLabel`, `replayComments[]`. The LLM never selects the replay media URL. Runtime celebration FX are outcome-aware: WIN replays may use the payoff celebration package; LOSS replays never trigger WINNER/BOOM/coins/confetti payoff celebration.
 
 ### Scene 4 — Status / Story summary
 
