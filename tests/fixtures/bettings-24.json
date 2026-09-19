@@ -22,7 +22,7 @@
       "stake": 20,
       "odds": 7.5,
       "result": "LOSS",
-      "finishingPosition": 2,
+      "finishingPosition": 0,
       "return": 0,
       "profitLoss": -20,
       "runningPnl": -20,
