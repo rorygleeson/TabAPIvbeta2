@@ -546,6 +546,7 @@ def job_id(path): return f"{period_label(path)}__{datetime.now():%Y%m%d-%H%M%S}-
 # PASS 2 — HORSE-ONLY TAB HISTORICAL ENRICHMENT + PERSISTENT MEETING RESOLUTION
 # =============================================================================
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 
@@ -590,18 +591,27 @@ def enrich_as_list(value):
 
 
 class TabHistoricalApi:
-    """Small client with warm-runtime caches only. Persistent meeting learning is local JSON."""
+    """Small client with per-run in-memory URL caching. Persistent meeting learning is local JSON."""
 
     def __init__(self, base_url, jurisdiction, timeout, retries):
         self.base_url = base_url.rstrip("/")
         self.jurisdiction = jurisdiction.upper()
         self.timeout = timeout
         self.retries = retries
-        self.date_cache = {}
-        self.race_cache = {}
+        # Cache by exact URL so every caller shares the same success/failure result.
+        # This is deliberately per-run memory only; nothing is persisted to disk.
+        self.response_cache = {}
+        self.error_cache = {}
         self.date_calls = 0
         self.race_calls = 0
         self.cache_hits = 0
+        self.failure_cache_hits = 0
+
+    @staticmethod
+    def _non_retryable_http_error(ex):
+        # Retrying a deterministic 4xx (especially 404 while probing candidate
+        # meetings) only repeats the same request. 408/429 may be transient.
+        return isinstance(ex, urllib.error.HTTPError) and 400 <= ex.code < 500 and ex.code not in (408, 429)
 
     def _get(self, url, kind):
         headers = {"Accept": "application/json", "User-Agent": "Mozilla/5.0"}
@@ -618,35 +628,45 @@ class TabHistoricalApi:
                     return json.loads(response.read().decode("utf-8"))
             except Exception as ex:
                 last_error = ex
+                if self._non_retryable_http_error(ex):
+                    break
                 if attempt < self.retries:
                     time.sleep(attempt + 1)
         raise RuntimeError(f"TAB API request failed: {last_error}")
 
-    def date(self, event_date):
-        if event_date in self.date_cache:
+    def _cached_get(self, url, kind):
+        if url in self.response_cache:
             self.cache_hits += 1
-            return self.date_cache[event_date]
+            return self.response_cache[url]
+        if url in self.error_cache:
+            self.cache_hits += 1
+            self.failure_cache_hits += 1
+            raise RuntimeError(self.error_cache[url])
+
+        try:
+            data = self._get(url, kind)
+        except Exception as ex:
+            message = str(ex)
+            self.error_cache[url] = message
+            raise RuntimeError(message) from ex
+
+        self.response_cache[url] = data
+        return data
+
+    def date(self, event_date):
         url = (
             f"{self.base_url}/{urllib.parse.quote(self.jurisdiction)}/racing/"
             f"{urllib.parse.quote(event_date)}"
         )
-        data = self._get(url, "date")
-        self.date_cache[event_date] = data
-        return data
+        return self._cached_get(url, "date")
 
     def race(self, event_date, venue_mnemonic, race_type, race_number):
-        key = (event_date, venue_mnemonic, race_type, race_number)
-        if key in self.race_cache:
-            self.cache_hits += 1
-            return self.race_cache[key]
         url = (
             f"{self.base_url}/{urllib.parse.quote(self.jurisdiction)}/racing/"
             f"{urllib.parse.quote(event_date)}/{urllib.parse.quote(str(venue_mnemonic))}/"
             f"{urllib.parse.quote(str(race_type))}/races/{race_number}"
         )
-        data = self._get(url, "race")
-        self.race_cache[key] = data
-        return data
+        return self._cached_get(url, "race")
 
 
 class MeetingResolutionStore:
