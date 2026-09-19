@@ -1,33 +1,103 @@
-# TabAPIvbeta2 — TAB Daily Recap / Kubrick V2
+# TabAPIvbeta2 — Kubrick
 
-`TabAPIvbeta2` is the active source repository for the deterministic Kubrick V2 migration of the TAB Daily Recap pilot.
+`TabAPIvbeta2` is the active source repository for **Kubrick**, the TAB Daily Recap generation service.
 
-The migration deliberately reuses the existing vbeta1 AWS environment. The repository name changed; the deployed resource names did not.
+Kubrick is the complete backend pipeline:
+
+```text
+Kubrick
+  = Orchestrator Lambda
+  + Planner Lambda
+  + Builder / Renderer Lambda
+```
+
+The repository name is `TabAPIvbeta2`, while the deployed AWS resources intentionally retain their existing `tab-recap-vbeta1-*` names.
+
+## Component terminology
+
+- **Orchestrator** — owns the public API boundary, creates the job ID, stores canonical input, starts planning, exposes job status and returns the final recap URL.
+- **Planner** — owns deterministic scene structure, one grounded LLM copy call and deterministic copy fallback, then produces `scene.json`.
+- **Builder / Renderer** — renders `bettings.json + scene.json` into the final interactive `recap.html`.
+- **Kubrick** — the complete Orchestrator + Planner + Builder/Renderer service.
+
+The CSV **Normaliser is not part of Kubrick**. It is an isolated sample client/use case that converts TAB CSV data into canonical `bettings.json` and then consumes the Kubrick API. Any other client capable of producing canonical `bettings.json` can consume Kubrick directly.
 
 ## Authoritative documents
 
-Read these first before changing planner behaviour:
+Read these first:
 
-- `KUBRICK-ARCHITECTURE-GUIDE.md` — current architecture, ownership boundaries, locked planner policy and end-to-end target flow.
-- `docs/KUBRICK_V2_MIGRATION.md` — migration status, proven tests, deployment boundary and remaining work.
-- `docs/NORMALISER-LOGIC-SPEC.md` — current local CSV Normaliser design.
-- `tests/README.md` — current regression and fixture rules.
-- `tests/manual-cli-tests.md` — deployed-AWS smoke-test procedures and latest proof record.
+- `KUBRICK-ARCHITECTURE-GUIDE.md` — authoritative architecture, component ownership and locked planner policy.
+- `docs/KUBRICK_API.md` — client-facing API contract and exact consumption flow.
+- `docs/KUBRICK_V2_MIGRATION.md` — migration history, proof state and deployment rules.
+- `docs/NORMALISER-LOGIC-SPEC.md` — isolated sample CSV client design.
+- `tests/README.md` — current regression, fixture and API-test expectations.
+- `tests/manual-cli-tests.md` — deployed-AWS smoke-test procedures and proof record.
 
-## Current planner flow
+## Public API
+
+Kubrick exposes exactly two POC endpoints:
+
+```text
+POST /jobs
+GET  /jobs/{jobId}
+```
+
+Both currently require the API Gateway `x-api-key` header. The shared POC API key value is deliberately not stored in this repository or documentation.
+
+A client:
 
 ```text
 canonical bettings.json
-  -> deterministic scene planner
-  -> deterministic scene skeleton
-  -> compact grounded copy payload
-  -> exactly one Bedrock copy call
-  -> copy response validation
-       -> valid copy: merge into skeleton
-       -> copy-stage failure: deterministic safe fallback copy
-  -> final scene.json planVersion 2.0
-  -> existing Builder
-  -> recap HTML
+  -> POST /jobs
+  -> receive jobId
+  -> poll GET /jobs/{jobId}
+  -> status becomes READY
+  -> receive short-lived recapUrl
+  -> open/download recap.html
+```
+
+The Orchestrator generates the UUID job ID. Clients do not create job IDs.
+
+## Kubrick processing flow
+
+```text
+Client
+  |
+  | POST /jobs + x-api-key
+  v
+API Gateway
+  |
+  v
+Orchestrator
+  |
+  +--> UUID jobId
+  +--> S3 working/<jobId>/bettings.json
+  +--> DynamoDB RECEIVED
+  +--> Planning SQS
+  |
+  v
+Planner
+  |
+  +--> deterministic scene structure
+  +--> exactly one grounded Bedrock copy call
+  +--> deterministic fallback if copy stage fails
+  +--> scene.json
+  +--> DynamoDB RENDERING
+  +--> Rendering SQS
+  |
+  v
+Builder / Renderer
+  |
+  +--> recaps/<jobId>/recap.html
+  +--> DynamoDB READY + recapS3Key
+  |
+  | GET /jobs/{jobId}
+  v
+Orchestrator
+  |
+  +--> fresh short-lived presigned recapUrl
+  v
+Client
 ```
 
 The LLM is a copywriter only. Code owns scene structure, grouping, chronology, coverage, replay selection, midpoint placement and duration.
@@ -39,32 +109,45 @@ There is no structural repair loop and no second LLM call.
 Account: `134387458447`  
 Region: `ap-southeast-2`
 
-Key existing resources intentionally retain vbeta1 names:
+Key resources:
 
-- `tab-recap-vbeta1`
-- `tab-recap-vbeta1-jobs`
-- `tab-recap-vbeta1-planning`
-- `tab-recap-vbeta1-rendering`
+- `tab-recap-vbeta1-orchestrator`
 - `tab-recap-vbeta1-scene-planner`
 - `tab-recap-vbeta1-builder-recap`
+- `tab-recap-vbeta1-planning`
+- `tab-recap-vbeta1-rendering`
+- `tab-recap-vbeta1-jobs`
+- `tab-recap-vbeta1`
+- `tab-recap-vbeta1-api`
 
 Deployment source branch remains `deploy`.
 
 ## Current proof state
 
-Direct planner tests have reached `RENDERING` for:
+The public API path is live-proven across multiple fixture sizes up to 75 bets:
 
-- 5 bets — new real-race fixture
-- 8 bets — new real-race fixture
-- 16 bets — retained older baseline fixture
-- 32 bets — new real-race fixture
-- 50 bets — new real-race fixture
-- 75 bets — new real-race fixture
+```text
+POST /jobs
+-> Orchestrator
+-> Planner
+-> Rendering SQS
+-> Builder / Renderer
+-> READY
+-> GET /jobs/{jobId}
+-> recapUrl
+-> working recap.html
+```
 
-The 75-bet fixture deliberately contains two `replayUrl: null` cases and still passes.
+The orchestrator harness exercises both public endpoints and downloads the final recap:
 
-The remaining visible planner issue is copy quality only: occasional awkward grammar, repeated phrases or internal wording such as “block”. These are non-fatal and must not be “fixed” by reintroducing hard prose validators, repair loops or extra LLM calls.
+```cmd
+tests\tools\run-orchestrator-test.cmd <size>
+```
+
+Supported fixture sizes are 5, 8, 16, 32, 50 and 75.
+
+The soundtrack path is also live-proven after enabling CORS for the existing CloudFront MP3 path and setting `audio.crossOrigin='anonymous'` before assigning the soundtrack source.
 
 ## Reference repository
 
-`rorygleeson/TabAPIvbeta1` remains the frozen migration reference/fallback source. It is not the active Kubrick V2 codebase.
+`rorygleeson/TabAPIvbeta1` remains the frozen migration reference/fallback source. It is not the active Kubrick codebase.
