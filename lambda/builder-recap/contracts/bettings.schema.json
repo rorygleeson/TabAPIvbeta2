@@ -50,7 +50,7 @@
         "stake": { "type": "number", "minimum": 0 },
         "odds": { "type": "number", "exclusiveMinimum": 0 },
         "result": { "enum": ["WIN", "LOSS"] },
-        "finishingPosition": { "type": "integer", "minimum": 1 },
+        "finishingPosition": { "type": "integer", "minimum": 0 },
         "return": { "type": "number", "minimum": 0 },
         "profitLoss": { "type": "number" },
         "runningPnl": { "type": "number" },
