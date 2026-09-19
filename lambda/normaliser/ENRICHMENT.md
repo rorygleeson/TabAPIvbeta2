@@ -205,29 +205,19 @@ toteReturnPlace
 
 ## 8. Race ID
 
-If the API provides an explicit race ID, use it.
+`raceId` is optional in canonical Kubrick input.
 
-If not, Pass 2 creates the deterministic internal key:
+If the API provides an explicit `raceId`, `raceID` or generic explicit `id`, preserve it and record the source. Otherwise omit it.
 
-```text
-<jurisdiction>:<date>:<venueMnemonic>:<raceType>:<raceNumber>
-```
-
-Example:
-
-```text
-VIC:2025-10-25:A:R:3
-```
-
-The output records `raceIdSource` so a derived key is never misrepresented as a TAB-supplied ID.
+Do not derive a race ID from date, venue mnemonic, race type or race number merely to satisfy the contract.
 
 ## 9. Runner ID
 
-Pass 2 first uses an explicit runner/proposition ID from the API payload when available.
+`runnerId` is optional in canonical Kubrick input.
 
-If no explicit ID is exposed, it may use `fixedOdds.propositionNumber` as a deterministic fallback and records the source in `runnerIdSource`.
+If the API provides an explicit `runnerId`, `runnerID` or generic explicit `id`, preserve it and record the source. Otherwise omit it.
 
-If no acceptable runner ID is available, the wager is `PARTIAL`, because current final `bettings.json` requires `runnerId`.
+Do not substitute `fixedOdds.propositionNumber` as runner identity. Missing optional IDs do not make the wager `PARTIAL`.
 
 ## 10. Finishing position
 
@@ -292,10 +282,8 @@ Pass 2 adds:
 
 ```text
 raceTime
-raceId
 raceName
 state
-runnerId
 runnerNumber
 canonical runnerName
 finishingPosition
@@ -448,18 +436,16 @@ The current final schema requires ordinary racing fields including:
 
 ```text
 raceTime
-raceId
 raceName
 meeting
 state
 raceNumber
-runnerId
 runnerNumber
 runnerName
 finishingPosition
 ```
 
-Pass 2 supplies these where the historical API supports them.
+`raceId` and `runnerId` are optional. Pass 2 preserves them only when the historical API genuinely supplies them. Their absence must not block finalisation.
 
 Pass 3 remains responsible for:
 
