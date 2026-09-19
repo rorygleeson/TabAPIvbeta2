@@ -54,7 +54,9 @@ jobs:
           node --check shared/canonical-bettings-validator.test.js
           node shared/canonical-bettings-validator.test.js
           grep -F "validateCanonicalBettingsSemantics" lambda/builder-recap/recap-builder.js
-          echo "OK: shared canonical bettings semantic validator is the Builder source."
+          grep -F "validateCanonicalBettingsSemantics" lambda/orchestrator/index.js
+          test -f contracts/bettings.schema.json
+          echo "OK: shared canonical bettings semantic validator is used by Builder and Orchestrator."
 
       - name: Run builder Scene 8 regression tests
         run: node lambda/builder-recap/recap-builder.test.js

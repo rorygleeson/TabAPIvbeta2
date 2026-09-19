@@ -114,7 +114,7 @@ Only a payload that passes the complete admission gate may receive a `jobId`.
 
 The Planner still performs defensive validation internally, but Planner validation is not the public admission gate.
 
-**Implementation note:** this strict Orchestrator admission validation is the next controlled implementation step. The API contract is being locked here before the code change.
+**Implementation status:** strict Orchestrator admission validation is implemented. The Orchestrator parses JSON, validates the canonical schema, runs the shared canonical semantic validator, records admission telemetry and only then begins job creation.
 
 ### Admission timing and execution rules
 
@@ -250,6 +250,7 @@ The POC admission/error catalogue is:
 | 403 | `KUBRICK_API_KEY_INVALID` | API key supplied but not accepted | No |
 | 400 | `KUBRICK_INVALID_JSON` | Request body is not valid JSON | No |
 | 400 | `KUBRICK_INVALID_PAYLOAD` | JSON is parseable but fails canonical schema or semantic validation | No |
+| 400 | `KUBRICK_INVALID_REQUEST` | Request is structurally invalid, such as a missing required jobId on a status lookup | No |
 | 404 | `KUBRICK_ROUTE_NOT_FOUND` | Requested API route does not exist | No |
 | 429 | `KUBRICK_RATE_LIMITED` | API Gateway throttling/usage-plan limit reached | No |
 | 500 | `KUBRICK_INTERNAL_ERROR` | Unexpected server-side admission/service failure | No |
@@ -352,6 +353,11 @@ The GET request itself succeeded, so the status endpoint returns HTTP `200` with
 ```
 
 Job failure fields are deliberately named `failureCode`, `failedStage` and `message` to distinguish them from pre-job API `errorCode` responses.
+
+The public failure code reflects the failed backend stage:
+
+- `KUBRICK_PLANNING_FAILED` with `failedStage: "PLANNING"`;
+- `KUBRICK_RENDERING_FAILED` with `failedStage: "RENDERING"`.
 
 The persisted/internal failure record may retain more diagnostic detail than is exposed to the client. Clients must not depend on raw Lambda/AWS exception text.
 

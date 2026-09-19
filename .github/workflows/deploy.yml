@@ -247,22 +247,30 @@ jobs:
       - name: Package orchestrator Lambda
         run: |
           rm -rf dist/orchestrator-package dist/orchestrator.zip
-          mkdir -p dist/orchestrator-package
+          mkdir -p dist/orchestrator-package/contracts
           cd lambda/orchestrator
           npm install --omit=dev --ignore-scripts
           cd ../..
           cp lambda/orchestrator/index.js dist/orchestrator-package/index.js
+          cp shared/canonical-bettings-validator.js dist/orchestrator-package/canonical-bettings-validator.js
+          cp contracts/bettings.schema.json dist/orchestrator-package/contracts/bettings.schema.json
           cp lambda/orchestrator/package.json dist/orchestrator-package/package.json
           cp -R lambda/orchestrator/node_modules dist/orchestrator-package/node_modules
           test -f dist/orchestrator-package/index.js
+          test -f dist/orchestrator-package/canonical-bettings-validator.js
+          test -f dist/orchestrator-package/contracts/bettings.schema.json
           test -d dist/orchestrator-package/node_modules/@aws-sdk/client-s3
           test -d dist/orchestrator-package/node_modules/@aws-sdk/client-dynamodb
           test -d dist/orchestrator-package/node_modules/@aws-sdk/client-sqs
           test -d dist/orchestrator-package/node_modules/@aws-sdk/s3-request-presigner
+          test -d dist/orchestrator-package/node_modules/ajv
+          test -d dist/orchestrator-package/node_modules/ajv-formats
           cd dist/orchestrator-package
           zip -qr ../orchestrator.zip .
           cd ../..
           unzip -l dist/orchestrator.zip | grep 'index.js'
+          unzip -l dist/orchestrator.zip | grep 'canonical-bettings-validator.js'
+          unzip -l dist/orchestrator.zip | grep 'contracts/bettings.schema.json'
           aws s3 cp \
             dist/orchestrator.zip \
             s3://tab-recap-vbeta1/deploy-artifacts/orchestrator/$GITHUB_SHA.zip \

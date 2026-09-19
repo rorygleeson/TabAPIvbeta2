@@ -38,4 +38,11 @@ assert.throws(
   /summary\.totalReturned mismatch/
 );
 
+const badReplayUrl = structuredClone(baseline);
+badReplayUrl.bets[0].replayUrl = 'http://example.com/replay.mp4';
+assert.throws(
+  () => validateCanonicalBettingsSemantics(badReplayUrl),
+  /replayUrl must be a valid non-empty HTTPS URL or null/
+);
+
 console.log('Shared canonical bettings semantic validator tests passed.');
