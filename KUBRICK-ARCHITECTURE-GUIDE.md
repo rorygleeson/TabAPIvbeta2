@@ -492,9 +492,71 @@ This is the main availability circuit breaker.
 
 ---
 
-## 9. Current AWS/runtime architecture
+## 9. Kubrick service boundary and terminology
 
-Kubrick V2 deliberately reuses the existing vbeta1 AWS environment.
+**Kubrick** is now the name for the complete recap-generation backend, not just the planner.
+
+```text
+Kubrick
+  = Orchestrator Lambda
+  + Planner Lambda
+  + Builder / Renderer Lambda
+```
+
+Component ownership is explicit:
+
+### Orchestrator
+
+The Orchestrator owns the public service boundary:
+
+- receives public API requests;
+- generates the UUID `jobId`;
+- stores canonical `bettings.json`;
+- creates the initial DynamoDB job state;
+- submits the planning SQS message;
+- reads current job status;
+- generates the fresh short-lived `recapUrl` when the job is READY.
+
+### Planner
+
+The Planner owns recap planning:
+
+- validates canonical input;
+- builds deterministic scene structure;
+- selects replay, midpoint, grouping and duration;
+- makes exactly one grounded Bedrock copy call;
+- uses deterministic fallback for copy-stage failure;
+- writes final `scene.json`;
+- moves the job to `RENDERING`;
+- submits the rendering SQS message.
+
+### Builder / Renderer
+
+The existing Builder is the Kubrick renderer. The terms **Builder** and **Renderer** refer to the same downstream Lambda responsibility:
+
+- consumes canonical `bettings.json` and final `scene.json`;
+- selects deterministic templates;
+- renders the interactive HTML/CSS/JavaScript recap;
+- handles runtime media behaviour;
+- writes `recaps/<jobId>/recap.html`;
+- stores `recapS3Key`;
+- moves the job to `READY`.
+
+The Builder/Renderer is not a second planner.
+
+### Normaliser
+
+The CSV Normaliser is **not part of Kubrick**.
+
+It is an isolated sample client/use case that converts TAB account-history CSV data into canonical `bettings.json`, then calls Kubrick through the same public API as any other client.
+
+Kubrick must not absorb CSV parsing, account-history interpretation or historical-results enrichment responsibilities.
+
+---
+
+## 10. Current AWS/runtime architecture
+
+Kubrick deliberately reuses the existing vbeta1-named AWS environment.
 
 Account:
 
@@ -508,26 +570,21 @@ Region:
 ap-southeast-2
 ```
 
-Key backend resources:
-
-```text
-S3        tab-recap-vbeta1
-DynamoDB  tab-recap-vbeta1-jobs
-SQS       tab-recap-vbeta1-planning
-SQS       tab-recap-vbeta1-rendering
-Lambda    tab-recap-vbeta1-scene-planner
-Lambda    tab-recap-vbeta1-builder-recap
-```
-
-The new POC API source/IaC adds:
+Key resources:
 
 ```text
 API Gateway REST API  tab-recap-vbeta1-api
 Lambda                tab-recap-vbeta1-orchestrator
+Lambda                tab-recap-vbeta1-scene-planner
+Lambda                tab-recap-vbeta1-builder-recap
+SQS                   tab-recap-vbeta1-planning
+SQS                   tab-recap-vbeta1-rendering
+DynamoDB              tab-recap-vbeta1-jobs
+S3                    tab-recap-vbeta1
 Usage Plan            tab-recap-vbeta1-poc
 ```
 
-The API key value is deliberately **not** stored in source or documentation. It is created manually in API Gateway and attached to the usage plan after deployment.
+The API key value is deliberately **not** stored in source or documentation. It is created/configured in API Gateway and attached to the POC usage plan. Clients currently provide it through the standard `x-api-key` header.
 
 Bedrock model/profile:
 
@@ -548,131 +605,178 @@ Deployment runs from the `deploy` branch via `.github/workflows/deploy.yml`.
 
 GitHub source changes are not assumed deployed until the deployment flow is explicitly run and verified.
 
-## 10. Current implemented backend flow
+---
 
-The currently proven backend path is:
+## 11. Public Kubrick API
 
-```text
-working/<jobId>/bettings.json
-       |
-       v
-planning SQS or direct test invocation
-       |
-       v
-Scene Planner Lambda
-       |
-       +--> DynamoDB RECEIVED/PLANNING state
-       +--> deterministic-scene-plan.json
-       +--> one Bedrock copy attempt
-       +--> scene.json
-       |
-       v
-DynamoDB RENDERING
-       |
-       v
-rendering SQS
-       |
-       v
-Builder Lambda
-       |
-       +--> recaps/<jobId>/recap.html
-       +--> DynamoDB READY + recapS3Key
-```
-
-The Planner now sends the rendering SQS message automatically after `scene.json` is written and the job is transitioned to `RENDERING`.
-
-The parameterised harness `tests/tools/run-planner-test.cmd` now verifies the complete Planner -> rendering SQS -> Builder path and downloads the final recap HTML. Live 5-, 50- and 75-bet runs have reached `READY`.
-
-The existing downstream Planner/Builder contracts are unchanged by the Orchestrator work.
-
-## 11. POC API / Orchestrator boundary
-
-For the POC, the Normaliser is deliberately decoupled. Any client that can produce canonical `bettings.json` may call the API.
-
-The locked public API surface is exactly:
+The POC public API surface is deliberately small and locked:
 
 ```text
 POST /jobs
 GET  /jobs/{jobId}
 ```
 
-Both methods require an API Gateway API key through the standard `x-api-key` header.
-
-The API Gateway key is a shared POC secret rather than user authentication. The actual key value must never be committed to GitHub or documented in the repository. It is created manually in the AWS Console and attached to the deployed usage plan.
-
-`POST /jobs` accepts canonical `bettings.json` as the request body. The Orchestrator:
+Base URL:
 
 ```text
-generates UUID jobId
--> writes working/<jobId>/bettings.json
--> creates DynamoDB job = RECEIVED
--> sends the existing planning SQS message
--> returns jobId
+https://fbhuqhy5cf.execute-api.ap-southeast-2.amazonaws.com/poc
 ```
 
-The UUID is owned by the Orchestrator. Planner and Builder continue treating `jobId` as an opaque non-empty string, so the existing downstream flow does not change.
+Both methods require:
 
-`GET /jobs/{jobId}` reads DynamoDB. While processing it returns the current status. When the job is `READY`, the Orchestrator uses `recapS3Key` to generate a fresh short-lived S3 pre-signed URL and returns it as `recapUrl`.
+```http
+x-api-key: <POC API KEY>
+```
 
-The pre-signed URL is never stored in DynamoDB. The stable object key remains the persisted state.
+The shared key is POC access control/throttling, not end-user identity. The actual value must never be committed to GitHub or repository documentation.
 
-POC flow:
+### Admission boundary
+
+Before any Kubrick job begins, API Gateway and the Orchestrator provide a synchronous admission gate:
 
 ```text
-any canonical-data client
+API Gateway
+  -> require valid x-api-key
+  -> Orchestrator parses JSON
+  -> canonical schema validation
+  -> deterministic semantic validation
+  -> only then create/queue the job
+```
+
+Admission validation is local deterministic work. It must not invoke Bedrock, enrichment APIs, historical APIs, Planner logic or rendering.
+
+The client waits for this initial decision:
+
+```text
+rejected -> direct HTTP errorCode, no jobId, do not poll
+accepted -> HTTP 202 + jobId + RECEIVED, begin polling
+```
+
+`202 Accepted` is returned only after the canonical input is persisted, the DynamoDB job exists and Planning SQS has accepted the processing message.
+
+If a persistence or queue-handoff step fails, the request must not be represented as successfully accepted. Partial internal state must be reconciled as part of Kubrick's resiliency behaviour.
+
+### POST /jobs
+
+The request body is canonical `bettings.json`.
+
+The Orchestrator:
+
+```text
+generate UUID jobId
+-> S3 working/<jobId>/bettings.json
+-> DynamoDB RECEIVED
+-> planning SQS
+-> HTTP 202 {jobId,status:"RECEIVED"}
+```
+
+The client never generates the job ID.
+
+### GET /jobs/{jobId}
+
+The Orchestrator reads DynamoDB and returns the current state.
+
+Processing responses contain:
+
+```json
+{
+  "jobId": "...",
+  "status": "PLANNING"
+}
+```
+
+Client-visible lifecycle states can include:
+
+```text
+RECEIVED
+PLANNING
+RENDERING
+READY
+FAILED
+```
+
+When READY, the response contains a fresh presigned URL:
+
+```json
+{
+  "jobId": "...",
+  "status": "READY",
+  "recapUrl": "https://..."
+}
+```
+
+The current presigned URL lifetime is 15 minutes.
+
+The URL itself is not stored in DynamoDB. `recapS3Key` is the stable persisted state; the Orchestrator generates a new URL on demand.
+
+The detailed client contract is maintained in:
+
+`docs/KUBRICK_API.md`
+
+---
+
+## 12. How a client consumes Kubrick
+
+A Kubrick client only needs to understand the canonical input contract and the two HTTP endpoints.
+
+```text
+1. Produce canonical bettings.json.
+2. POST /jobs with x-api-key and wait for synchronous admission.
+3. If POST is rejected, handle the direct errorCode and do not poll.
+4. If POST returns 202 Accepted, retain the returned jobId.
+5. Poll GET /jobs/{jobId} with x-api-key.
+5. Continue while status is RECEIVED / PLANNING / RENDERING.
+6. Stop and surface the error if status is FAILED.
+7. When status is READY, read recapUrl.
+8. Present the interactive recap to the user while the URL is valid.
+```
+
+Everything behind the API is abstracted from the client:
+
+```text
+Client
   |
-  | POST /jobs + x-api-key
+  | POST /jobs
   v
 API Gateway
   |
   v
-Orchestrator Lambda
-  |
-  +--> UUID jobId
-  +--> private S3 bettings.json
-  +--> DynamoDB RECEIVED
-  +--> planning SQS
+Orchestrator
   |
   v
-Kubrick V2 Planner
+Planning SQS
   |
   v
-rendering SQS
+Planner
   |
   v
-Builder
+Rendering SQS
   |
-  +--> private recap.html
-  +--> DynamoDB READY
-  |
-  | GET /jobs/{jobId} + x-api-key
   v
-Orchestrator generates fresh recapUrl
+Builder / Renderer
+  |
+  v
+private recap.html
+  |
+  | GET /jobs/{jobId}
+  v
+Orchestrator -> fresh recapUrl -> Client
 ```
 
-Source and IaC for this API/Orchestrator are implemented in the repository. They remain **IN PROGRESS** until the new stack is deployed, the API key is configured manually, and an API-level end-to-end test reaches `READY`.
+Clients do not need direct access to S3, DynamoDB, SQS, Bedrock, Planner internals, templates or Builder internals.
 
-The new test harness `tests/tools/run-orchestrator-test.cmd` is intended to exercise the same 5 / 8 / 16 / 32 / 50 / 75 canonical fixtures through the public API.
-
-## 12. Normaliser boundary
-
-The Normaliser remains separate from Kubrick.
-
-Current direction:
+The isolated CSV Normaliser is simply one example:
 
 ```text
-TAB account-history CSV
-  -> Pass 1 deterministic parse
-  -> Pass 2 historical enrichment
-  -> Pass 3 canonical bettings.json
-  -> Kubrick V2
+TAB CSV
+-> isolated Normaliser
+-> canonical bettings.json
+-> Kubrick POST /jobs
+-> poll Kubrick status
+-> recapUrl
 ```
 
-Kubrick must not absorb CSV parsing or historical-results enrichment responsibilities.
-
-The main Normaliser design document is:
-
-`docs/NORMALISER-LOGIC-SPEC.md`
+Other future clients may be mobile apps, web apps, backend services, batch processes or other TAB systems.
 
 ---
 
@@ -688,27 +792,43 @@ Current fixture files:
 - `tests/fixtures/bettings-75.json`
 - `tests/fixtures/bettings-baseline.json`
 
-The 5 / 8 / 32 / 50 / 75 fixtures use recent real historical Australian thoroughbred race data for race identity, runner, result, fixed odds and Sky replay URLs. Betting selections/stakes are synthetic test activity.
-
-The 16-bet fixture remains the older baseline dataset.
+The 5 / 8 / 32 / 50 / 75 fixtures use recent real historical Australian thoroughbred race facts with synthetic customer betting activity. The 16-bet fixture remains the older retained baseline dataset.
 
 The 75-bet fixture deliberately has `replayUrl: null` on sequences 74 and 75 to prove missing replay media is harmless.
 
-Planner structural tests have passed at 5 / 8 / 16 / 32 / 50 / 75 bets.
+Planner structural tests pass at 5 / 8 / 16 / 32 / 50 / 75 bets.
 
-The downstream automatic handoff is now also live-proven:
+The automatic backend handoff is live-proven:
 
 ```text
-5 bets  -> Planner -> rendering SQS -> Builder -> READY -> recap.html
-50 bets -> Planner -> rendering SQS -> Builder -> READY -> recap.html
-75 bets -> Planner -> rendering SQS -> Builder -> READY -> recap.html
+Planner
+-> rendering SQS
+-> Builder / Renderer
+-> READY
+-> recap.html
 ```
 
-The 50-bet run exposed one legitimate Scene 4 grounding gap. `CHECKPOINT_BETS_REMAINING` was added to the `PRE_FUTURE_RESULTS` phase and the rerun completed with real LLM copy rather than fallback.
+The public Kubrick API path is also live-proven through `tests/tools/run-orchestrator-test.cmd`.
 
-The 75-bet end-to-end run also completed with real LLM copy and reached `READY`.
+That harness exercises **both** public endpoints:
 
-The public API/Orchestrator path has not yet been live-proven.
+```text
+POST /jobs
+GET /jobs/{jobId}
+```
+
+and then downloads the final `recap.html` using the returned `recapUrl`.
+
+Live API tests have completed successfully across multiple fixture sizes up to the 75-bet maximum.
+
+The soundtrack/media path is also proven after:
+
+- configuring the existing CloudFront MP3 path to return CORS headers; and
+- setting `audio.crossOrigin='anonymous'` before assigning the soundtrack `src`.
+
+The existing Web Audio/runtime flow was otherwise left unchanged.
+
+---
 
 ## 14. Copy-quality hardening
 

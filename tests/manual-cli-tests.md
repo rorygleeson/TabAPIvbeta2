@@ -1,8 +1,10 @@
 # Manual AWS CLI Smoke Tests
 
-Last updated: 2026-09-18
+Last updated: 2026-09-19
 
-Purpose: deployed AWS proof for the current Kubrick V2 planner while reusing the existing vbeta1-named backend resources.
+Purpose: deployed AWS proof for Kubrick while reusing the existing vbeta1-named backend resources.
+
+Kubrick means the complete Orchestrator + Planner + Builder/Renderer backend service. The CSV Normaliser is an isolated sample client and is not part of Kubrick.
 
 All commands are Windows CMD-compatible unless stated otherwise.
 
@@ -101,19 +103,95 @@ tests\tools\run-planner-test.cmd 50
 tests\tools\run-planner-test.cmd 75
 ```
 
-The script:
+The script starts the selected fixture at the Planner boundary. The deployed Planner now sends the rendering SQS message automatically, so the harness can prove the downstream Builder/Renderer handoff and poll for the final `READY` state.
 
-1. uploads the selected fixture to S3;
-2. creates a fresh DynamoDB `RECEIVED` job;
-3. creates a direct planner event;
-4. invokes `tab-recap-vbeta1-scene-planner` at `$LATEST`;
-5. requires returned status `RENDERING`;
-6. downloads final `scene.json`;
-7. writes a render-message file for optional manual Builder handoff.
+This is still a **direct Planner-boundary test**. It does not exercise API Gateway or the Orchestrator. Use the Orchestrator API harness below for public-service proof.
 
-It does not automatically send the rendering SQS message.
+## 3. Public Kubrick API test helper
 
-## 3. Latest direct live proof — PASS
+Use this harness to simulate the public client boundary:
+
+```cmd
+tests\tools\run-orchestrator-test.cmd <size> [good|bad]
+```
+
+Supported sizes:
+
+```cmd
+tests\tools\run-orchestrator-test.cmd 5
+tests\tools\run-orchestrator-test.cmd 8
+tests\tools\run-orchestrator-test.cmd 16
+tests\tools\run-orchestrator-test.cmd 32
+tests\tools\run-orchestrator-test.cmd 50
+tests\tools\run-orchestrator-test.cmd 75
+```
+
+The second argument is optional. Omitting it means `good`.
+
+Examples:
+
+```cmd
+tests\tools\run-orchestrator-test.cmd 8
+tests\tools\run-orchestrator-test.cmd 8 good
+tests\tools\run-orchestrator-test.cmd 8 bad
+```
+
+The deployed POC base URL is embedded in the harness. The only client secret is supplied locally through:
+
+```text
+TAB_RECAP_API_KEY
+```
+
+Never put the API key value in source or documentation.
+
+### GOOD mode client simulation
+
+```text
+selected canonical fixture
+-> POST /jobs
+-> wait for synchronous admission result
+-> require HTTP 202 + jobId + RECEIVED
+-> poll GET /jobs/{jobId}
+-> READY + recapUrl
+-> download final recap.html
+```
+
+The harness prints the HTTP admission result, generated `jobId`, initial status, each polled lifecycle status and the final client action.
+
+### BAD mode client simulation
+
+BAD mode starts from the selected canonical fixture but **does not modify that fixture**.
+
+It writes a temporary invalid payload under the test run's results directory by changing only:
+
+```text
+summary.totalBets
+```
+
+so it deliberately disagrees with:
+
+```text
+bets.length
+```
+
+The expected public-client journey is:
+
+```text
+POST /jobs
+-> HTTP 400
+-> errorCode KUBRICK_INVALID_PAYLOAD
+-> no jobId
+-> client stops
+-> GET polling is skipped
+```
+
+If the invalid request is unexpectedly accepted with HTTP 202, the harness fails immediately and reports the unexpected `jobId`.
+
+This keeps one test helper for both the successful and rejected client journeys while preserving all checked-in fixture files unchanged.
+
+GOOD mode is already live-proven across multiple fixture sizes up to 75 bets. BAD mode is ready to prove the strict admission implementation once the Orchestrator change is deployed.
+
+## 4. Latest direct live proof — PASS
 
 All of the following were run against deployed `$LATEST` on 2026-09-18.
 
@@ -223,7 +301,7 @@ Result: **PASS**
 
 The 75-bet fixture deliberately had `replayUrl = null` at sequences 74 and 75. Planning still completed successfully.
 
-## 4. Current direct-test acceptance statement
+## 5. Current direct-test acceptance statement
 
 The deployed planner boundary is proven across:
 
@@ -244,7 +322,7 @@ Current direct tests prove:
 
 The tests do not prove perfect prose quality.
 
-## 5. Current copy-quality note
+## 6. Current copy-quality note
 
 Valid plans still occasionally contain awkward LLM wording.
 
@@ -261,7 +339,7 @@ Do not convert these into planner hard failures.
 
 If copy polish is attempted, keep it prompt-only first and compare 5- and 75-bet outputs.
 
-## 6. Historical resilience proofs retained
+## 7. Historical resilience proofs retained
 
 Earlier live testing already proved these backend behaviours and the evidence remains useful:
 
@@ -278,7 +356,7 @@ Those tests were performed against earlier deployed planner generations. They de
 
 Kubrick V2 intentionally removed that old copy/plan repair architecture.
 
-## 7. Planning queue operating decision
+## 8. Planning queue operating decision
 
 Current source-controlled queue policy remains intentionally conservative:
 
@@ -297,7 +375,7 @@ Verify live queue configuration when needed:
 aws sqs get-queue-attributes --queue-url https://sqs.ap-southeast-2.amazonaws.com/134387458447/tab-recap-vbeta1-planning --attribute-names RedrivePolicy VisibilityTimeout --region ap-southeast-2
 ```
 
-## 8. Optional manual Builder handoff
+## 9. Optional manual Builder handoff
 
 After a planner helper test passes, the generated render-message file can be sent manually:
 
@@ -307,7 +385,7 @@ aws sqs send-message --queue-url https://sqs.ap-southeast-2.amazonaws.com/134387
 
 Do not send it automatically from the planner test helper.
 
-## 9. Logging expectations
+## 10. Logging expectations
 
 Normal planner happy path should contain the applicable events for:
 
@@ -322,13 +400,20 @@ Normal planner happy path should contain the applicable events for:
 
 Copy fallback is an availability path, not a second model attempt.
 
-## 10. Current manual-test status
+## 11. Current manual-test status
 
 ### PROVEN
 
-- direct deployed planner at 5 / 8 / 16 / 32 / 50 / 75;
+- direct deployed Planner at 5 / 8 / 16 / 32 / 50 / 75;
+- automatic Planner -> Rendering SQS -> Builder/Renderer -> READY handoff;
+- deployed Orchestrator + API Gateway public boundary;
+- both `POST /jobs` and `GET /jobs/{jobId}`;
+- API -> Orchestrator -> Planner -> Builder/Renderer -> READY -> `recapUrl`;
+- public API runs across multiple fixture sizes up to 75 bets;
+- final recap HTML download from returned presigned URL;
 - 75-bet payload no longer exceeds model input;
 - missing replay URLs are harmless;
+- soundtrack playback after CloudFront CORS + anonymous soundtrack loading;
 - surrounding vbeta1 S3/Dynamo/SQS topology remains in use.
 
 ### RETAINED HISTORICAL EVIDENCE
@@ -337,6 +422,6 @@ Copy fallback is an availability path, not a second model attempt.
 
 ### REMAINING WHEN REQUIRED
 
-- fresh full Builder/rendered-HTML proof using the new real fixtures;
 - fresh poison-message/DLQ timing proof if that operational acceptance evidence is still required;
-- any final end-to-end frontend/orchestrator/normaliser flow proof once those planned components are integrated.
+- separate integration testing for any future real client application;
+- separate Normaliser-to-Kubrick integration once the isolated sample Normaliser is productionised.

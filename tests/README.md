@@ -1,12 +1,23 @@
 # TAB Recap Regression Gates
 
-Last updated: 2026-09-18
+Last updated: 2026-09-19
 
 This document describes the **current Kubrick V2 regression expectations** for `rorygleeson/TabAPIvbeta2`.
 
 The old vbeta1 planner repair-loop tests are historical and are no longer the acceptance model for Kubrick V2.
 
-## 1. Planner architecture under test
+## 1. Kubrick architecture under test
+
+Kubrick is the complete backend:
+
+```text
+Kubrick
+  = Orchestrator
+  + Planner
+  + Builder / Renderer
+```
+
+The Planner path remains:
 
 ```text
 bettings.json
@@ -16,10 +27,26 @@ bettings.json
        -> valid: merge copy
        -> copy-stage failure: deterministic fallback
   -> scene.json
-  -> existing Builder
+  -> Builder / Renderer
 ```
 
 Code owns structure. The LLM owns copy only.
+
+The public Kubrick path is:
+
+```text
+POST /jobs
+-> Orchestrator
+-> Planning SQS
+-> Planner
+-> Rendering SQS
+-> Builder / Renderer
+-> READY
+-> GET /jobs/{jobId}
+-> recapUrl
+```
+
+The CSV Normaliser is not under this Kubrick regression boundary. It is an isolated sample client that may produce the canonical input.
 
 There is:
 - no LLM structural planning;
@@ -200,7 +227,84 @@ The Builder remains downstream-compatible and should continue to prove:
 
 The Builder must not become a second planner or a prose semantic validator.
 
-## 10. Working rule
+## 10. Public API regression gate
+
+The deployed API harness is:
+
+```cmd
+tests\tools\run-orchestrator-test.cmd <size> [good|bad]
+```
+
+Supported fixture sizes:
+
+```text
+5 / 8 / 16 / 32 / 50 / 75
+```
+
+The mode defaults to `good`, so the existing usage remains valid:
+
+```cmd
+tests\tools\run-orchestrator-test.cmd 8
+```
+
+Explicit good-mode example:
+
+```cmd
+tests\tools\run-orchestrator-test.cmd 8 good
+```
+
+Admission-failure example:
+
+```cmd
+tests\tools\run-orchestrator-test.cmd 8 bad
+```
+
+The harness simulates a public Kubrick client.
+
+### GOOD mode
+
+GOOD mode uses the selected source fixture unchanged and exercises the complete public journey:
+
+```text
+known-good fixture
+-> POST /jobs
+-> require HTTP 202
+-> require jobId + RECEIVED
+-> poll GET /jobs/{jobId}
+-> observe DynamoDB-backed lifecycle
+-> require READY
+-> require recapUrl
+-> download recap.html
+```
+
+If POST is rejected, the client stops and does not poll.
+
+### BAD mode
+
+BAD mode does **not** edit any source fixture.
+
+It reads the selected known-good fixture and writes a temporary invalid copy only inside that test run's `tests/results/` directory. The injected fault deliberately changes `summary.totalBets` so it no longer matches `bets.length`.
+
+The simulated client then expects:
+
+```text
+temporary invalid payload
+-> POST /jobs
+-> require HTTP 400
+-> require errorCode = KUBRICK_INVALID_PAYLOAD
+-> require no jobId
+-> do not poll
+```
+
+If Kubrick returns HTTP 202 for BAD mode, the harness reports a failure and prints any unexpected `jobId` because an invalid request has crossed the admission boundary.
+
+The source fixture is never mutated by BAD mode.
+
+The API key value is a local secret and must never be committed to the repository.
+
+The API harness has been live-proven in GOOD mode across multiple fixture sizes up to 75 bets. BAD-mode admission behaviour is the test contract for the upcoming strict Orchestrator validation implementation and is not yet claimed as deployed/proven.
+
+## 11. Working rule
 
 For every significant change:
 
