@@ -644,6 +644,22 @@ canonical meeting identity when parsing is ambiguous
 
 Kubrick does not require raceId or runnerId. If the API genuinely exposes either identifier it may be preserved, but absence of either identifier must not make an otherwise complete bet partial or invalid.
 
+Finishing-position semantics are independent of bet settlement:
+
+```text
+result
+- authoritative wager outcome: WIN or LOSS
+
+finishingPosition
+- preserve the TAB historical-results API value
+- 0 = unplaced / exact finishing position not supplied by TAB
+- 1+ = recorded finishing position supplied by TAB
+- never infer or fabricate an exact finishing position
+- does not determine or override result
+```
+
+A valid TAB value of `0` must therefore pass through to canonical `bettings.json`; it must not by itself make an otherwise complete bet partial or invalid.
+
 ### Record count
 
 ```text

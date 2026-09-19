@@ -491,6 +491,15 @@ winOdds
 placeOdds
 ```
 
+When Pass 2 later enriches a settled racing bet, finishing-position semantics are:
+
+```text
+0  = unplaced / exact finishing position not supplied by TAB
+1+ = recorded finishing position supplied by TAB
+```
+
+The value is preserved from the TAB historical-results API. It is factual context only; the source settlement `result` remains authoritative for whether the wager won or lost, and the Normaliser never fabricates an exact finishing position.
+
 `Meeting Venue` may legitimately be absent on the continuation component. A missing optional continuation value is not treated as a conflict; conflicting populated values are.
 
 ## 17. Trifecta and First 4

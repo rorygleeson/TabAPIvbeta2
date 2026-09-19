@@ -100,6 +100,21 @@ highestOddsWinnerSequence
 
 `sceneType` and `showReplay` are not canonical input fields.
 
+Canonical outcome/finish semantics are:
+
+```text
+result
+- authoritative betting outcome for the wager: WIN or LOSS
+
+finishingPosition
+- preserve the TAB historical-results API value
+- 0 = unplaced / exact finishing position not supplied by TAB
+- 1+ = recorded finishing position supplied by TAB
+- never infer or fabricate an exact finishing position
+- finishingPosition does not determine or override result
+```
+
+
 Replay semantics are:
 
 ```text
@@ -429,7 +444,7 @@ The atom ownership rule is now explicit:
 
 > **Code owns exact factual values and eligibility. The LLM owns grammar and storytelling.**
 
-Model-facing fact atoms are exact typed values, not pre-written customer sentences. Counts are counts; stakes and returns are exact money values; P&L is exposed as unsigned typed atoms such as `*_PROFIT_AMOUNT` or `*_LOSS_AMOUNT`; odds use explicit `*_DECIMAL_ODDS` names; finishing positions remain exact ordinals. Prose-fragment atoms such as `*_RACE_WIN = "won the race"` are not exposed.
+Model-facing fact atoms are exact typed values, not pre-written customer sentences. Counts are counts; stakes and returns are exact money values; P&L is exposed as unsigned typed atoms such as `*_PROFIT_AMOUNT` or `*_LOSS_AMOUNT`; odds use explicit `*_DECIMAL_ODDS` names; recorded finishing positions use exact ordinals, while canonical `finishingPosition=0` means `UNPLACED` and must never be rendered as `0TH`. Prose-fragment atoms such as `*_RACE_WIN = "won the race"` are not exposed.
 
 Deterministic semantic context carries meaning that should not be rendered directly. The global policy states that race-action evidence is unavailable and replay copy is limited to supplied result facts. Scene-local semantics are intentionally small: for example `raceWinner` after a completed result, and `isFirstGroup/isFinalGroup` for grouped day-position wording. Exact group start/end/remaining values remain renderable fact atoms.
 
@@ -979,7 +994,7 @@ Template: `templates/scene-2-single-race-card-template.html`
 | `betType` | BETTINGS | Canonical wager type |
 | `oddsDisplay` | BETTINGS DERIVED | Decimal odds formatted for display |
 | `tensionLine` | **LLM** | Pre-result copy |
-| `finishingPositionText` | BETTINGS DERIVED | Ordinal finishing position |
+| `finishingPositionText` | BETTINGS DERIVED | Recorded ordinal, or `UNPLACED` when canonical `finishingPosition=0` |
 | `betResult` | BETTINGS | Canonical wager outcome |
 | `reactionLine` | **LLM** | Post-result copy |
 | `previousRunningPnl` | BETTINGS DERIVED | Running P&L before current bet |
@@ -1073,7 +1088,7 @@ The template loops over deterministic `races[]` rows:
 | `stakeDisplay` | BETTINGS DERIVED | Stake display |
 | `oddsDisplay` | BETTINGS DERIVED | Decimal odds display |
 | `returnText` | BETTINGS DERIVED | Deterministic return text when return > 0 |
-| `finishingPositionText` | BETTINGS DERIVED | Finishing-position display |
+| `finishingPositionText` | BETTINGS DERIVED | Recorded ordinal, or `UNPLACED` when canonical `finishingPosition=0` |
 | `betResult` | BETTINGS | Wager outcome |
 | `betProfitLossDisplay` | BETTINGS DERIVED | Per-bet P&L display |
 
@@ -1150,7 +1165,7 @@ The template loops over deterministic `races[]` rows:
 | `betType` | BETTINGS | Wager type |
 | `oddsDisplay` | BETTINGS DERIVED | Decimal odds display |
 | `stakeDisplay` | BETTINGS DERIVED | Stake display |
-| `finishingPositionText` | BETTINGS DERIVED | Finishing-position display |
+| `finishingPositionText` | BETTINGS DERIVED | Recorded ordinal, or `UNPLACED` when canonical `finishingPosition=0` |
 | `betResult` | BETTINGS | Wager outcome |
 | `betProfitLossDisplay` | BETTINGS DERIVED | Per-bet P&L display |
 | `comment` | **LLM** | One grounded result comment for that bet |

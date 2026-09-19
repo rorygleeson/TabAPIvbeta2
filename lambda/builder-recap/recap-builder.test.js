@@ -6,7 +6,7 @@ const {buildRecap,BuildError,__test}=require('./recap-builder');
 
 function makeBettings(total){
   let running=0;
-  const bets=Array.from({length:total},(_,i)=>{const win=i%3===0,stake=10,ret=win?25:0,profitLoss=ret-stake;running+=profitLoss;return {sequence:i+1,betTime:`2026-09-12T00:${String(i%60).padStart(2,'0')}:00+00:00`,raceTime:`2026-09-12T01:${String(i%60).padStart(2,'0')}:00+00:00`,raceId:`R${i+1}`,raceName:`Race ${i+1}`,meeting:'TEST',state:'VIC',raceNumber:(i%12)+1,runnerId:`RUN${i+1}`,runnerNumber:(i%20)+1,runnerName:`RUNNER WITH A DELIBERATELY LONG NAME ${i+1}`,betType:'WIN',stake,odds:2.5,result:win?'WIN':'LOSS',finishingPosition:win?1:4,return:ret,profitLoss,runningPnl:running,replayUrl:null};});
+  const bets=Array.from({length:total},(_,i)=>{const win=i%3===0,stake=10,ret=win?25:0,profitLoss=ret-stake;running+=profitLoss;return {sequence:i+1,betTime:`2026-09-12T00:${String(i%60).padStart(2,'0')}:00+00:00`,raceTime:`2026-09-12T01:${String(i%60).padStart(2,'0')}:00+00:00`,raceId:`R${i+1}`,raceName:`Race ${i+1}`,meeting:'TEST',state:'VIC',raceNumber:(i%12)+1,runnerId:`RUN${i+1}`,runnerNumber:(i%20)+1,runnerName:`RUNNER WITH A DELIBERATELY LONG NAME ${i+1}`,betType:'WIN',stake,odds:2.5,result:win?'WIN':'LOSS',finishingPosition:win?1:(i%2===1?0:4),return:ret,profitLoss,runningPnl:running,replayUrl:null};});
   const wins=bets.filter(x=>x.result==='WIN'),losses=bets.filter(x=>x.result==='LOSS');
   const bw=wins.reduce((a,b)=>(!a||b.profitLoss>a.profitLoss)?b:a,null);
   const bl=losses.reduce((a,b)=>(!a||b.profitLoss<a.profitLoss)?b:a,null);
@@ -17,6 +17,12 @@ function edgeScenes(){return [{sceneType:1,openingTeaser:'A racing story is read
 function fastPlan(total,groupSize=5){const [s1,s6,s7]=edgeScenes(),scenes=[s1];let n=1;while(total-n+1>=2){const remaining=total-n+1,size=Math.min(groupSize,remaining===6?4:remaining);if(size<2)break;scenes.push({sceneType:8,betSequences:Array.from({length:size},(_,i)=>n+i),headline:'Quick results ahead',comments:Array.from({length:size},()=> 'On we go')});n+=size;}if(n<=total)scenes.push({sceneType:2,betSequence:n,tensionLine:'One runner remains before the finish.',reactionLine:'That completes the final result.'});scenes.push(s6,s7);return {planVersion:'2.0',scenes};}
 
 for(const count of [4,5]){const bettings=makeBettings(count),plan=fastPlan(count,count),out=buildRecap({bettings,scenePlan:plan});assert.match(out.html,new RegExp(`data-bet-count=\"${count}\"`));assert.match(out.html,new RegExp(`NEXT ${count}`));assert.match(out.html,/data-result-reveal-ms=/);assert.match(out.html,/data-scene-duration-ms=/);}
+const unplacedOut=buildRecap({bettings:makeBettings(5),scenePlan:fastPlan(5,5)});
+assert.match(unplacedOut.html,/UNPLACED/);
+assert.doesNotMatch(unplacedOut.html,/0TH/i);
+assert.match(unplacedOut.html,/1ST/);
+assert.match(unplacedOut.html,/4TH/);
+
 const optionalIdBettings=makeBettings(5);
 optionalIdBettings.bets.forEach(bet=>{delete bet.raceId;delete bet.runnerId;});
 const optionalIdOut=buildRecap({bettings:optionalIdBettings,scenePlan:fastPlan(5,5)});

@@ -392,7 +392,7 @@ function preBetAtoms(bet) {
 function postBetAtoms(bet) {
   const prefix = 'B' + bet.sequence + '_';
   return mergeAtoms({
-    [prefix + 'FINISH']: ordinal(bet.finishingPosition),
+    [prefix + 'FINISH']: finishingPositionText(bet.finishingPosition),
     [prefix + 'BET_RESULT']: bet.result,
     [prefix + 'RETURN_PHRASE']: 'a ' + money(bet.return) + ' return'
   },
@@ -603,6 +603,10 @@ function ordinal(value) {
   const mod100 = n % 100;
   const suffix = (mod100 >= 11 && mod100 <= 13) ? 'th' : ({1:'st',2:'nd',3:'rd'}[n % 10] || 'th');
   return n + suffix;
+}
+
+function finishingPositionText(value) {
+  return Number(value) === 0 ? 'UNPLACED' : ordinal(value);
 }
 
 function joinNatural(values) {

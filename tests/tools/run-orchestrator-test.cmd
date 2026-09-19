@@ -5,6 +5,7 @@ if "%~1"=="" (
   echo Usage: run-orchestrator-test.cmd 5 [good^|bad]
   echo        run-orchestrator-test.cmd 8 [good^|bad]
   echo        run-orchestrator-test.cmd 16 [good^|bad]
+  echo        run-orchestrator-test.cmd 24 [good^|bad]
   echo        run-orchestrator-test.cmd 32 [good^|bad]
   echo        run-orchestrator-test.cmd 50 [good^|bad]
   echo        run-orchestrator-test.cmd 75 [good^|bad]
