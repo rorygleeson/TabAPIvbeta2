@@ -17,25 +17,24 @@ function buildDeterministicScenePlan(bettings, options = {}) {
   );
 
   const desiredReplayCount = calculateDesiredReplayCount(facts.totalBets, policy.replay);
-  const eligibleReplayBets = facts.bets
-    .filter(isReplayEligible)
-    .sort((a, b) => scoreBet(b, facts, policy) - scoreBet(a, facts, policy) || a.sequence - b.sequence);
+  const eligibleReplayGroups = buildReplayGroups(facts.bets)
+    .sort((a, b) => b.importance - a.importance || b.latestSequence - a.latestSequence);
 
   const maximumReplayCount = Math.min(
     desiredReplayCount,
-    eligibleReplayBets.length,
+    eligibleReplayGroups.length,
     policy.replay.maxCount
   );
   const minimumReplayCount = calculateMinimumRequiredReplayCount(
     facts.totalBets,
-    eligibleReplayBets.length,
+    eligibleReplayGroups.length,
     maximumReplayCount,
     policy.replay
   );
 
   for (let replayCount = maximumReplayCount; replayCount >= minimumReplayCount; replayCount -= 1) {
     const replaySequences = new Set(
-      eligibleReplayBets.slice(0, replayCount).map(bet => bet.sequence)
+      eligibleReplayGroups.slice(0, replayCount).map(group => group.representative.sequence)
     );
 
     const maxExtraScene2 = calculateExtraScene2Allowance(
@@ -189,7 +188,45 @@ function calculateExtraScene2Allowance(totalBets, rules) {
 }
 
 function isReplayEligible(bet) {
-  return bet.result === 'WIN' && isHttpsUrl(bet.replayUrl);
+  return isHttpsUrl(bet.replayUrl);
+}
+
+function buildReplayGroups(bets) {
+  const groupsByUrl = new Map();
+
+  for (const bet of bets) {
+    if (!isReplayEligible(bet)) continue;
+
+    let group = groupsByUrl.get(bet.replayUrl);
+    if (!group) {
+      group = {
+        replayUrl: bet.replayUrl,
+        bets: [],
+        raceNetPnl: 0,
+        importance: 0,
+        latestSequence: bet.sequence,
+        representative: bet
+      };
+      groupsByUrl.set(bet.replayUrl, group);
+    }
+
+    group.bets.push(bet);
+    group.raceNetPnl += Number(bet.profitLoss) || 0;
+    group.latestSequence = Math.max(group.latestSequence, bet.sequence);
+
+    const currentAbs = Math.abs(Number(group.representative.profitLoss) || 0);
+    const candidateAbs = Math.abs(Number(bet.profitLoss) || 0);
+    if (candidateAbs > currentAbs ||
+        (candidateAbs === currentAbs && bet.sequence > group.representative.sequence)) {
+      group.representative = bet;
+    }
+  }
+
+  for (const group of groupsByUrl.values()) {
+    group.importance = Math.abs(group.raceNetPnl);
+  }
+
+  return [...groupsByUrl.values()];
 }
 
 function isHttpsUrl(value) {
@@ -394,6 +431,7 @@ function validateDeterministicPlan(scenes, facts, replaySequences) {
 
   const covered = [];
   const seenReplaySequences = new Set();
+  const seenReplayUrls = new Set();
 
   for (let index = 0; index < scenes.length; index += 1) {
     const scene = scenes[index];
@@ -409,6 +447,10 @@ function validateDeterministicPlan(scenes, facts, replaySequences) {
       if (!isReplayEligible(bet)) {
         throw new Error(`Scene 3 bet ${scene.betSequence} is not replay eligible.`);
       }
+      if (seenReplayUrls.has(bet.replayUrl)) {
+        throw new Error(`Replay URL ${bet.replayUrl} may appear at most once.`);
+      }
+      seenReplayUrls.add(bet.replayUrl);
       seenReplaySequences.add(scene.betSequence);
     }
   }
