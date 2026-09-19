@@ -79,6 +79,16 @@ GET /VIC/racing/2025-10-25/A/R/races/3
 
 The race response is used for race identity, runner identity, finishing position, replay/media URLs and available fixed/tote return fields.
 
+### 2.3 Tested work-network caveat
+
+In work-laptop testing, the same race-detail URL returned different payload depth depending on network path. Off the work VPN, Python `urllib` could receive a thin race summary with no `runners`; on the work VPN, the same request returned the full race payload. The 2025-06-27 Mackay R7 case proved this directly and allowed TAHKIAN BUBBLES to resolve as runner 10 with `finishingPosition=0`.
+
+For the tested work environment, run Pass 2 while connected to the work VPN. A thin race-detail object must not be treated as authoritative evidence that a runner is absent.
+
+### 2.4 Open resolver technical debt
+
+The HEALESVLL / NANDO BLAST 2025-06-27 record remains unresolved. DIRECT and LOCAL_LOOKUP do not resolve the source meeting, and DEEP_API currently stops candidate evaluation when one candidate race lookup (SAN ISIDRO) returns HTTP 404. The resolver should later be hardened to record and skip an isolated non-retryable candidate failure while continuing the remaining candidate checks. Do not add an alias or domain exclusion until the source record is independently proven.
+
 ## 3. Pass 1 fields used for lookup
 
 For a normal racing wager Pass 2 uses only structured Pass-1 fields:
