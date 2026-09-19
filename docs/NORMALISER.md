@@ -1,4 +1,4 @@
-# TAB Normaliser — Racing Settlement, Enrichment and POC Rules
+# TAB Normaliser — Racing Settlement and Enrichment Rules
 
 Status: **DESIGN BASELINE — 19 Sep 2026**  
 Target repository: `TabAPIvbeta2`  
@@ -138,7 +138,7 @@ Sports Fixed bets normally do not follow that racing identity pattern.
 
 # 4. Final-design enrichment rules
 
-This section describes the intended **full/final Normaliser**, not the POC shortcut.
+This section describes the intended **full/final Normaliser**.
 
 The key rule is:
 
@@ -609,155 +609,10 @@ These counts are evidence from the supplied sample set, not a guarantee about ev
 
 ---
 
-# 6. POC mode — hosted Normaliser without historical enrichment
-
-The POC goal is to make the recap usable by other internal users without requiring the Normaliser runtime to reach the restricted TAB historical API.
-
-POC mode therefore prioritises:
-
-```text
-real customer betting facts
-correct financial outcome
-simple deterministic parsing
-no fabricated metadata
-hosted usability
-```
-
-over perfect race enrichment.
-
-## 6.1 POC rules by bet type
-
-### Fixed WIN / PLACE
-
-Use the CSV directly.
-
-Produce one record per customer component with:
-
-```text
-event date
-meeting
-race number
-runner name
-WIN or PLACE
-stake
-accepted Fixed odds
-WIN/LOSS
-actual return
-profit/loss
-```
-
-No enrichment required for normal settlement.
-
-### Fixed WIN & PLACE
-
-Continue to produce two records **only when the component settlement can be proven from the CSV**.
-
-For the observed sample set this works for all 19 transactions.
-
-If a future winning Fixed W&P payout cannot be uniquely split:
-
-```text
-POC behaviour:
-- do not invent the split
-- either exclude/quarantine that transaction
-- or later adopt an explicit combined Fixed W&P representation
-```
-
-### Tote WIN / PLACE
-
-Produce one record per transaction.
-
-Use:
-
-```text
-meeting when known
-race number
-runner number
-stake
-overall result
-actual payout
-profit/loss
-```
-
-Do not invent runner name, dividend, finishing position or IDs.
-
-### Tote WIN & PLACE
-
-POC simplification:
-
-> Treat the whole transaction as **one bet**.
-
-Produce:
-
-```text
-betType = TOTE_WIN_PLACE
-total stake = winStake + placeStake
-runner number
-overall result
-return = combined payout, or 0 for a settled loss
-profitLoss = return - total stake
-```
-
-Do **not** attempt to split the payout into separate WIN and PLACE returns.
-
-This removes the main financial dependency on historical Tote dividend enrichment.
 
 ---
 
-# 7. What POC mode cannot honestly produce without enrichment
-
-The following fields are not reliably available from the account-history CSV:
-
-```text
-raceTime
-raceId
-official raceName
-state / canonical location
-runnerId
-finishingPosition
-replayUrl
-runnerNumber for many Fixed bets
-runnerName for many Tote bets
-official Tote dividend / odds, especially for losing Tote bets
-canonical meeting identity when source text is missing or ambiguous
-```
-
-These values must be absent/optional, derived only where explicitly justified, or supplied later by enrichment.
-
-They must never be fabricated merely to satisfy a schema.
-
-## 7.1 Current Kubrick contract conflict
-
-The current Kubrick v1 canonical schema requires several enrichment-only fields for every bet, including:
-
-```text
-raceTime
-raceId
-raceName
-state
-runnerId
-runnerNumber
-runnerName
-odds > 0
-finishingPosition
-```
-
-Therefore the current strict contract cannot accept every honest no-enrichment POC record.
-
-In particular:
-
-- Fixed bets often have runner name but not runner number;
-- Tote bets often have runner number but not runner name;
-- losing Tote bets do not have a positive dividend/odds in the CSV;
-- raceId, runnerId, raceTime and finishingPosition are enrichment facts.
-
-Before POC submission to Kubrick, the contract must be reviewed to distinguish **story-essential canonical facts** from **optional enrichment facts**.
-
-POC code must not create fake values to get around this.
-
----
-
-# 8. Melbourne Cup Fixed-format exception
+# 6. Melbourne Cup Fixed-format exception
 
 Two supplied horse-racing transactions use a non-standard Fixed selection shape:
 
@@ -801,72 +656,7 @@ potential return
 actual payout when applicable
 ```
 
-## 8.1 Final-design handling
+## 6.1 Final-design handling
 
 The full design should resolve this event through proper race/event enrichment rather than relying on display-name assumptions.
 
-## 8.2 POC hack
-
-POC mode may use a deliberately narrow exception:
-
-```text
-IF Fixed racing selection matches:
-  WIN Melbourne Cup <runner>
-  or
-  PLA Melbourne Cup <runner>
-
-AND the record contains TAB racing-specific "Deductions Apply" wording
-
-THEN:
-  eventLabel = MELBOURNE CUP
-  meeting = FLEMINGTON
-  raceNumber = 7
-  runnerName = parsed suffix
-  mark resolutionMethod = POC_MELBOURNE_CUP_ALIAS
-```
-
-This is intentionally a **POC-only special case** for the observed TAB statement shape.
-
-It must not become a generic rule such as "named race -> guess meeting/race number".
-
-If the event/date does not match the supported Melbourne Cup shape, quarantine it rather than guessing.
-
----
-
-# 9. POC output philosophy
-
-For the Gill/internal-trial POC:
-
-```text
-prefer:
-  correct stake
-  correct accepted Fixed odds
-  correct customer result
-  correct actual return
-  correct profit/loss
-  recognisable meeting/race/runner identity where the CSV provides it
-
-over:
-  fabricated IDs
-  fabricated finishing positions
-  fabricated Tote odds
-  fake replay links
-  guessed race metadata
-```
-
-The POC can still tell the core personalised story:
-
-```text
-what the customer backed
-where they backed it
-WIN / PLACE / Tote W&P
-how much they staked
-their accepted Fixed price where applicable
-whether they won or lost
-what they got back
-their P/L
-their running/day P/L
-their biggest wins/losses
-```
-
-Historical enrichment remains a later enhancement for richer race identity, replay, finishing-position storytelling and full Tote component detail.
