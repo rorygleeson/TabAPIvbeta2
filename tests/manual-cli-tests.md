@@ -109,10 +109,10 @@ This is still a **direct Planner-boundary test**. It does not exercise API Gatew
 
 ## 3. Public Kubrick API test helper
 
-Use this harness to test the public client boundary:
+Use this harness to simulate the public client boundary:
 
 ```cmd
-tests\tools\run-orchestrator-test.cmd <size>
+tests\tools\run-orchestrator-test.cmd <size> [good|bad]
 ```
 
 Supported sizes:
@@ -126,6 +126,16 @@ tests\tools\run-orchestrator-test.cmd 50
 tests\tools\run-orchestrator-test.cmd 75
 ```
 
+The second argument is optional. Omitting it means `good`.
+
+Examples:
+
+```cmd
+tests\tools\run-orchestrator-test.cmd 8
+tests\tools\run-orchestrator-test.cmd 8 good
+tests\tools\run-orchestrator-test.cmd 8 bad
+```
+
 The deployed POC base URL is embedded in the harness. The only client secret is supplied locally through:
 
 ```text
@@ -134,27 +144,52 @@ TAB_RECAP_API_KEY
 
 Never put the API key value in source or documentation.
 
-The harness proves both public endpoints:
+### GOOD mode client simulation
 
 ```text
-POST /jobs
-GET /jobs/{jobId}
-```
-
-Its flow is:
-
-```text
-fixture bettings.json
+selected canonical fixture
 -> POST /jobs
--> receive generated jobId
+-> wait for synchronous admission result
+-> require HTTP 202 + jobId + RECEIVED
 -> poll GET /jobs/{jobId}
 -> READY + recapUrl
 -> download final recap.html
 ```
 
-This is the preferred end-to-end backend acceptance test because the client sees only the public Kubrick API.
+The harness prints the HTTP admission result, generated `jobId`, initial status, each polled lifecycle status and the final client action.
 
-Live runs have passed across multiple fixture sizes up to 75 bets.
+### BAD mode client simulation
+
+BAD mode starts from the selected canonical fixture but **does not modify that fixture**.
+
+It writes a temporary invalid payload under the test run's results directory by changing only:
+
+```text
+summary.totalBets
+```
+
+so it deliberately disagrees with:
+
+```text
+bets.length
+```
+
+The expected public-client journey is:
+
+```text
+POST /jobs
+-> HTTP 400
+-> errorCode KUBRICK_INVALID_PAYLOAD
+-> no jobId
+-> client stops
+-> GET polling is skipped
+```
+
+If the invalid request is unexpectedly accepted with HTTP 202, the harness fails immediately and reports the unexpected `jobId`.
+
+This keeps one test helper for both the successful and rejected client journeys while preserving all checked-in fixture files unchanged.
+
+GOOD mode is already live-proven across multiple fixture sizes up to 75 bets. BAD mode is ready to prove the strict admission implementation once the Orchestrator change is deployed.
 
 ## 4. Latest direct live proof — PASS
 
