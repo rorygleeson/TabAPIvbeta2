@@ -17,7 +17,9 @@ TabAPIvbeta1
 + minimal canonical bettings.json cleanup
 ```
 
-The existing Builder, templates, runtime, S3/SQS/DynamoDB topology and vbeta1-named AWS resources remain intentionally reused. The POC now adds an Orchestrator Lambda and API Gateway REST API while leaving the proven Planner/Builder contracts unchanged.
+The existing Builder, templates, runtime, S3/SQS/DynamoDB topology and vbeta1-named AWS resources remain intentionally reused. The POC adds an Orchestrator Lambda and API Gateway REST API while leaving the proven Planner/Builder contracts unchanged.
+
+For current terminology, **Kubrick means the complete Orchestrator + Planner + Builder/Renderer backend service**. The CSV Normaliser is not part of Kubrick; it is an isolated sample client that produces canonical `bettings.json` and consumes the Kubrick API.
 
 ## Repositories
 
@@ -436,7 +438,16 @@ No new validator, repair loop or second model call should be added for copy poli
 
 ## POC Orchestrator / API architecture
 
-The Normaliser remains decoupled. For the POC, any client may submit already-canonical `bettings.json` to the public API.
+Kubrick is the complete backend service:
+
+```text
+Kubrick
+  = Orchestrator
+  + Planner
+  + Builder / Renderer
+```
+
+The public client boundary is API Gateway + Orchestrator. Clients never call Planner or Builder/Renderer directly.
 
 Locked API:
 
@@ -445,9 +456,9 @@ POST /jobs
 GET  /jobs/{jobId}
 ```
 
-Both methods require the API Gateway `x-api-key` header. This is a shared POC key, not user authentication. The key value is never stored in GitHub or repository documentation; it is created manually in the AWS Console and attached to the deployed usage plan.
+Both methods require the API Gateway `x-api-key` header. This is a shared POC key, not end-user authentication. The key value is never stored in GitHub or repository documentation.
 
-`POST /jobs`:
+### POST /jobs
 
 ```text
 canonical bettings.json
@@ -457,26 +468,76 @@ canonical bettings.json
        -> working/<jobId>/bettings.json
        -> DynamoDB RECEIVED
        -> planning SQS
-  -> returns jobId
+  -> HTTP 202 {jobId,status:"RECEIVED"}
 ```
 
-The existing downstream path remains unchanged:
+The job ID is owned by the Orchestrator.
+
+### Internal Kubrick path
 
 ```text
 planning SQS
-  -> Kubrick V2 Scene Planner
+  -> Planner
   -> scene.json
   -> rendering SQS
-  -> existing Builder
+  -> Builder / Renderer
   -> recaps/<jobId>/recap.html
   -> DynamoDB READY + recapS3Key
 ```
 
-`GET /jobs/{jobId}` reads current DynamoDB state. When the job is `READY`, the Orchestrator generates a fresh short-lived S3 pre-signed URL from `recapS3Key` and returns it as `recapUrl`.
+### GET /jobs/{jobId}
 
-The pre-signed URL is never persisted in DynamoDB.
+The Orchestrator reads the current DynamoDB state. Processing clients can observe `RECEIVED`, `PLANNING` and `RENDERING`. Terminal states are `READY` or `FAILED`.
 
-Source/IaC now exists for the Orchestrator/API, plus `tests/tools/run-orchestrator-test.cmd` for 5 / 8 / 16 / 32 / 50 / 75 fixtures. This boundary remains **IN PROGRESS** until deployed, the API key is manually configured, and a live API test reaches `READY`.
+When the job is `READY`, the Orchestrator generates a fresh short-lived S3 presigned URL from `recapS3Key` and returns it as `recapUrl`.
+
+The presigned URL is never persisted in DynamoDB. Current TTL is 15 minutes.
+
+The client consumption sequence is:
+
+```text
+produce canonical bettings.json
+-> POST /jobs
+-> retain jobId
+-> poll GET /jobs/{jobId}
+-> READY
+-> consume recapUrl
+```
+
+The dedicated API contract is `docs/KUBRICK_API.md`.
+
+### Normaliser relationship
+
+The Normaliser remains isolated from Kubrick.
+
+It is one sample client/use case:
+
+```text
+TAB account-history CSV
+-> Normaliser
+-> canonical bettings.json
+-> Kubrick API
+-> recapUrl
+```
+
+Other clients can consume Kubrick directly without using the Normaliser.
+
+### Proof
+
+The Orchestrator/API CloudFormation stack is deployed and the shared POC API key is configured.
+
+`tests/tools/run-orchestrator-test.cmd` exercises both public endpoints:
+
+```text
+POST /jobs
+GET /jobs/{jobId}
+```
+
+and then downloads the final HTML from the returned `recapUrl`.
+
+Live API tests have succeeded across multiple fixture sizes up to the 75-bet maximum.
+
+The soundtrack path is also live-proven after the existing CloudFront MP3 path was configured for CORS and the Builder runtime was changed to set `audio.crossOrigin='anonymous'` before the soundtrack `src`. No other Web Audio/Apple compatibility logic was redesigned.
 
 ## Working rules
 
@@ -495,39 +556,48 @@ Source/IaC now exists for the Orchestrator/API, plus `tests/tools/run-orchestrat
 
 ### PROVEN
 
+- Kubrick service boundary is Orchestrator + Planner + Builder/Renderer;
 - deterministic planner exists and is active source;
 - canonical input cleanup complete;
 - replay selection and missing-replay handling work;
 - deterministic midpoint/grouping/coverage work;
 - compact 75-bet model payload works;
 - one-call copy circuit breaker works;
-- Builder downstream contract remains compatible;
+- Builder/Renderer downstream contract remains compatible;
 - direct 5 / 8 / 16 / 32 / 50 / 75 planner tests pass;
 - Planner automatically sends rendering SQS messages;
-- end-to-end Planner -> rendering SQS -> Builder -> READY is live-proven at 5, 50 and 75 bets.
+- Planner -> rendering SQS -> Builder/Renderer -> READY is live-proven;
+- Orchestrator/API stack is deployed;
+- API Gateway shared-key POC access is configured;
+- both `POST /jobs` and `GET /jobs/{jobId}` are live-proven through the orchestrator harness;
+- public API -> Orchestrator -> Planner -> Builder/Renderer -> READY -> presigned `recapUrl` is live-proven across multiple sizes up to 75 bets;
+- final recap HTML has been opened/checked from live API outputs;
+- soundtrack playback is live-proven with the existing CloudFront MP3 path plus anonymous CORS mode.
 
 ### LOCKED
 
+- Kubrick means the complete Orchestrator + Planner + Builder/Renderer service;
+- Orchestrator is the only public Kubrick Lambda boundary;
+- Planner and Builder/Renderer remain internal implementation components;
 - LLM is copywriter only;
 - code owns structure;
 - one LLM copy call maximum;
 - no repair loop;
 - deterministic fallback on copy-stage failure;
 - existing vbeta1-named backend topology reused;
-- Builder not redesigned;
+- Builder/Renderer not redesigned;
 - Orchestrator generates UUID job IDs;
-- API surface is POST /jobs and GET /jobs/{jobId};
-- both methods require API Gateway x-api-key;
+- API surface is exactly `POST /jobs` and `GET /jobs/{jobId}`;
+- both methods require API Gateway `x-api-key` for the POC;
 - actual API key value is manually configured in AWS and never committed;
-- Normaliser remains decoupled;
-- recapS3Key is persisted; pre-signed recap URL is generated fresh on READY.
+- `recapS3Key` is persisted while the presigned `recapUrl` is generated fresh on READY;
+- the Normaliser is isolated and is only a sample client/use case, not a Kubrick component.
 
 ### IN PROGRESS / PLANNED
 
-- deploy the Orchestrator/API CloudFormation stack;
-- manually create and attach the POC API key;
-- run the new API-level fixture harness and prove READY + recapUrl;
-- Normaliser integration remains a separate upstream concern.
+- productionising the isolated Normaliser as a client remains a separate future step;
+- future client applications may consume the same Kubrick API directly;
+- production-grade user authentication/authorization can replace the shared POC API key later if required.
 
 ### TECH DEBT / CLEANUP
 
