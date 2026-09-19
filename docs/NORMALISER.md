@@ -127,6 +127,8 @@ Python 3.8 or later
 network access to the TAB historical-results API for Pass 2 enrichment
 ```
 
+On the tested work laptop, TAB historical race-detail responses were environment/network-path sensitive. Off the work VPN, the same Python `urllib` race request could return a thin summary object with no `runners`, placeholder race metadata and no replay. With the work VPN connected, the same Normaliser request returned the full historical race-detail payload, including runners, true race time/name and replay media. For that tested environment, run the Normaliser while connected to the work VPN. Do not treat a thin race object as authoritative evidence that a runner does not exist.
+
 Git, Node.js, npm, pip packages, AWS CLI, AWS credentials and a copy of the wider Kubrick repository are not required.
 
 ## 2. Local client operating model
@@ -312,6 +314,28 @@ candidate Kubrick payload fails validation
 ```
 
 Diagnostic evidence should still be written under `working\\` so failures remain inspectable.
+
+### 2.8 Known technical debt / open resolver issue
+
+The 2025-06-27 validation run leaves one isolated unresolved source transaction:
+
+```text
+source meeting: HEALESVLL
+runner: NANDO BLAST
+race: 2
+transaction: 32258734228769901
+```
+
+Current behaviour:
+
+```text
+DIRECT       -> no exact meetingName match for HEALESVLL
+LOCAL_LOOKUP -> miss
+DEEP_API     -> candidate evaluation stops because one candidate race lookup
+                (SAN ISIDRO) returns HTTP 404
+```
+
+This is logged as resolver technical debt, not a reason to weaken canonical validation or fabricate race facts. The deep resolver should be hardened so an isolated deterministic candidate lookup failure such as a 404 can be recorded and skipped while the remaining candidates continue to be evaluated. The exact identity/domain of the HEALESVLL/NANDO BLAST source record must still be proven before any alias or non-horse rule is added.
 
 ### 2.8 Kubrick API secret
 
