@@ -28,7 +28,7 @@ const REGION = process.env.AWS_REGION || 'ap-southeast-2';
 const STORAGE_BUCKET = process.env.STORAGE_BUCKET;
 const JOBS_TABLE = process.env.JOBS_TABLE;
 const PLANNING_QUEUE_URL = process.env.PLANNING_QUEUE_URL;
-const RECAP_URL_TTL_SECONDS = Number(process.env.RECAP_URL_TTL_SECONDS || 900);
+const RECAP_URL_TTL_SECONDS = Number(process.env.RECAP_URL_TTL_SECONDS || 43200);
 
 const s3 = new S3Client({ region: REGION });
 const ddb = new DynamoDBClient({ region: REGION });
