@@ -617,12 +617,13 @@ The soundtrack path is also live-proven after the existing CloudFront MP3 path w
 - actual API key value is manually configured in AWS and never committed;
 - `recapS3Key` is persisted while the presigned `recapUrl` is generated fresh on READY;
 - the Normaliser is isolated and is only a sample client/use case, not a Kubrick component.
+- strict Orchestrator admission now performs JSON parsing, canonical schema validation and shared deterministic semantic validation before job creation;
+- Orchestrator-owned direct request failures now use stable `errorCode` envelopes with `requestId`;
+- admission telemetry records payload size, bet count, validation duration and acceptance/rejection result;
+- canonical semantic validation is shared from `shared/canonical-bettings-validator.js` and packaged into both Orchestrator and Builder Lambdas.
 
 ### IN PROGRESS / PLANNED
 
-- implement strict Orchestrator canonical schema + semantic admission validation before job creation;
-- implement stable direct API error codes for admission failures;
-- instrument payload size / bet count / validation duration at admission;
 - define and test partial job-creation rollback/reconciliation before returning 202;
 - complete the end-to-end resiliency audit covering API/Lambda timeouts, SQS visibility/retries/DLQs and DynamoDB terminal failure state;
 - productionising the isolated Normaliser as a client remains a separate future step;
