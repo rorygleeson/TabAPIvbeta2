@@ -148,7 +148,8 @@ The Builder HTML-escapes display substitutions.
 - optional replay;
 - for a replay-eligible WIN or LOSS bet selected as the representative of a unique replay video;
 - immediately follows matching Scene 2;
-- replay URL comes from canonical factual input; exact replayUrl is the duplicate identity and the same video may appear at most once.
+- replay URL comes from canonical factual input; exact replayUrl is the duplicate identity and the same video may appear at most once;
+- WIN and LOSS replays share the same video lifecycle, but loss replays must not trigger the WIN payoff/celebration package.
 
 ### Scene 4
 
