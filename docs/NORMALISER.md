@@ -75,6 +75,54 @@ Historical prices must never overwrite the customer's accepted Fixed price.
 ---
 
 
+## Portable standalone package
+
+The repository includes a self-contained local client under:
+
+```text
+local-normaliser\
+```
+
+It is designed to be copied or extracted independently of the rest of the Kubrick repository.
+
+Portable layout:
+
+```text
+local-normaliser\
+    normaliser.py
+    validate-kubrick.js
+    bettings.schema.json
+    canonical-bettings-validator.js
+    package.json
+    setup.cmd
+    run.cmd
+    input\
+    working\                  created automatically
+    meeting-resolution.json   created automatically when needed
+```
+
+The bundled `bettings.schema.json` and `canonical-bettings-validator.js` are copies of the authoritative Kubrick validation files so the standalone client can perform the same validation without requiring the full repository tree.
+
+First-time setup on a Windows machine:
+
+```cmd
+setup.cmd
+```
+
+Normal use:
+
+```cmd
+run.cmd
+```
+
+TAB monthly account-history CSV files are placed in:
+
+```text
+input\
+```
+
+Git is not required on the machine running the standalone client. Python, Node.js and npm are required for the current implementation.
+
 ## 2. Local client operating model
 
 The first working client is a **local Windows application/script**. It runs on the user's PC so it can continue to use the currently reachable TAB historical-results API for enrichment.
