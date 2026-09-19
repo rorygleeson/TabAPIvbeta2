@@ -99,6 +99,22 @@ const response = orchestrator.__test.jsonResponse(202, { jobId: 'abc', status: '
 assert.strictEqual(response.statusCode, 202);
 assert.strictEqual(JSON.parse(response.body).status, 'RECEIVED');
 
+const planningFailure = orchestrator.__test.failedJobPublicFields({});
+assert.deepStrictEqual(planningFailure, {
+  failureCode: 'KUBRICK_PLANNING_FAILED',
+  failedStage: 'PLANNING',
+  message: 'Kubrick could not complete planning.'
+});
+
+const renderingFailure = orchestrator.__test.failedJobPublicFields({
+  sceneS3Key: { S: 'working/job/scene.json' }
+});
+assert.deepStrictEqual(renderingFailure, {
+  failureCode: 'KUBRICK_RENDERING_FAILED',
+  failedStage: 'RENDERING',
+  message: 'Kubrick could not complete rendering.'
+});
+
 (async () => {
   const invalidResponse = await orchestrator.handler(
     postEvent(JSON.stringify(badTotalBets))
