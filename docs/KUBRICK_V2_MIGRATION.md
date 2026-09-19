@@ -217,6 +217,7 @@ valid HTTPS replayUrl -> replay eligible for WIN or LOSS
 group candidates by exact replayUrl
 raceNetPnl = sum(profitLoss for all bets sharing that replayUrl)
 replayImportance = abs(raceNetPnl)
+monetary comparison is performed in integer cents to avoid floating-point tie drift
 rank highest replayImportance first
 if the replay quota cuts through an equal-importance tie, prefer the later replay group
 the same replayUrl may be selected at most once
@@ -225,6 +226,8 @@ the same replayUrl may be selected at most once
 Within a selected replay group, the representative bet used for the Scene 2/Scene 3 attachment is the bet with the largest absolute individual profitLoss; an exact tie uses the later bet sequence.
 
 Replay count remains owned by the existing bet-volume/runtime planner policy; this ranking only decides which unique replay videos fill those slots.
+
+Scene 3 runtime treatment is outcome-aware. The Builder passes the exact wager result into the runtime manifest. WIN replays may use the existing payoff/celebration FX; LOSS replays must not trigger WINNER/BOOM/coins/confetti payoff celebration.
 
 ### Scene 2 extras
 
