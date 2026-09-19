@@ -44,6 +44,20 @@ assert.strictEqual(parsed.bettings.bets.length, baseline.bets.length);
 assert.strictEqual(parsed.betCount, baseline.bets.length);
 assert.ok(parsed.payloadBytes > 0);
 
+const baselineWithoutOptionalIds = structuredClone(baseline);
+baselineWithoutOptionalIds.bets.forEach(bet => {
+  delete bet.raceId;
+  delete bet.runnerId;
+});
+const parsedWithoutOptionalIds = orchestrator.__test.parseCanonicalBettings(
+  postEvent(JSON.stringify(baselineWithoutOptionalIds))
+);
+assert.strictEqual(parsedWithoutOptionalIds.bettings.bets.length, baseline.bets.length);
+assert.ok(parsedWithoutOptionalIds.bettings.bets.every(
+  bet => !Object.prototype.hasOwnProperty.call(bet, 'raceId') &&
+         !Object.prototype.hasOwnProperty.call(bet, 'runnerId')
+));
+
 assert.throws(
   () => orchestrator.__test.parseCanonicalBettings(postEvent('{bad json')),
   error =>
