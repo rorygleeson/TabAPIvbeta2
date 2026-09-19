@@ -76,7 +76,9 @@ function replayPlan(total,replaySequences){
   const bettings=makeBettings(5);
   bettings.bets[1].replayUrl='https://example.com/loss-replay.mp4';
   assert.strictEqual(bettings.bets[1].result,'LOSS');
-  assert.doesNotThrow(()=>buildRecap({bettings,scenePlan:replayPlan(5,[2])}));
+  const out=buildRecap({bettings,scenePlan:replayPlan(5,[2])});
+  assert.match(out.html,/"replayResult":"LOSS"/);
+  assert.match(out.html,/if\(data\.replayResult==='WIN'\)replayCelebrationFx\(root\)/);
 }
 
 // The Builder independently protects the planner invariant that one video cannot appear twice.
