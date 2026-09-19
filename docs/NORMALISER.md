@@ -119,13 +119,16 @@ TAB monthly account-history CSV files are placed in:
 input\
 ```
 
-Runtime requirements for the current pre-POST client are:
+Runtime requirements for the current end-to-end local client are:
 
 ```text
 Windows CMD
 Python 3.8 or later
 network access to the TAB historical-results API for Pass 2 enrichment
+TAB_RECAP_API_KEY environment variable for Kubrick API access
 ```
+
+On the tested work laptop, TAB historical race-detail responses were environment/network-path sensitive. Off the work VPN, the same Python `urllib` race request could return a thin summary object with no `runners`, placeholder race metadata and no replay. With the work VPN connected, the same Normaliser request returned the full historical race-detail payload, including runners, true race time/name and replay media. For that tested environment, run the Normaliser while connected to the work VPN. Do not treat a thin race object as authoritative evidence that a runner does not exist.
 
 Git, Node.js, npm, pip packages, AWS CLI, AWS credentials and a copy of the wider Kubrick repository are not required.
 
@@ -313,6 +316,28 @@ candidate Kubrick payload fails validation
 
 Diagnostic evidence should still be written under `working\\` so failures remain inspectable.
 
+### 2.8 Known technical debt / open resolver issue
+
+The 2025-06-27 validation run leaves one isolated unresolved source transaction:
+
+```text
+source meeting: HEALESVLL
+runner: NANDO BLAST
+race: 2
+transaction: 32258734228769901
+```
+
+Current behaviour:
+
+```text
+DIRECT       -> no exact meetingName match for HEALESVLL
+LOCAL_LOOKUP -> miss
+DEEP_API     -> candidate evaluation stops because one candidate race lookup
+                (SAN ISIDRO) returns HTTP 404
+```
+
+This is logged as resolver technical debt, not a reason to weaken canonical validation or fabricate race facts. The deep resolver should be hardened so an isolated deterministic candidate lookup failure such as a 404 can be recorded and skipped while the remaining candidates continue to be evaluated. The exact identity/domain of the HEALESVLL/NANDO BLAST source record must still be proven before any alias or non-horse rule is added.
+
 ### 2.8 Kubrick API secret
 
 The eventual local Kubrick client reads the POC API key from the Windows environment:
@@ -385,14 +410,9 @@ Kubrick validator errorCode/message/details
 
 The final screen must clearly report how many records were processed, how many survived and how many source transactions were quarantined.
 
-If at least one source transaction survives and the rebuilt final payload passes the exact Kubrick validator, the final message should clearly state:
+If at least one source transaction survives and the rebuilt final payload passes validation, the script proceeds to the Kubrick client stage. It submits the validated canonical payload, retains the returned `jobId`, and polls the public status endpoint until the job reaches `READY` or `FAILED`.
 
-```text
-READY TO SEND TO KUBRICK
-Kubrick request not sent in this build.
-```
-
-If no source transaction survives, or the rebuilt final payload itself fails validation, the script must state that it is not ready and must not claim success.
+If no source transaction survives, the rebuilt final payload fails validation, or `TAB_RECAP_API_KEY` is missing, the script must stop safely and must not claim that a Kubrick recap was created.
 
 The authoritative local validation path is the same contract used by the Kubrick Orchestrator:
 
@@ -404,11 +424,9 @@ shared/canonical-bettings-validator.js
 
 The Python Normaliser may orchestrate validation, but it must not maintain an independent Python copy as the source of truth for Kubrick admission.
 
-This milestone allows Pass 1, Pass 2, mapping and Kubrick compatibility to be proven against real selected racing days before any HTTP integration is enabled.
+The current local client now owns the complete Kubrick request lifecycle:
 
 ### 2.10 Final Kubrick-client lifecycle
-
-Only after the candidate payload is proven will the same script enable the final automated client step.
 
 The local client owns the entire Kubrick request lifecycle:
 
@@ -422,7 +440,6 @@ validated canonical bettings.json
     -> report lifecycle status changes
     -> when READY, receive fresh recapUrl
     -> print recapUrl
-    -> automatically open recapUrl in the user's default browser
 ```
 
 The client must distinguish **API admission** from **accepted-job processing** exactly as defined in `docs/KUBRICK_API.md`.
@@ -468,24 +485,14 @@ RECAP READY
 Recap URL:
 https://...
 
-Opening recap in your default browser...
+The printed URL is the fresh short-lived presigned recap URL.
 ```
 
-### 2.11 Launching the final recap
+### 2.11 Returning the final recap
 
 When Kubrick returns `status: READY`, the response contains a fresh short-lived S3 presigned `recapUrl`.
 
-The local Python client should use the standard library `webbrowser` module to open that URL in the user's default browser.
-
-Conceptually:
-
-```python
-import webbrowser
-
-webbrowser.open(recap_url)
-```
-
-The script should **always print the URL as well as attempting to open it**, so the user still has a usable link if automatic browser launch fails.
+The current client prints that URL prominently and also writes the terminal Kubrick response evidence under the selected run's `candidate\\` directory. It polls continuously through `RECEIVED`, `PLANNING` and `RENDERING` until the job reaches the terminal `READY` or `FAILED` state.
 
 The presigned URL is temporary and must not be treated as durable state. The stable identifier is the Kubrick `jobId`; while the job remains READY, another `GET /jobs/{jobId}` can obtain a fresh presigned URL.
 
@@ -495,11 +502,11 @@ The target local user experience is therefore:
 python normaliser.py
 -> select one racing day
 -> wait while the script normalises, enriches, validates and submits
--> watch clear Kubrick status updates
--> recap automatically opens in the browser when READY
+-> watch clear Kubrick status changes
+-> receive the final presigned recap URL when READY
 ```
 
-No manual curl commands, S3 navigation, job-status lookups, URL copying, or AWS-console interaction should be required during normal use.
+Automatic browser launch can be added later as a convenience layer; it is not required for the current proven client boundary.
 
 ---
 

@@ -39,8 +39,8 @@ module.exports = {
   replay: {
     enabled: true,
 
-    // Bet volume sets the desired replay count. Eligible winning bets with
-    // valid HTTPS footage cap what can actually be selected.
+    // Bet volume sets the desired replay count. Unique valid HTTPS replay
+    // videos cap what can actually be selected; WIN and LOSS bets are eligible.
     minimumByBets: [
       { maxBets: 5, minCount: 1 },
       { maxBets: 10, minCount: 2 },

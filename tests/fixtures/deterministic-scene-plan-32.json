@@ -21,16 +21,11 @@
       "betSequence": 3
     },
     {
-      "sceneType": 2,
-      "betSequence": 4
-    },
-    {
-      "sceneType": 2,
-      "betSequence": 5
-    },
-    {
-      "sceneType": 3,
-      "betSequence": 5
+      "sceneType": 5,
+      "betSequences": [
+        4,
+        5
+      ]
     },
     {
       "sceneType": 2,
@@ -56,19 +51,31 @@
         12,
         13,
         14,
-        15,
-        16
+        15
       ]
     },
     {
       "sceneType": 4,
-      "checkpointAfterBetSequence": 16
+      "checkpointAfterBetSequence": 15
     },
     {
-      "sceneType": 8,
+      "sceneType": 5,
       "betSequences": [
-        17,
-        18,
+        16,
+        17
+      ]
+    },
+    {
+      "sceneType": 2,
+      "betSequence": 18
+    },
+    {
+      "sceneType": 3,
+      "betSequence": 18
+    },
+    {
+      "sceneType": 5,
+      "betSequences": [
         19,
         20
       ]

@@ -62,6 +62,7 @@ deterministic parse + horse-only domain classification
 PASS 2
 TAB historical enrichment + meeting resolution
 DIRECT -> LOCAL_LOOKUP -> DEEP_API
+(network path must return full historical race-detail payload)
         |
         v
 PASS 3
@@ -279,6 +280,54 @@ For each included horse record:
 ```
 
 No fuzzy/Levenshtein best guess is allowed.
+
+### 7.1 Network-path behaviour observed in work-laptop testing
+
+The historical race endpoint can return materially different payload depth for the same URL depending on network/request path. This was proven on the 2025-06-27 Mackay R7 request:
+
+```text
+/VIC/racing/2025-06-27/B/R/races/7
+```
+
+Observed off the work VPN with the Normaliser's Python `urllib` request:
+
+```text
+raceName      = MACKAY R07 27/06
+raceStartTime = 2025-06-27T00:00:00
+runners       = []
+replay        = absent
+```
+
+Observed with the work VPN connected:
+
+```text
+raceName      = RACING AGAIN NEWMARKET HCP 11TH JULY
+raceStartTime = 2025-06-27T06:19:00+00:00
+runners       = full field
+replay        = available
+```
+
+The full payload correctly contained TAHKIAN BUBBLES as runner 10 with `finishingPosition=0`. In the tested corporate environment, the Normaliser must therefore be run on the work VPN. A thin response must not be interpreted as proof that an expected runner is absent.
+
+### 7.2 Technical debt: HEALESVLL deep-resolution robustness
+
+One known 2025-06-27 source record remains unresolved:
+
+```text
+meeting = HEALESVLL
+runner  = NANDO BLAST
+race    = 2
+```
+
+Current chain:
+
+```text
+DIRECT exact meeting -> miss
+LOCAL_LOOKUP         -> miss
+DEEP_API             -> aborts candidate evaluation after SAN ISIDRO race lookup returns 404
+```
+
+Technical debt: DEEP_API candidate evaluation should tolerate an isolated non-retryable candidate lookup failure by recording that candidate error and continuing to evaluate the remaining candidates. This must not introduce fuzzy matching, guessed aliases or fabricated race identity. The HEALESVLL abbreviation/domain must be independently proven before adding any mapping or exclusion rule.
 
 ## 8. Exact non-horse hard stop
 

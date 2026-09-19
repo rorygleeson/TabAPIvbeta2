@@ -60,6 +60,39 @@ assert.match(tolerantOut.html,/&lt;script&gt;not executable&lt;\/script&gt;/);
 assert.match(tolerantOut.html,/&lt;em&gt;display only&lt;\/em&gt;/);
 assert.doesNotMatch(tolerantOut.html,/<script>not executable<\/script>/);
 
+
+function replayPlan(total,replaySequences){
+  const [s1,s6,s7]=edgeScenes(),scenes=[s1],selected=new Set(replaySequences);
+  for(let n=1;n<=total;n++){
+    scenes.push({sceneType:2,betSequence:n,tensionLine:'Next bet ready.',reactionLine:'Result recorded.'});
+    if(selected.has(n)) scenes.push({sceneType:3,betSequence:n,replayLabel:'RACE REPLAY',replayComments:['Result in','Race complete']});
+  }
+  scenes.push(s6,s7);
+  return {planVersion:'2.0',scenes};
+}
+
+// Scene 3 eligibility is footage-based, not WIN-only. A losing bet with HTTPS footage is valid.
+{
+  const bettings=makeBettings(5);
+  bettings.bets[1].replayUrl='https://example.com/loss-replay.mp4';
+  assert.strictEqual(bettings.bets[1].result,'LOSS');
+  const out=buildRecap({bettings,scenePlan:replayPlan(5,[2])});
+  assert.match(out.html,/"replayResult":"LOSS"/);
+  assert.match(out.html,/if\(data\.replayResult==='WIN'\)replayCelebrationFx\(root\)/);
+}
+
+// The Builder independently protects the planner invariant that one video cannot appear twice.
+{
+  const bettings=makeBettings(5);
+  const shared='https://example.com/shared-replay.mp4';
+  bettings.bets[0].replayUrl=shared;
+  bettings.bets[1].replayUrl=shared;
+  assert.throws(
+    ()=>buildRecap({bettings,scenePlan:replayPlan(5,[1,2])}),
+    e=>e instanceof BuildError&&/replay URL may appear at most once/.test(e.message)
+  );
+}
+
 const runtimeContract=JSON.parse(fs.readFileSync(path.resolve(__dirname,'contracts/runtime-contract.json'),'utf8'));
 assert.strictEqual(runtimeContract.timeline.scene3.replayClipSeconds,17);
 assert.strictEqual(runtimeContract.timeline.scene3.replayStartSecondsBeforeEnd,48);

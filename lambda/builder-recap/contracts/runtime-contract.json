@@ -1,5 +1,5 @@
 {
-  "runtimeContractVersion": "2.0.2",
+  "runtimeContractVersion": "2.0.3",
   "owner": "runtime/main-shell-template.html + runtime/recap-runtime.js",
   "purpose": "Complete production runtime contract for eight scene types. Builder assembles; runtime plays; planner/builder enforce bounded planned duration.",
   "canonicalArtifacts": {
@@ -64,7 +64,8 @@
       "3": {
         "required": [
           "replayUrl",
-          "replayComments"
+          "replayComments",
+          "replayResult"
         ]
       },
       "7": {
@@ -195,7 +196,8 @@
     "crossoriginAnonymousForbidden": true,
     "start": "After loadedmetadata, targetStart=max(0,duration-48). For normal long-form race replays this starts 48 seconds before the MP4 end.",
     "failure": "Metadata timeout/error, play rejection/timeout or media error: restore music, show exit veil, wait 550ms then advance. Replay failure never stalls recap.",
-    "end": "Successful playback runs on the existing 17-second runtime timeline, then uses a 550ms exit veil before advancing; media ended/failure may finish earlier."
+    "end": "Successful playback runs on the existing 17-second runtime timeline, then uses a 550ms exit veil before advancing; media ended/failure may finish earlier.",
+    "outcomeFx": "replayResult is required in the Scene 3 runtime payload. WIN replays may use the existing payoff/celebration package; LOSS replays must not trigger WINNER/BOOM/coins/confetti payoff celebration."
   },
   "sharing": {
     "shareTitle": "Runtime derives '<user visible recap title>' as 'My TAB Racing Day Recap'.",
