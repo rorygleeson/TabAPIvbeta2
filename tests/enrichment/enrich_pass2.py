@@ -293,7 +293,7 @@ def selected_runner_details(race: dict, runner_numbers: List[int]) -> Tuple[List
             "runnerId": rid,
             "runnerNumber": number,
             "runnerName": r.get("runnerName"),
-            "finishingPosition": raw_pos if raw_pos and raw_pos > 0 else None,
+            "finishingPosition": raw_pos if raw_pos is not None and raw_pos >= 0 else None,
             "apiFinishingPositionRaw": raw_pos,
         })
     return found, missing
@@ -408,7 +408,7 @@ def enrich_bet(bet: dict, api: TabApi, aliases: Dict[str, str]) -> Tuple[dict, O
 
         rid, rid_source = runner_id(runner)
         raw_position = to_int(runner.get("finishingPosition"))
-        position = raw_position if raw_position is not None and raw_position > 0 else None
+        position = raw_position if raw_position is not None and raw_position >= 0 else None
         fixed = runner.get("fixedOdds") if isinstance(runner.get("fixedOdds"), dict) else {}
         tote = runner.get("parimutuel") if isinstance(runner.get("parimutuel"), dict) else {}
 
