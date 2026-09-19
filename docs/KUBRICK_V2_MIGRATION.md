@@ -208,13 +208,21 @@ Scene 4 is placed after the legal primary-scene boundary nearest the target.
 max   -> 5
 ```
 
-For >40 bets, retain at least 3 when 3+ eligible replay bets exist.
+For >40 bets, retain at least 3 when 3+ unique eligible replay videos exist.
 
-Eligibility:
+Eligibility and ranking:
 
 ```text
-WIN + valid HTTPS replayUrl
+valid HTTPS replayUrl -> replay eligible for WIN or LOSS
+group candidates by exact replayUrl
+raceNetPnl = sum(profitLoss for all bets sharing that replayUrl)
+replayImportance = abs(raceNetPnl)
+rank highest replayImportance first
+if the replay quota cuts through an equal-importance tie, prefer the later replay group
+the same replayUrl may be selected at most once
 ```
+
+Replay count remains owned by the existing bet-volume/runtime planner policy; this ranking only decides which unique replay videos fill those slots.
 
 ### Scene 2 extras
 
