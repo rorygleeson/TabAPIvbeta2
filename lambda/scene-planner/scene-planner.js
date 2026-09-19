@@ -18,7 +18,7 @@ function buildDeterministicScenePlan(bettings, options = {}) {
 
   const desiredReplayCount = calculateDesiredReplayCount(facts.totalBets, policy.replay);
   const eligibleReplayGroups = buildReplayGroups(facts.bets)
-    .sort((a, b) => b.importance - a.importance || b.latestSequence - a.latestSequence);
+    .sort((a, b) => b.importanceCents - a.importanceCents || b.latestSequence - a.latestSequence);
 
   const maximumReplayCount = Math.min(
     desiredReplayCount,
@@ -202,8 +202,8 @@ function buildReplayGroups(bets) {
       group = {
         replayUrl: bet.replayUrl,
         bets: [],
-        raceNetPnl: 0,
-        importance: 0,
+        raceNetPnlCents: 0,
+        importanceCents: 0,
         latestSequence: bet.sequence,
         representative: bet
       };
@@ -211,11 +211,11 @@ function buildReplayGroups(bets) {
     }
 
     group.bets.push(bet);
-    group.raceNetPnl += Number(bet.profitLoss) || 0;
+    group.raceNetPnlCents += moneyToCents(bet.profitLoss);
     group.latestSequence = Math.max(group.latestSequence, bet.sequence);
 
-    const currentAbs = Math.abs(Number(group.representative.profitLoss) || 0);
-    const candidateAbs = Math.abs(Number(bet.profitLoss) || 0);
+    const currentAbs = Math.abs(moneyToCents(group.representative.profitLoss));
+    const candidateAbs = Math.abs(moneyToCents(bet.profitLoss));
     if (candidateAbs > currentAbs ||
         (candidateAbs === currentAbs && bet.sequence > group.representative.sequence)) {
       group.representative = bet;
@@ -223,10 +223,14 @@ function buildReplayGroups(bets) {
   }
 
   for (const group of groupsByUrl.values()) {
-    group.importance = Math.abs(group.raceNetPnl);
+    group.importanceCents = Math.abs(group.raceNetPnlCents);
   }
 
   return [...groupsByUrl.values()];
+}
+
+function moneyToCents(value) {
+  return Math.round(Number(value) * 100);
 }
 
 function isHttpsUrl(value) {
