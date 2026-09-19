@@ -107,6 +107,7 @@ valid HTTPS replayUrl -> eligible for WIN or LOSS
 group by exact replayUrl
 raceNetPnl = sum(profitLoss for all bets sharing replayUrl)
 replayImportance = abs(raceNetPnl)
+compare monetary importance in integer cents
 rank highest replayImportance first
 equal-importance cutoff tie -> prefer later replay group
 same replayUrl -> at most one Scene 3
@@ -228,6 +229,7 @@ The Builder remains downstream-compatible and should continue to prove:
 - invalid coverage rejected;
 - invalid factual/P&L input rejected;
 - replay media failure does not stall runtime;
+- loss replay runtime payloads carry `replayResult=LOSS` and never trigger the WIN payoff celebration package;
 - Scene 5 and Scene 8 render correctly;
 - Scene 4 renders at the deterministic checkpoint;
 - final HTML remains functional;
