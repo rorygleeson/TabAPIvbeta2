@@ -85,7 +85,7 @@ echo.
 echo [PREP] Creating temporary invalid payload...
 echo Fault  : summary.totalBets is deliberately changed so it no longer matches bets.length
 
-node -e "const fs=require('fs');const src=process.argv[1],dst=process.argv[2];const x=JSON.parse(fs.readFileSync(src,'utf8'));if(!x.summary||typeof x.summary.totalBets!=='number')throw new Error('fixture summary.totalBets missing');x.summary.totalBets=x.summary.totalBets+1;fs.writeFileSync(dst,JSON.stringify(x,null,2)+'\n');" "%FIXTURE%" "%POSTFILE%"
+node -e "const fs=require('fs');const src=process.argv[1],dst=process.argv[2];const x=JSON.parse(fs.readFileSync(src,'utf8'));if(x.summary && typeof x.summary.totalBets==='number'){}else throw new Error('fixture summary.totalBets missing');x.summary.totalBets=x.summary.totalBets+1;fs.writeFileSync(dst,JSON.stringify(x,null,2)+'\n');" "%FIXTURE%" "%POSTFILE%"
 if errorlevel 1 (
   echo FAILED - could not create temporary invalid payload.
   exit /b 1
