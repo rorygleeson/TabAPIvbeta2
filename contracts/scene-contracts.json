@@ -287,7 +287,7 @@
       "name": "Race replay",
       "template": "templates/scene-3-race-replay-template.html",
       "position": "immediately-after-scene-2-same-bet",
-      "eligibility": "result=WIN AND valid non-empty HTTPS replayUrl",
+      "eligibility": "valid non-empty HTTPS replayUrl; WIN and LOSS bets are both eligible. Replay selection groups bets by exact replayUrl so the same video is selected at most once.",
       "fields": {
         "meetingRace": "DERIVED",
         "userName": "FACT",
