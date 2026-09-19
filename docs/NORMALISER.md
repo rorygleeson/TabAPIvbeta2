@@ -288,14 +288,67 @@ Stage 0
 -> STOP
 ```
 
-If validation passes, the final message should clearly state:
+Before final day validation, the Normaliser must treat each **source transaction as an atomic Kubrick candidate**.
+
+Required behaviour:
+
+```text
+Pass 2 enriched selected day
+    -> group canonical records by source transactionNumber
+    -> build a temporary Kubrick payload for each source transaction
+    -> run the exact Kubrick schema + semantic validator
+    -> valid transaction: retain
+    -> invalid transaction: quarantine with reason/evidence
+    -> rebuild the racing day from retained transactions only
+    -> resequence 1..N
+    -> recalculate running P/L and every summary field
+    -> run the exact Kubrick validator again on the final day payload
+```
+
+Atomicity matters for composite source bets:
+
+```text
+Fixed W&P
+    -> WIN and PLACE component records share one source transaction
+    -> either both survive or both are quarantined
+
+Tote W&P
+    -> already one combined TOTE_WIN_PLACE record
+    -> retained or quarantined as one transaction
+```
+
+One invalid or unsupported transaction must **not** automatically discard every otherwise valid bet from the selected racing day.
+
+Quarantine must never be silent. Evidence must include at least:
+
+```text
+transactionNumber
+canonicalIds / bet types
+enrichment status
+missing enrichment fields where applicable
+Kubrick validator errorCode/message/details
+```
+
+The final screen must clearly report how many records were processed, how many survived and how many source transactions were quarantined.
+
+If at least one source transaction survives and the rebuilt final payload passes the exact Kubrick validator, the final message should clearly state:
 
 ```text
 READY TO SEND TO KUBRICK
 Kubrick request not sent in this build.
 ```
 
-If validation fails, the script should identify the failing bet/field or semantic rule clearly and must not claim readiness.
+If no source transaction survives, or the rebuilt final payload itself fails validation, the script must state that it is not ready and must not claim success.
+
+The authoritative local validation path is the same contract used by the Kubrick Orchestrator:
+
+```text
+contracts/bettings.schema.json
++
+shared/canonical-bettings-validator.js
+```
+
+The Python Normaliser may orchestrate validation, but it must not maintain an independent Python copy as the source of truth for Kubrick admission.
 
 This milestone allows Pass 1, Pass 2, mapping and Kubrick compatibility to be proven against real selected racing days before any HTTP integration is enabled.
 
