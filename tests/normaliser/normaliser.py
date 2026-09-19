@@ -1068,7 +1068,7 @@ def selected_runner_details(race, runner_numbers):
             "runnerId": get_runner_id(runner),
             "runnerNumber": number,
             "runnerName": runner.get("runnerName"),
-            "finishingPosition": raw_position if raw_position and raw_position > 0 else None,
+            "finishingPosition": raw_position if raw_position is not None and raw_position >= 0 else None,
         })
     return found, missing
 
@@ -1340,7 +1340,7 @@ def enrich_one_bet(bet, api, store):
             "runnerId": get_runner_id(runner),
             "runnerNumber": enrich_to_int(runner.get("runnerNumber")),
             "runnerName": runner.get("runnerName"),
-            "finishingPosition": raw_position if raw_position and raw_position > 0 else None,
+            "finishingPosition": raw_position if raw_position is not None and raw_position >= 0 else None,
         })
 
         # Simple Tote WIN/PLACE needs the official historical dividend because
