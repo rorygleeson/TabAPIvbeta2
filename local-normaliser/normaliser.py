@@ -1749,10 +1749,18 @@ def validate_candidate_kubrick_payload(payload):
             if field in bet and (not isinstance(bet.get(field), str) or not bet.get(field)):
                 errors.append(f"{prefix}: {field} must be a non-empty string when present")
 
-        for field in ("sequence", "raceNumber", "runnerNumber", "finishingPosition"):
+        for field in ("sequence", "raceNumber", "runnerNumber"):
             value = bet.get(field)
             if not isinstance(value, int) or isinstance(value, bool) or value < 1:
                 errors.append(f"{prefix}: {field} must be an integer >= 1")
+
+        finishing_position = bet.get("finishingPosition")
+        if (
+            not isinstance(finishing_position, int)
+            or isinstance(finishing_position, bool)
+            or finishing_position < 0
+        ):
+            errors.append(f"{prefix}: finishingPosition must be an integer >= 0")
 
         for field in ("stake", "return"):
             value = bet.get(field)
