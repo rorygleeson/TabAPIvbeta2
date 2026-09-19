@@ -650,9 +650,12 @@ Canonical semantic validation is implemented once in `shared/canonical-bettings-
 The client waits for this initial decision:
 
 ```text
-rejected -> direct HTTP errorCode, no jobId, do not poll
-accepted -> HTTP 202 + jobId + RECEIVED, begin polling
+Orchestrator rejection -> direct HTTP errorCode, no jobId, do not poll
+API Gateway rejection  -> direct Gateway HTTP error, no jobId, do not poll
+accepted               -> HTTP 202 + jobId + RECEIVED, begin polling
 ```
+
+API Gateway currently enforces the shared key and throttling before Lambda, but custom Gateway `GatewayResponse` mappings are not configured; clients must not assume those Gateway-owned 403/429 bodies use the same Kubrick JSON envelope as Orchestrator-owned errors.
 
 `202 Accepted` is returned only after the canonical input is persisted, the DynamoDB job exists and Planning SQS has accepted the processing message.
 
@@ -724,13 +727,13 @@ A Kubrick client only needs to understand the canonical input contract and the t
 ```text
 1. Produce canonical bettings.json.
 2. POST /jobs with x-api-key and wait for synchronous admission.
-3. If POST is rejected, handle the direct errorCode and do not poll.
+3. If POST is rejected, handle the direct error and do not poll.
 4. If POST returns 202 Accepted, retain the returned jobId.
 5. Poll GET /jobs/{jobId} with x-api-key.
-5. Continue while status is RECEIVED / PLANNING / RENDERING.
-6. Stop and surface the error if status is FAILED.
-7. When status is READY, read recapUrl.
-8. Present the interactive recap to the user while the URL is valid.
+6. Continue while status is RECEIVED / PLANNING / RENDERING.
+7. Stop and surface the error if status is FAILED.
+8. When status is READY, read recapUrl.
+9. Present the interactive recap to the user while the URL is valid.
 ```
 
 Everything behind the API is abstracted from the client:
@@ -823,6 +826,8 @@ and then downloads the final `recap.html` using the returned `recapUrl`.
 
 Live API tests have completed successfully across multiple fixture sizes up to the 75-bet maximum.
 
+Strict bad-input admission is also live-proven. On 2026-09-19, `tests\\tools\\run-orchestrator-test.cmd 8 bad` returned HTTP 400 with `KUBRICK_INVALID_PAYLOAD`, a `requestId`, semantic validation `details`, no `jobId`, and no polling.
+
 The soundtrack/media path is also proven after:
 
 - configuring the existing CloudFront MP3 path to return CORS headers; and
@@ -847,9 +852,9 @@ The model-facing catalog now prefers atomic values/small factual units. Live tes
 
 This is a copy-interface change only. It does not alter deterministic scene planning, grouping, replay policy, midpoint policy, Builder inputs or the one-call/fallback architecture.
 
-The compact grounded-string protocol is now live-proven at 75 bets: the previous response hit the 8,000-token ceiling and truncated, while the compact response completed naturally at 3,982 output tokens with `stopReason=end_turn`, `fallbackUsed=false`, and 27 scenes reaching RENDERING. The next source hardening is semantic V4, which must be live-tested before its copy-quality impact is marked proven.
+The compact grounded-string protocol is now live-proven at 75 bets: the previous response hit the 8,000-token ceiling and truncated, while the compact response completed naturally at 3,982 output tokens with `stopReason=end_turn`, `fallbackUsed=false`, and 27 scenes reaching RENDERING.
 
-Semantic V4 regression backfeeding covers the historical failure classes: signed P&L wording, return-versus-profit confusion, race-win fragment atoms, strongest-finish range/count ambiguity, false final-group language, decimal-odds meaning and unsupported race-action storytelling.
+Semantic V4 is implemented and live-tested. Regression backfeeding covers the historical failure classes: signed P&L wording, return-versus-profit confusion, race-win fragment atoms, strongest-finish range/count ambiguity, false final-group language, decimal-odds meaning and unsupported race-action storytelling.
 
 ---
 
@@ -909,12 +914,21 @@ These rules are mandatory:
 - DynamoDB stores stable `recapS3Key`, not a pre-signed URL;
 - `GET /jobs/{jobId}` generates a fresh short-lived recap URL when status is `READY`.
 
-### IN PROGRESS
+### PROVEN — public API/admission boundary
 
-- deploy `tabapivbeta1-orchestrator` from `infra/orchestrator.yml`;
-- manually create/attach the shared API Gateway key to the `tab-recap-vbeta1-poc` usage plan;
-- live-test `tests/tools/run-orchestrator-test.cmd` against representative fixtures;
-- mark the API/Orchestrator boundary PROVEN only after the public API reaches `READY` and the returned pre-signed URL downloads the recap.
+- `tabapivbeta1-orchestrator` is deployed;
+- the shared POC API key is attached to the usage plan;
+- public `POST /jobs` and `GET /jobs/{jobId}` are live-proven;
+- accepted jobs have reached `READY` and returned presigned URLs that download the final recap;
+- strict admission is live-proven for a semantic mismatch: HTTP 400 + `KUBRICK_INVALID_PAYLOAD` + `requestId` + validation `details` + no `jobId`;
+- the shared canonical semantic validator is packaged into both Orchestrator and Builder;
+- the Orchestrator packages the root canonical `contracts/bettings.schema.json` and validates schema before semantic rules.
+
+### IN PROGRESS / PLANNED
+
+- complete partial job-creation cleanup/reconciliation for failures after S3/DynamoDB writes but before successful Planning SQS handoff;
+- complete the end-to-end resiliency audit for Lambda timeouts, SQS visibility/retries/DLQs and stuck non-terminal DynamoDB states;
+- API Gateway key/throttle rejection is enforced before Lambda, but custom Gateway-owned Kubrick JSON error envelopes are not currently configured.
 
 The planner/Builder path should not be structurally redesigned unless new evidence demonstrates a real architectural defect.
 
