@@ -37,6 +37,31 @@ The API key value is intentionally not stored in GitHub or repository documentat
 
 This shared key is POC access control and throttling, not end-user authentication.
 
+API-key rejection happens at **API Gateway before the Orchestrator Lambda runs**. A missing or invalid key therefore must not create a Kubrick job, S3 input object, DynamoDB record or SQS message.
+
+Kubrick treats API admission failures and job-processing failures as two different failure planes:
+
+```text
+PRE-JOB / API ADMISSION FAILURE
+  -> direct HTTP response to the request
+  -> API errorCode
+  -> no jobId
+  -> no DynamoDB job
+  -> client must NOT start polling
+
+POST ACCEPTED
+  -> HTTP 202 + jobId
+  -> DynamoDB lifecycle begins
+  -> client may poll GET /jobs/{jobId}
+
+POST-ACCEPTANCE / JOB PROCESSING FAILURE
+  -> GET /jobs/{jobId} succeeds
+  -> DynamoDB status = FAILED
+  -> job failure metadata is returned
+```
+
+These concepts must remain separate. An API admission error is **not** a DynamoDB job status.
+
 ## API surface
 
 Kubrick exposes exactly two public endpoints:
@@ -74,7 +99,22 @@ Conceptually:
 }
 ```
 
-The Orchestrator performs basic request-shape checks and Kubrick's Planner performs the canonical contract/semantic validation.
+The public Kubrick admission contract requires the Orchestrator to perform **strict canonical validation before any job is created**.
+
+The admission gate must validate:
+
+- JSON parsing;
+- the canonical `contracts/bettings.schema.json` structure;
+- required properties and types;
+- rejection of unexpected properties;
+- schema version;
+- deterministic semantic invariants such as exact sequence coverage, financial arithmetic, summary consistency and replay URL validity.
+
+Only a payload that passes the complete admission gate may receive a `jobId`.
+
+The Planner still performs defensive validation internally, but Planner validation is not the public admission gate.
+
+**Implementation note:** this strict Orchestrator admission validation is the next controlled implementation step. The API contract is being locked here before the code change.
 
 ### Success response
 
@@ -102,9 +142,57 @@ Orchestrator
 
 The POST request is asynchronous. A successful `202` means the job was accepted, not that the recap is already complete.
 
-### Invalid request
+### Pre-job API/admission failures
 
-Malformed or unsuitable request input may return HTTP `400` with an error object.
+Failures before acceptance are returned directly by the API call. They do **not** appear later through `GET /jobs/{jobId}`, because no Kubrick job exists.
+
+The stable public error envelope is:
+
+```json
+{
+  "errorCode": "KUBRICK_INVALID_PAYLOAD",
+  "message": "Payload failed canonical bettings.json validation.",
+  "details": [
+    "summary.totalBets must equal bets.length"
+  ],
+  "requestId": "..."
+}
+```
+
+`details` is optional and is intended for safe validation detail. Clients must make decisions using `errorCode`, not by parsing the human-readable `message`.
+
+The POC admission/error catalogue is:
+
+| HTTP | errorCode | Meaning | Job created? |
+| ---: | --- | --- | --- |
+| 403 | `KUBRICK_API_KEY_REQUIRED` | No API key supplied | No |
+| 403 | `KUBRICK_API_KEY_INVALID` | API key supplied but not accepted | No |
+| 400 | `KUBRICK_INVALID_JSON` | Request body is not valid JSON | No |
+| 400 | `KUBRICK_INVALID_PAYLOAD` | JSON is parseable but fails canonical schema or semantic validation | No |
+| 404 | `KUBRICK_ROUTE_NOT_FOUND` | Requested API route does not exist | No |
+| 429 | `KUBRICK_RATE_LIMITED` | API Gateway throttling/usage-plan limit reached | No |
+| 500 | `KUBRICK_INTERNAL_ERROR` | Unexpected server-side admission/service failure | No |
+
+API-key and throttling faults originate at API Gateway, because those requests are rejected before the Orchestrator runs. The external contract should nevertheless use stable Kubrick error codes so clients see one coherent API.
+
+For `POST /jobs`, the hard rule is:
+
+```text
+anything except a successful 202
+-> no accepted Kubrick job
+-> client must not poll
+```
+
+A valid accepted response remains:
+
+```json
+{
+  "jobId": "...",
+  "status": "RECEIVED"
+}
+```
+
+Only after this response does the job lifecycle begin.
 
 ## 2. Poll job status
 
@@ -168,36 +256,100 @@ The presigned URL is never stored as job state. Calling GET again while the job 
 
 ### FAILED response
 
-A failed job remains queryable through the status endpoint. When a stored error is available the response can include:
+A processing failure after a job has been accepted is **not an API admission error**.
+
+The GET request itself succeeded, so the status endpoint returns HTTP `200` with the job lifecycle state:
 
 ```json
 {
   "jobId": "...",
   "status": "FAILED",
-  "error": "..."
+  "failureCode": "KUBRICK_RENDERING_FAILED",
+  "failedStage": "RENDERING",
+  "message": "Kubrick could not complete rendering."
 }
 ```
 
+Job failure fields are deliberately named `failureCode`, `failedStage` and `message` to distinguish them from pre-job API `errorCode` responses.
+
+The persisted/internal failure record may retain more diagnostic detail than is exposed to the client. Clients must not depend on raw Lambda/AWS exception text.
+
 ### Unknown job
 
-An unknown `jobId` returns HTTP `404`.
+An unknown `jobId` returns HTTP `404` with a direct API error response such as:
+
+```json
+{
+  "errorCode": "KUBRICK_JOB_NOT_FOUND",
+  "message": "Job not found.",
+  "requestId": "..."
+}
+```
+
+This is a request-level lookup error, not `status: "FAILED"`, because the requested job does not exist.
 
 ## Client consumption pattern
 
-The required client algorithm is intentionally small:
+The client must treat **POST admission** and **job polling** as separate phases:
 
 ```text
 1. Produce canonical bettings.json.
-2. POST /jobs with Content-Type application/json and x-api-key.
-3. Read and retain jobId from the 202 response.
+
+2. POST /jobs with:
+     Content-Type: application/json
+     x-api-key: <POC API KEY>
+
+3. Inspect the direct POST response.
+
+   NON-202:
+     -> handle errorCode immediately
+     -> there is no accepted job
+     -> do NOT poll
+
+   202:
+     -> read and retain jobId
+     -> accepted Kubrick job now exists
+
 4. Poll GET /jobs/{jobId} with the same x-api-key.
-5. If status is RECEIVED / PLANNING / RENDERING, wait and poll again.
-6. If status is FAILED, stop and surface the failure.
-7. If status is READY, read recapUrl.
-8. Open, redirect to, embed where appropriate, or download the recap URL while it is valid.
+
+5. Handle the GET response.
+
+   request-level error:
+     -> handle HTTP status + errorCode
+
+   status RECEIVED / PLANNING / RENDERING:
+     -> wait and poll again
+
+   status FAILED:
+     -> stop polling
+     -> handle failureCode / failedStage
+
+   status READY:
+     -> read recapUrl
+     -> present the recap while the URL is valid
 ```
 
 The client does not need to know about S3 keys, DynamoDB, SQS, Bedrock, scenes, Planner logic or Builder templates.
+
+### Error/status naming rule
+
+The naming distinction is intentional:
+
+```text
+errorCode
+  = direct API/request failure
+  = request was not successfully serviced/accepted
+  = may exist without any job
+
+status
+  = DynamoDB-backed lifecycle of an accepted job
+
+failureCode
+  = terminal processing failure for an accepted job
+  = only meaningful when status = FAILED
+```
+
+A client must never interpret a pre-job `errorCode` as a job status, and must never expect admission failures to appear later through the status endpoint.
 
 ## Example client flow
 
@@ -248,6 +400,8 @@ API Gateway
 
 - API boundary;
 - API request routing;
+- strict canonical admission validation before job creation;
+- stable direct API error responses for Orchestrator-owned admission failures;
 - UUID job creation;
 - canonical input persistence;
 - initial job-state creation;
@@ -275,6 +429,35 @@ API Gateway
 - write `recaps/<jobId>/recap.html`;
 - transition the job to `READY`;
 - persist `recapS3Key`.
+
+## Fault model — locked contract
+
+Kubrick's public fault model is:
+
+```text
+API Gateway admission
+  -> API key / throttling
+  -> direct HTTP errorCode
+  -> no job
+
+Orchestrator admission
+  -> JSON / canonical payload validation
+  -> direct HTTP errorCode
+  -> no job
+
+Accepted job
+  -> DynamoDB lifecycle
+  -> RECEIVED / PLANNING / RENDERING / READY / FAILED
+
+Accepted job failure
+  -> GET returns HTTP 200
+  -> status = FAILED
+  -> failureCode + failedStage
+```
+
+This separation is mandatory for all future resiliency work.
+
+The next implementation step is to make the Orchestrator enforce the strict canonical admission contract and stable error envelope defined above. After that, Kubrick's queue/Lambda timeout, retry, DLQ and DynamoDB failure-state behaviour will be audited and documented separately.
 
 ## Test harness
 
