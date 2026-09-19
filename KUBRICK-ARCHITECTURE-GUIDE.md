@@ -645,6 +645,8 @@ API Gateway
 
 Admission validation is local deterministic work. It must not invoke Bedrock, enrichment APIs, historical APIs, Planner logic or rendering.
 
+Canonical semantic validation is implemented once in `shared/canonical-bettings-validator.js` and packaged into both the Orchestrator and Builder Lambdas. The Orchestrator also packages the canonical root `contracts/bettings.schema.json` for admission schema validation.
+
 The client waits for this initial decision:
 
 ```text
