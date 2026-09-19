@@ -630,6 +630,32 @@ x-api-key: <POC API KEY>
 
 The shared key is POC access control/throttling, not end-user identity. The actual value must never be committed to GitHub or repository documentation.
 
+### Admission boundary
+
+Before any Kubrick job begins, API Gateway and the Orchestrator provide a synchronous admission gate:
+
+```text
+API Gateway
+  -> require valid x-api-key
+  -> Orchestrator parses JSON
+  -> canonical schema validation
+  -> deterministic semantic validation
+  -> only then create/queue the job
+```
+
+Admission validation is local deterministic work. It must not invoke Bedrock, enrichment APIs, historical APIs, Planner logic or rendering.
+
+The client waits for this initial decision:
+
+```text
+rejected -> direct HTTP errorCode, no jobId, do not poll
+accepted -> HTTP 202 + jobId + RECEIVED, begin polling
+```
+
+`202 Accepted` is returned only after the canonical input is persisted, the DynamoDB job exists and Planning SQS has accepted the processing message.
+
+If a persistence or queue-handoff step fails, the request must not be represented as successfully accepted. Partial internal state must be reconciled as part of Kubrick's resiliency behaviour.
+
 ### POST /jobs
 
 The request body is canonical `bettings.json`.
@@ -695,9 +721,10 @@ A Kubrick client only needs to understand the canonical input contract and the t
 
 ```text
 1. Produce canonical bettings.json.
-2. POST /jobs with x-api-key.
-3. Retain the returned jobId.
-4. Poll GET /jobs/{jobId} with x-api-key.
+2. POST /jobs with x-api-key and wait for synchronous admission.
+3. If POST is rejected, handle the direct errorCode and do not poll.
+4. If POST returns 202 Accepted, retain the returned jobId.
+5. Poll GET /jobs/{jobId} with x-api-key.
 5. Continue while status is RECEIVED / PLANNING / RENDERING.
 6. Stop and surface the error if status is FAILED.
 7. When status is READY, read recapUrl.
