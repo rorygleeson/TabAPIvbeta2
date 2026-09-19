@@ -14,7 +14,7 @@ test root. No DynamoDB, boto3, AWS CLI, IAM, or AWS credentials are required.
 """
 from __future__ import annotations
 
-import argparse, csv, hashlib, json, re, shutil, sys
+import argparse, csv, hashlib, json, re, shutil, subprocess, sys
 from collections import Counter, defaultdict
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
@@ -1104,11 +1104,17 @@ def enrichment_impact(bet):
 
 
 def expected_enrichment_fields(bet):
-    """Expected race facts by bet shape; excludes genuinely optional IDs/replay."""
-    base = ["raceTime", "raceName", "meeting", "state", "raceNumber"]
+    """Race facts required before a normal single-runner bet can be Kubrick-ready.
+
+    replayUrl remains genuinely optional because Kubrick permits null. Exotics are
+    retained through enrichment for evidence but are not forced into a false
+    single-runner identity; the authoritative Kubrick validator will quarantine
+    them until the Kubrick contract explicitly supports multi-runner selections.
+    """
+    base = ["raceTime", "raceId", "raceName", "meeting", "state", "raceNumber"]
     if bet.get("betType") in ("TRIFECTA", "FIRST_4"):
         return base
-    return base + ["runnerNumber", "runnerName"]
+    return base + ["runnerId", "runnerNumber", "runnerName", "finishingPosition"]
 
 
 def enrichment_missing_fields(bet, enrichment):
@@ -1330,6 +1336,8 @@ def enrich_one_bet(bet, api, store):
             tote = runner.get("parimutuel") if isinstance(runner.get("parimutuel"), dict) else {}
             win_dividend = enrich_to_decimal(tote.get("returnWin"))
             place_dividend = enrich_to_decimal(tote.get("returnPlace"))
+            enrichment["toteWinDividend"] = float(win_dividend) if win_dividend is not None and win_dividend > 0 else None
+            enrichment["totePlaceDividend"] = float(place_dividend) if place_dividend is not None and place_dividend > 0 else None
             resolution = {
                 "reconciled": False,
                 "winReturn": None,
@@ -1518,13 +1526,47 @@ KUBRICK_BET_FIELDS = (
 
 
 def candidate_odds(bet):
-    if bet.get("odds") is not None:
+    """Return the canonical positive odds value without fabricating source facts."""
+    if bet.get("odds") is not None and float(bet["odds"]) > 0:
         return float(bet["odds"])
+
     e = bet.get("enrichment", {})
-    if e.get("toteDividend") is not None:
+    if e.get("toteDividend") is not None and float(e["toteDividend"]) > 0:
         return float(e["toteDividend"])
-    # Composite Tote W&P currently has no single official canonical dividend.
-    # Leave it unresolved rather than inventing a value.
+
+    if bet.get("betType") == "TOTE_WIN_PLACE":
+        stake = best_effort_stake(bet)
+        returned = best_effort_return(bet)
+
+        # Preferred rule for a returned composite: effective whole-transaction
+        # multiple actually achieved by the customer.
+        if stake is not None and float(stake) > 0 and returned is not None and float(returned) > 0:
+            return round(float(returned) / float(stake), 6)
+
+        # For a settled loss, return/stake is zero and cannot satisfy Kubrick's
+        # positive-odds contract. Use only official historical component Tote
+        # dividends when both are available; weight them by the actual component
+        # stakes to produce one deterministic composite multiple.
+        win_dividend = e.get("toteWinDividend")
+        place_dividend = e.get("totePlaceDividend")
+        win_stake = bet.get("winStake")
+        place_stake = bet.get("placeStake")
+        total_stake = bet.get("totalStake")
+        if all(v is not None for v in (win_dividend, place_dividend, win_stake, place_stake, total_stake)):
+            total_stake = float(total_stake)
+            if total_stake > 0:
+                effective = (
+                    float(win_stake) * float(win_dividend)
+                    + float(place_stake) * float(place_dividend)
+                ) / total_stake
+                if effective > 0:
+                    return round(effective, 6)
+
+        # Never manufacture a positive number merely to pass Kubrick. This
+        # transaction will be quarantined by exact validation if the historical
+        # evidence cannot support a positive composite odds value.
+        return None
+
     return None
 
 
@@ -1611,143 +1653,140 @@ def build_candidate_kubrick_payload(enriched_payload, selected_date, first_name=
     }
 
 
-def validate_candidate_kubrick_payload(payload):
-    """Mirror the current public Kubrick v1 schema + semantic admission rules."""
-    errors = []
-    required_top = ("schemaVersion", "user", "day", "bets", "summary")
-    if set(payload.keys()) != set(required_top):
-        errors.append(f"top-level fields must be exactly {required_top}")
-    if payload.get("schemaVersion") != "1.0":
-        errors.append("schemaVersion must equal '1.0'")
+def run_authoritative_kubrick_validator(payload_path, root):
+    """Run the exact schema + semantic validator used by the Kubrick Orchestrator."""
+    helper = root / "validate-kubrick.js"
+    if not helper.exists():
+        return {
+            "valid": False,
+            "validatorError": True,
+            "errorCode": "KUBRICK_VALIDATOR_HELPER_MISSING",
+            "message": f"Authoritative validator helper not found: {helper}",
+            "details": [],
+        }
 
-    user = payload.get("user")
-    if not isinstance(user, dict) or set(user.keys()) != {"firstName"} or not isinstance(user.get("firstName"), str) or not user.get("firstName"):
-        errors.append("user.firstName must be a non-empty string and user must contain no extra fields")
+    try:
+        completed = subprocess.run(
+            ["node", str(helper), str(payload_path)],
+            cwd=str(root),
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except FileNotFoundError:
+        return {
+            "valid": False,
+            "validatorError": True,
+            "errorCode": "NODE_NOT_FOUND",
+            "message": "Node.js is required to run the exact Kubrick validator but 'node' was not found in PATH.",
+            "details": [],
+        }
+    except Exception as ex:
+        return {
+            "valid": False,
+            "validatorError": True,
+            "errorCode": "KUBRICK_VALIDATOR_EXECUTION_FAILED",
+            "message": str(ex),
+            "details": [],
+        }
 
-    day = payload.get("day")
-    if not isinstance(day, dict) or set(day.keys()) != {"date", "timezone"}:
-        errors.append("day must contain exactly date and timezone")
-    else:
-        if not valid_date(day.get("date")):
-            errors.append("day.date must be YYYY-MM-DD")
-        if not isinstance(day.get("timezone"), str) or not day.get("timezone"):
-            errors.append("day.timezone must be a non-empty string")
+    raw = (completed.stdout or completed.stderr or "").strip()
+    try:
+        result = json.loads(raw)
+    except Exception:
+        return {
+            "valid": False,
+            "validatorError": True,
+            "errorCode": "KUBRICK_VALIDATOR_BAD_RESPONSE",
+            "message": "Authoritative validator returned an unreadable response.",
+            "details": [raw[:1000]] if raw else [],
+        }
 
-    bets = payload.get("bets")
-    if not isinstance(bets, list) or not bets:
-        errors.append("bets must contain at least one bet")
-        return errors
+    if completed.returncode not in (0, 1) and not result.get("validatorError"):
+        result["validatorError"] = True
+    return result
 
-    for index, bet in enumerate(bets, 1):
-        prefix = f"bet {index}"
-        if not isinstance(bet, dict):
-            errors.append(f"{prefix}: must be an object")
+
+def transaction_groups_for_validation(enriched_payload):
+    """Keep source transactions atomic while preserving original day order."""
+    groups = []
+    by_key = {}
+    for index, bet in enumerate(
+        sorted(enriched_payload.get("bets", []), key=lambda b: b.get("sequence") or 999999),
+        1,
+    ):
+        tx = bet.get("transactionNumber")
+        key = str(tx) if tx not in (None, "") else f"NO_TX_{index}"
+        if key not in by_key:
+            item = {"key": key, "transactionNumber": tx, "bets": []}
+            by_key[key] = item
+            groups.append(item)
+        by_key[key]["bets"].append(bet)
+    return groups
+
+
+def authoritative_transaction_partition(
+    enriched_payload,
+    selected_date,
+    first_name,
+    timezone_name,
+    root,
+    candidate_dir,
+):
+    """Quarantine only source transactions that cannot satisfy Kubrick.
+
+    Fixed W&P components share a transaction number and are therefore kept or
+    excluded together. Tote W&P is already one combined transaction record.
+    """
+    validation_dir = candidate_dir / "transaction-validation"
+    validation_dir.mkdir(parents=True, exist_ok=True)
+
+    included = []
+    quarantined = []
+
+    for ordinal, group in enumerate(transaction_groups_for_validation(enriched_payload), 1):
+        transaction_payload = dict(enriched_payload)
+        transaction_payload["bets"] = list(group["bets"])
+        candidate = build_candidate_kubrick_payload(
+            transaction_payload,
+            selected_date,
+            first_name,
+            timezone_name,
+        )
+        candidate_path = validation_dir / f"{ordinal:03d}-{group['key']}.json"
+        write_json(candidate_path, candidate)
+        result = run_authoritative_kubrick_validator(candidate_path, root)
+
+        if result.get("validatorError"):
+            raise RuntimeError(
+                f"Authoritative Kubrick validator could not run: "
+                f"{result.get('errorCode')}: {result.get('message')}"
+            )
+
+        if result.get("valid"):
+            included.extend(group["bets"])
             continue
-        if set(bet.keys()) != set(KUBRICK_BET_FIELDS):
-            missing = [f for f in KUBRICK_BET_FIELDS if f not in bet]
-            extra = [f for f in bet if f not in KUBRICK_BET_FIELDS]
-            if missing: errors.append(f"{prefix}: missing fields: {', '.join(missing)}")
-            if extra: errors.append(f"{prefix}: unexpected fields: {', '.join(extra)}")
 
-        string_fields = ("betTime", "raceTime", "raceId", "raceName", "meeting", "state", "runnerId", "runnerName", "betType")
-        for field in string_fields:
-            if not isinstance(bet.get(field), str) or not bet.get(field):
-                errors.append(f"{prefix}: {field} must be a non-empty string")
-        for field in ("sequence", "raceNumber", "runnerNumber", "finishingPosition"):
-            value = bet.get(field)
-            if not isinstance(value, int) or isinstance(value, bool) or value < 1:
-                errors.append(f"{prefix}: {field} must be an integer >= 1")
-        for field in ("stake", "return"):
-            value = bet.get(field)
-            if not isinstance(value, (int, float)) or isinstance(value, bool) or value < 0:
-                errors.append(f"{prefix}: {field} must be a number >= 0")
-        odds = bet.get("odds")
-        if not isinstance(odds, (int, float)) or isinstance(odds, bool) or odds <= 0:
-            errors.append(f"{prefix}: odds must be a number > 0")
-        for field in ("profitLoss", "runningPnl"):
-            if not isinstance(bet.get(field), (int, float)) or isinstance(bet.get(field), bool):
-                errors.append(f"{prefix}: {field} must be a number")
-        if bet.get("result") not in ("WIN", "LOSS"):
-            errors.append(f"{prefix}: result must be WIN or LOSS")
-        replay = bet.get("replayUrl")
-        if replay is not None and (not isinstance(replay, str) or not replay.lower().startswith("https://")):
-            errors.append(f"{prefix}: replayUrl must be null or a non-empty HTTPS URL")
+        quarantined.append({
+            "transactionNumber": group.get("transactionNumber"),
+            "canonicalIds": [b.get("canonicalId") for b in group["bets"]],
+            "betTypes": [b.get("betType") for b in group["bets"]],
+            "enrichmentStatuses": [
+                b.get("enrichment", {}).get("status") for b in group["bets"]
+            ],
+            "missingEnrichmentFields": [
+                {
+                    "canonicalId": b.get("canonicalId"),
+                    "fields": enrichment_missing_fields(b, b.get("enrichment", {})),
+                }
+                for b in group["bets"]
+            ],
+            "errorCode": result.get("errorCode"),
+            "message": result.get("message"),
+            "details": result.get("details") or [],
+        })
 
-    sequences = [b.get("sequence") for b in bets if isinstance(b, dict)]
-    if sequences != list(range(1, len(bets) + 1)):
-        errors.append("bets[].sequence must be ascending, unique and contiguous 1..N")
-
-    def money_equal(a, b):
-        try:
-            return round(float(a) * 100) == round(float(b) * 100)
-        except (TypeError, ValueError):
-            return False
-
-    running = 0.0
-    semantics_possible = True
-    for index, bet in enumerate(bets, 1):
-        if not all(isinstance(bet.get(f), (int, float)) and not isinstance(bet.get(f), bool) for f in ("stake", "return", "profitLoss", "runningPnl")):
-            semantics_possible = False
-            continue
-        expected_pnl = float(bet["return"]) - float(bet["stake"])
-        if not money_equal(bet["profitLoss"], expected_pnl):
-            errors.append(f"bet {index}: profitLoss must equal return - stake")
-        running += float(bet["profitLoss"])
-        if not money_equal(bet["runningPnl"], running):
-            errors.append(f"bet {index}: runningPnl does not match cumulative profitLoss")
-
-    summary = payload.get("summary")
-    summary_fields = (
-        "totalBets", "totalStaked", "totalReturned", "wins", "losses", "finalPnl",
-        "meetings", "biggestStake", "biggestWinSequence", "biggestLossSequence",
-        "highestOddsWinnerSequence",
-    )
-    if not isinstance(summary, dict) or set(summary.keys()) != set(summary_fields):
-        errors.append("summary does not match the current Kubrick summary contract")
-        return errors
-
-    if summary.get("totalBets") != len(bets):
-        errors.append("summary.totalBets must equal bets.length")
-    wins = [b for b in bets if b.get("result") == "WIN"]
-    losses = [b for b in bets if b.get("result") == "LOSS"]
-    if summary.get("wins") != len(wins) or summary.get("losses") != len(losses) or len(wins) + len(losses) != len(bets):
-        errors.append("summary wins/losses do not match bet results")
-    meetings = {b.get("meeting") for b in bets if b.get("meeting")}
-    if summary.get("meetings") != len(meetings):
-        errors.append("summary.meetings must equal unique meeting count")
-
-    if semantics_possible:
-        total_staked = sum(float(b["stake"]) for b in bets)
-        total_returned = sum(float(b["return"]) for b in bets)
-        if not money_equal(summary.get("totalStaked"), total_staked):
-            errors.append("summary.totalStaked must equal sum(stake)")
-        if not money_equal(summary.get("totalReturned"), total_returned):
-            errors.append("summary.totalReturned must equal sum(return)")
-        if not money_equal(summary.get("finalPnl"), total_returned - total_staked):
-            errors.append("summary.finalPnl must equal totalReturned - totalStaked")
-        biggest_stake = max(float(b["stake"]) for b in bets)
-        if not money_equal(summary.get("biggestStake"), biggest_stake):
-            errors.append("summary.biggestStake must equal max(stake)")
-
-        def expected_sequence(items, key, highest):
-            if not items:
-                return None
-            target = (max if highest else min)(float(b[key]) for b in items)
-            return min(b["sequence"] for b in items if float(b[key]) == target)
-
-        positive_wins = [b for b in wins if float(b["profitLoss"]) > 0]
-        negative_losses = [b for b in losses if float(b["profitLoss"]) < 0]
-        if summary.get("biggestWinSequence") != expected_sequence(positive_wins, "profitLoss", True):
-            errors.append("summary.biggestWinSequence is inconsistent")
-        if summary.get("biggestLossSequence") != expected_sequence(negative_losses, "profitLoss", False):
-            errors.append("summary.biggestLossSequence is inconsistent")
-        if wins and all(isinstance(b.get("odds"), (int, float)) and not isinstance(b.get("odds"), bool) for b in wins):
-            if summary.get("highestOddsWinnerSequence") != expected_sequence(wins, "odds", True):
-                errors.append("summary.highestOddsWinnerSequence is inconsistent")
-        elif not wins and summary.get("highestOddsWinnerSequence") is not None:
-            errors.append("summary.highestOddsWinnerSequence must be null when there are no wins")
-
-    return errors
+    return included, quarantined
 
 
 # =============================================================================
@@ -1980,29 +2019,94 @@ def process_selected_day(path, selected_date, root, api, store, first_name, time
         )
 
         stage = "KUBRICK_CANDIDATE"
-        print("\n[VALIDATION] Building candidate Kubrick payload...")
-        candidate = build_candidate_kubrick_payload(enriched, selected_date, first_name, timezone_name)
+        print("\n[FINALISATION] Testing source transactions against the exact Kubrick validator...")
+        included_bets, quarantined = authoritative_transaction_partition(
+            enriched,
+            selected_date,
+            first_name,
+            timezone_name,
+            root,
+            candidate_dir,
+        )
+
+        quarantine_path = candidate_dir / "quarantined-transactions.json"
+        write_json(quarantine_path, {
+            "jobId": jid,
+            "selectedDate": selected_date,
+            "inputBetRecords": len(enriched.get("bets", [])),
+            "includedBetRecords": len(included_bets),
+            "quarantinedTransactionCount": len(quarantined),
+            "quarantined": quarantined,
+        })
+
+        print(
+            f"[FINALISATION] {len(enriched.get('bets', []))} bet record(s) processed; "
+            f"{len(included_bets)} Kubrick-ready; "
+            f"{len(quarantined)} transaction(s) quarantined."
+        )
+        for item in quarantined:
+            tx = item.get("transactionNumber") or "<unknown>"
+            details = item.get("details") or [item.get("message") or "validation failed"]
+            print(f"  [QUARANTINED] Transaction {tx}: {details[0]}")
+
+        if not included_bets:
+            write_json(candidate_dir / "validation.json", {
+                "jobId": jid,
+                "selectedDate": selected_date,
+                "valid": False,
+                "errorCode": "NO_KUBRICK_READY_TRANSACTIONS",
+                "message": "No source transaction survived authoritative Kubrick validation.",
+                "quarantinedTransactionCount": len(quarantined),
+            })
+            print("\nNOT READY TO SEND TO KUBRICK")
+            print("No valid transactions remain after quarantine.")
+            print("Kubrick request not sent.")
+            return False
+
+        final_source = dict(enriched)
+        final_source["bets"] = included_bets
+        candidate = build_candidate_kubrick_payload(
+            final_source,
+            selected_date,
+            first_name,
+            timezone_name,
+        )
         candidate_path = candidate_dir / "bettings.json"
         write_json(candidate_path, candidate)
-        errors = validate_candidate_kubrick_payload(candidate)
+
+        print("\n[VALIDATION] Running final payload through Kubrick's exact validator...")
+        validation = run_authoritative_kubrick_validator(candidate_path, root)
         write_json(candidate_dir / "validation.json", {
             "jobId": jid,
             "selectedDate": selected_date,
-            "valid": not errors,
-            "errorCount": len(errors),
-            "errors": errors,
+            **validation,
+            "inputBetRecords": len(enriched.get("bets", [])),
+            "includedBetRecords": len(included_bets),
+            "quarantinedTransactionCount": len(quarantined),
         })
 
-        if errors:
-            print(f"[VALIDATION] FAILED: {len(errors)} issue(s) found.")
-            for error in errors:
-                print(f"  - {error}")
+        if validation.get("validatorError"):
+            raise RuntimeError(
+                f"Authoritative Kubrick validator could not run: "
+                f"{validation.get('errorCode')}: {validation.get('message')}"
+            )
+
+        if not validation.get("valid"):
+            print("[VALIDATION] FINAL PAYLOAD FAILED.")
+            for detail in validation.get("details") or [validation.get("message")]:
+                print(f"  - {detail}")
             print(f"\nEvidence: {job_dir}")
             print("\nNOT READY TO SEND TO KUBRICK")
             print("Kubrick request not sent.")
             return False
 
         print("[VALIDATION] Kubrick payload valid.")
+        if quarantined:
+            print(
+                f"[VALIDATION] WARNING: recap contains {len(included_bets)} of "
+                f"{len(enriched.get('bets', []))} enriched bet record(s); "
+                f"{len(quarantined)} source transaction(s) were quarantined."
+            )
         print("\n============================================================")
         print("CANDIDATE KUBRICK PAYLOAD")
         print("============================================================")
@@ -2012,6 +2116,8 @@ def process_selected_day(path, selected_date, root, api, store, first_name, time
         print("Kubrick request not sent in this build.")
         print("============================================================")
         print(f"Payload saved: {candidate_path}")
+        if quarantined:
+            print(f"Quarantine evidence: {quarantine_path}")
         return True
 
     except Exception as ex:
