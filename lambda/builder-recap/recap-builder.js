@@ -66,11 +66,12 @@ function validatePlan(b,p) {
   if(scenes.at(-1)?.sceneType!==7 || scenes.filter(x=>x.sceneType===7).length!==1) fail('SCENE_PLAN_SEMANTICS','Scene 7 must be last exactly once.');
   if(scenes.filter(x=>x.sceneType===4).length>1) fail('SCENE_PLAN_SEMANTICS','Scene 4 may appear at most once.');
   const coverage=[];
+  const seenReplayUrls=new Set();
   scenes.forEach((s,i)=>{
     if(s.sceneType===2) coverage.push(s.betSequence);
     if(s.sceneType===5){ if(s.betSequences.some((x,j)=>j&&x!==s.betSequences[j-1]+1)) fail('SCENE_PLAN_SEMANTICS',`Scene array item ${i+1} (sceneType 5): sequences must be consecutive.`); coverage.push(...s.betSequences); }
     if(s.sceneType===8){ if(s.betSequences.some((x,j)=>j&&x!==s.betSequences[j-1]+1)) fail('SCENE_PLAN_SEMANTICS',`Scene array item ${i+1} (sceneType 8): sequences must be consecutive.`); if(s.comments.length!==s.betSequences.length) fail('SCENE_PLAN_SEMANTICS',`Scene array item ${i+1} (sceneType 8): comments.length must equal betSequences.length.`); coverage.push(...s.betSequences); }
-    if(s.sceneType===3){ const prev=scenes[i-1], bet=b.bets[s.betSequence-1]; if(!prev||prev.sceneType!==2||prev.betSequence!==s.betSequence) fail('SCENE_PLAN_SEMANTICS',`Scene array item ${i+1} (sceneType 3): replay must immediately follow Scene 2 for same bet.`); if(!bet||bet.result!=='WIN'||!bet.replayUrl||!validHttps(bet.replayUrl)) fail('SCENE_PLAN_SEMANTICS',`Scene array item ${i+1} (sceneType 3): bet ${s.betSequence} is not replay eligible.`); }
+    if(s.sceneType===3){ const prev=scenes[i-1], bet=b.bets[s.betSequence-1]; if(!prev||prev.sceneType!==2||prev.betSequence!==s.betSequence) fail('SCENE_PLAN_SEMANTICS',`Scene array item ${i+1} (sceneType 3): replay must immediately follow Scene 2 for same bet.`); if(!bet||!bet.replayUrl||!validHttps(bet.replayUrl)) fail('SCENE_PLAN_SEMANTICS',`Scene array item ${i+1} (sceneType 3): bet ${s.betSequence} is not replay eligible.`); if(seenReplayUrls.has(bet.replayUrl)) fail('SCENE_PLAN_SEMANTICS',`Scene array item ${i+1} (sceneType 3): replay URL may appear at most once.`); seenReplayUrls.add(bet.replayUrl); }
   });
   if(coverage.length!==total || coverage.some((x,i)=>x!==i+1)) fail('SCENE_PLAN_SEMANTICS','Primary bet coverage must be exactly 1..totalBets once, in order.');
   validateMidpoint(scenes,total);
