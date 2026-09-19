@@ -69,7 +69,7 @@ Resources:
           STORAGE_BUCKET: tab-recap-vbeta1
           JOBS_TABLE: tab-recap-vbeta1-jobs
           PLANNING_QUEUE_URL: !Sub https://sqs.${AWS::Region}.amazonaws.com/${AWS::AccountId}/tab-recap-vbeta1-planning
-          RECAP_URL_TTL_SECONDS: '900'
+          RECAP_URL_TTL_SECONDS: '43200'
       Code:
         S3Bucket: !Ref ArtifactBucket
         S3Key: !Ref ArtifactKey
