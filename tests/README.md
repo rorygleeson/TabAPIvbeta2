@@ -232,7 +232,7 @@ The Builder must not become a second planner or a prose semantic validator.
 The deployed API harness is:
 
 ```cmd
-tests\tools\run-orchestrator-test.cmd <size>
+tests\tools\run-orchestrator-test.cmd <size> [good|bad]
 ```
 
 Supported fixture sizes:
@@ -241,28 +241,68 @@ Supported fixture sizes:
 5 / 8 / 16 / 32 / 50 / 75
 ```
 
-The harness exercises both public Kubrick endpoints:
+The mode defaults to `good`, so the existing usage remains valid:
 
-```text
-POST /jobs
-GET /jobs/{jobId}
+```cmd
+tests\tools\run-orchestrator-test.cmd 8
 ```
 
-Acceptance behaviour:
+Explicit good-mode example:
 
-1. POST canonical fixture JSON using the configured `x-api-key`.
-2. Require HTTP acceptance with a generated UUID `jobId` and `RECEIVED`.
-3. Poll GET with the same API key.
-4. Observe processing until a terminal state.
-5. Require `READY`.
-6. Require a returned `recapUrl`.
-7. Download final `recap.html` from that URL.
+```cmd
+tests\tools\run-orchestrator-test.cmd 8 good
+```
+
+Admission-failure example:
+
+```cmd
+tests\tools\run-orchestrator-test.cmd 8 bad
+```
+
+The harness simulates a public Kubrick client.
+
+### GOOD mode
+
+GOOD mode uses the selected source fixture unchanged and exercises the complete public journey:
+
+```text
+known-good fixture
+-> POST /jobs
+-> require HTTP 202
+-> require jobId + RECEIVED
+-> poll GET /jobs/{jobId}
+-> observe DynamoDB-backed lifecycle
+-> require READY
+-> require recapUrl
+-> download recap.html
+```
+
+If POST is rejected, the client stops and does not poll.
+
+### BAD mode
+
+BAD mode does **not** edit any source fixture.
+
+It reads the selected known-good fixture and writes a temporary invalid copy only inside that test run's `tests/results/` directory. The injected fault deliberately changes `summary.totalBets` so it no longer matches `bets.length`.
+
+The simulated client then expects:
+
+```text
+temporary invalid payload
+-> POST /jobs
+-> require HTTP 400
+-> require errorCode = KUBRICK_INVALID_PAYLOAD
+-> require no jobId
+-> do not poll
+```
+
+If Kubrick returns HTTP 202 for BAD mode, the harness reports a failure and prints any unexpected `jobId` because an invalid request has crossed the admission boundary.
+
+The source fixture is never mutated by BAD mode.
 
 The API key value is a local secret and must never be committed to the repository.
 
-The API harness has been live-proven across multiple fixture sizes up to 75 bets.
-
-The soundtrack/browser path has also been checked against live API output after the CORS/runtime fix.
+The API harness has been live-proven in GOOD mode across multiple fixture sizes up to 75 bets. BAD-mode admission behaviour is the test contract for the upcoming strict Orchestrator validation implementation and is not yet claimed as deployed/proven.
 
 ## 11. Working rule
 
