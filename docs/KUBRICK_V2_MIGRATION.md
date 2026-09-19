@@ -222,6 +222,8 @@ if the replay quota cuts through an equal-importance tie, prefer the later repla
 the same replayUrl may be selected at most once
 ```
 
+Within a selected replay group, the representative bet used for the Scene 2/Scene 3 attachment is the bet with the largest absolute individual profitLoss; an exact tie uses the later bet sequence.
+
 Replay count remains owned by the existing bet-volume/runtime planner policy; this ranking only decides which unique replay videos fill those slots.
 
 ### Scene 2 extras
