@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
-"""TAB CSV normaliser v0.9 local-only test harness.
+"""TAB Daily Recap local Normaliser client.
 
-LOCAL-ONLY standalone Normaliser with:
-- Pass 1: frozen v1.7 parsing behaviour + post-parse horse-only classification
-- Pass 2: horse-only historical enrichment + persistent local meeting resolution
-- Pass 3: best-effort daily bettings.json construction
+Current controlled milestone:
+- Stage 0: scan monthly CSVs and select one horse-racing day
+- Pass 1: retain the proven v1.7/v0.9 parsing and horse-only classification
+- Filter: keep only the selected eventDate
+- Pass 2: retain historical enrichment + persistent local meeting resolution
+- Candidate output: build and validate the exact Kubrick v1 canonical payload
+- STOP before POST /jobs; print/save the payload for inspection
 
 Persistent learned meeting aliases are stored in a local JSON file beside the
 test root. No DynamoDB, boto3, AWS CLI, IAM, or AWS credentials are required.
@@ -1312,6 +1315,14 @@ def enrich_one_bet(bet, api, store):
             "finishingPosition": raw_position if raw_position and raw_position > 0 else None,
         })
 
+        # Simple Tote WIN/PLACE needs the official historical dividend because
+        # losing Tote bets cannot derive a positive Kubrick odds value from CSV.
+        if bet.get("pricingType") == "TOTE" and bet.get("betType") in ("WIN", "PLACE"):
+            tote = runner.get("parimutuel") if isinstance(runner.get("parimutuel"), dict) else {}
+            dividend_key = "returnWin" if bet.get("betType") == "WIN" else "returnPlace"
+            tote_dividend = enrich_to_decimal(tote.get(dividend_key))
+            enrichment["toteDividend"] = float(tote_dividend) if tote_dividend is not None and tote_dividend > 0 else None
+
         if bet.get("betType") == "TOTE_WIN_PLACE":
             win_stake = enrich_money2(bet.get("winStake"))
             place_stake = enrich_money2(bet.get("placeStake"))
@@ -1434,6 +1445,306 @@ def enrich_normalised_payload(normalised, api, store):
         "pass2Status": "COMPLETE",
     }
     return payload, exceptions, summary
+
+
+# =============================================================================
+# STAGE 0 — LOCAL CSV/DAY DISCOVERY
+# =============================================================================
+
+def scan_racing_days(files):
+    """Return selectable horse-racing days without calling the historical API."""
+    days = []
+    scan_errors = []
+    for path in files:
+        try:
+            normalised, _, _ = normalise_csv(path, f"scan-{path.stem}", path.name)
+            counts = Counter(
+                str(b.get("eventDate"))
+                for b in normalised.get("bets", [])
+                if valid_date(str(b.get("eventDate") or ""))
+            )
+            for day, count in counts.items():
+                days.append({
+                    "selectedDate": day,
+                    "sourceCsvPath": path,
+                    "displayDate": datetime.strptime(day, "%Y-%m-%d").strftime("%A %d %b %Y"),
+                    "eligibleHorseBetCount": count,
+                })
+        except Exception as ex:
+            scan_errors.append({"sourceFile": path.name, "error": str(ex)})
+    days.sort(key=lambda item: (item["selectedDate"], item["sourceCsvPath"].name.lower()), reverse=True)
+    return days, scan_errors
+
+
+def choose_racing_day(days):
+    print("\nAvailable racing days:\n")
+    for index, item in enumerate(days, 1):
+        print(f"  [{index}]  {item['displayDate']:<24} {item['eligibleHorseBetCount']:>3} bets")
+    while True:
+        try:
+            raw = input(f"\nSelect racing day [1-{len(days)}]: ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print("\n\nSelection cancelled.")
+            return None
+        if raw.isdigit():
+            choice = int(raw)
+            if 1 <= choice <= len(days):
+                return days[choice - 1]
+        print(f"Invalid selection. Enter a number from 1 to {len(days)}.")
+
+
+def filter_normalised_to_day(normalised, selected_date):
+    filtered = [b for b in normalised.get("bets", []) if str(b.get("eventDate")) == selected_date]
+    for index, bet in enumerate(filtered, 1):
+        bet["sequence"] = index
+    result = dict(normalised)
+    result["bets"] = filtered
+    result["selectedDate"] = selected_date
+    result["domainSummary"] = dict(normalised.get("domainSummary", {}))
+    result["domainSummary"]["selectedDayHorseBets"] = len(filtered)
+    return result
+
+
+# =============================================================================
+# CANDIDATE KUBRICK PAYLOAD — BUILD + LOCAL CONTRACT VALIDATION
+# =============================================================================
+
+KUBRICK_BET_FIELDS = (
+    "sequence", "betTime", "raceTime", "raceId", "raceName", "meeting", "state",
+    "raceNumber", "runnerId", "runnerNumber", "runnerName", "betType", "stake",
+    "odds", "result", "finishingPosition", "return", "profitLoss", "runningPnl",
+    "replayUrl",
+)
+
+
+def candidate_odds(bet):
+    if bet.get("odds") is not None:
+        return float(bet["odds"])
+    e = bet.get("enrichment", {})
+    if e.get("toteDividend") is not None:
+        return float(e["toteDividend"])
+    # Composite Tote W&P currently has no single official canonical dividend.
+    # Leave it unresolved rather than inventing a value.
+    return None
+
+
+def candidate_return(bet):
+    value = best_effort_return(bet)
+    return float(value) if value is not None else None
+
+
+def candidate_stake(bet):
+    value = best_effort_stake(bet)
+    return float(value) if value is not None else None
+
+
+def build_candidate_kubrick_payload(enriched_payload, selected_date, first_name="Customer", timezone_name="Australia/Melbourne"):
+    bets = sorted(enriched_payload.get("bets", []), key=lambda b: b.get("sequence") or 999999)
+    final_bets = []
+    running = 0.0
+    for sequence, bet in enumerate(bets, 1):
+        e = bet.get("enrichment", {})
+        stake = candidate_stake(bet)
+        returned = candidate_return(bet)
+        pnl = round(returned - stake, 2) if stake is not None and returned is not None else None
+        running = round(running + pnl, 2) if pnl is not None else None if running is None else None
+        final_bets.append({
+            "sequence": sequence,
+            "betTime": bet.get("betTime"),
+            "raceTime": e.get("raceTime"),
+            "raceId": e.get("raceId"),
+            "raceName": e.get("raceName"),
+            "meeting": e.get("meeting") or bet.get("meeting"),
+            "state": e.get("state"),
+            "raceNumber": e.get("raceNumber") or bet.get("raceNumber"),
+            "runnerId": e.get("runnerId"),
+            "runnerNumber": e.get("runnerNumber") or bet.get("runnerNumber"),
+            "runnerName": e.get("runnerName") or bet.get("runnerName"),
+            "betType": bet.get("betType"),
+            "stake": stake,
+            "odds": candidate_odds(bet),
+            "result": bet.get("betResult"),
+            "finishingPosition": e.get("finishingPosition"),
+            "return": returned,
+            "profitLoss": pnl,
+            "runningPnl": running,
+            "replayUrl": e.get("replayUrl"),
+        })
+
+    stakes = [b["stake"] for b in final_bets if isinstance(b.get("stake"), (int, float))]
+    returns = [b["return"] for b in final_bets if isinstance(b.get("return"), (int, float))]
+    wins = [b for b in final_bets if b.get("result") == "WIN"]
+    losses = [b for b in final_bets if b.get("result") == "LOSS"]
+    meetings = {b.get("meeting") for b in final_bets if b.get("meeting")}
+
+    def earliest_extreme(items, key, highest=True):
+        usable = [b for b in items if isinstance(b.get(key), (int, float))]
+        if not usable:
+            return None
+        target = (max if highest else min)(b[key] for b in usable)
+        return min(b["sequence"] for b in usable if b[key] == target)
+
+    positive_wins = [b for b in wins if isinstance(b.get("profitLoss"), (int, float)) and b["profitLoss"] > 0]
+    negative_losses = [b for b in losses if isinstance(b.get("profitLoss"), (int, float)) and b["profitLoss"] < 0]
+
+    return {
+        "schemaVersion": "1.0",
+        "user": {"firstName": first_name},
+        "day": {"date": selected_date, "timezone": timezone_name},
+        "bets": final_bets,
+        "summary": {
+            "totalBets": len(final_bets),
+            "totalStaked": round(sum(stakes), 2) if len(stakes) == len(final_bets) else None,
+            "totalReturned": round(sum(returns), 2) if len(returns) == len(final_bets) else None,
+            "wins": len(wins),
+            "losses": len(losses),
+            "finalPnl": final_bets[-1]["runningPnl"] if final_bets else None,
+            "meetings": len(meetings),
+            "biggestStake": max(stakes) if len(stakes) == len(final_bets) and stakes else None,
+            "biggestWinSequence": earliest_extreme(positive_wins, "profitLoss", True),
+            "biggestLossSequence": earliest_extreme(negative_losses, "profitLoss", False),
+            "highestOddsWinnerSequence": earliest_extreme(wins, "odds", True),
+        },
+    }
+
+
+def validate_candidate_kubrick_payload(payload):
+    """Mirror the current public Kubrick v1 schema + semantic admission rules."""
+    errors = []
+    required_top = ("schemaVersion", "user", "day", "bets", "summary")
+    if set(payload.keys()) != set(required_top):
+        errors.append(f"top-level fields must be exactly {required_top}")
+    if payload.get("schemaVersion") != "1.0":
+        errors.append("schemaVersion must equal '1.0'")
+
+    user = payload.get("user")
+    if not isinstance(user, dict) or set(user.keys()) != {"firstName"} or not isinstance(user.get("firstName"), str) or not user.get("firstName"):
+        errors.append("user.firstName must be a non-empty string and user must contain no extra fields")
+
+    day = payload.get("day")
+    if not isinstance(day, dict) or set(day.keys()) != {"date", "timezone"}:
+        errors.append("day must contain exactly date and timezone")
+    else:
+        if not valid_date(day.get("date")):
+            errors.append("day.date must be YYYY-MM-DD")
+        if not isinstance(day.get("timezone"), str) or not day.get("timezone"):
+            errors.append("day.timezone must be a non-empty string")
+
+    bets = payload.get("bets")
+    if not isinstance(bets, list) or not bets:
+        errors.append("bets must contain at least one bet")
+        return errors
+
+    for index, bet in enumerate(bets, 1):
+        prefix = f"bet {index}"
+        if not isinstance(bet, dict):
+            errors.append(f"{prefix}: must be an object")
+            continue
+        if set(bet.keys()) != set(KUBRICK_BET_FIELDS):
+            missing = [f for f in KUBRICK_BET_FIELDS if f not in bet]
+            extra = [f for f in bet if f not in KUBRICK_BET_FIELDS]
+            if missing: errors.append(f"{prefix}: missing fields: {', '.join(missing)}")
+            if extra: errors.append(f"{prefix}: unexpected fields: {', '.join(extra)}")
+
+        string_fields = ("betTime", "raceTime", "raceId", "raceName", "meeting", "state", "runnerId", "runnerName", "betType")
+        for field in string_fields:
+            if not isinstance(bet.get(field), str) or not bet.get(field):
+                errors.append(f"{prefix}: {field} must be a non-empty string")
+        for field in ("sequence", "raceNumber", "runnerNumber", "finishingPosition"):
+            value = bet.get(field)
+            if not isinstance(value, int) or isinstance(value, bool) or value < 1:
+                errors.append(f"{prefix}: {field} must be an integer >= 1")
+        for field in ("stake", "return"):
+            value = bet.get(field)
+            if not isinstance(value, (int, float)) or isinstance(value, bool) or value < 0:
+                errors.append(f"{prefix}: {field} must be a number >= 0")
+        odds = bet.get("odds")
+        if not isinstance(odds, (int, float)) or isinstance(odds, bool) or odds <= 0:
+            errors.append(f"{prefix}: odds must be a number > 0")
+        for field in ("profitLoss", "runningPnl"):
+            if not isinstance(bet.get(field), (int, float)) or isinstance(bet.get(field), bool):
+                errors.append(f"{prefix}: {field} must be a number")
+        if bet.get("result") not in ("WIN", "LOSS"):
+            errors.append(f"{prefix}: result must be WIN or LOSS")
+        replay = bet.get("replayUrl")
+        if replay is not None and (not isinstance(replay, str) or not replay.lower().startswith("https://")):
+            errors.append(f"{prefix}: replayUrl must be null or a non-empty HTTPS URL")
+
+    sequences = [b.get("sequence") for b in bets if isinstance(b, dict)]
+    if sequences != list(range(1, len(bets) + 1)):
+        errors.append("bets[].sequence must be ascending, unique and contiguous 1..N")
+
+    def money_equal(a, b):
+        try:
+            return round(float(a) * 100) == round(float(b) * 100)
+        except (TypeError, ValueError):
+            return False
+
+    running = 0.0
+    semantics_possible = True
+    for index, bet in enumerate(bets, 1):
+        if not all(isinstance(bet.get(f), (int, float)) and not isinstance(bet.get(f), bool) for f in ("stake", "return", "profitLoss", "runningPnl")):
+            semantics_possible = False
+            continue
+        expected_pnl = float(bet["return"]) - float(bet["stake"])
+        if not money_equal(bet["profitLoss"], expected_pnl):
+            errors.append(f"bet {index}: profitLoss must equal return - stake")
+        running += float(bet["profitLoss"])
+        if not money_equal(bet["runningPnl"], running):
+            errors.append(f"bet {index}: runningPnl does not match cumulative profitLoss")
+
+    summary = payload.get("summary")
+    summary_fields = (
+        "totalBets", "totalStaked", "totalReturned", "wins", "losses", "finalPnl",
+        "meetings", "biggestStake", "biggestWinSequence", "biggestLossSequence",
+        "highestOddsWinnerSequence",
+    )
+    if not isinstance(summary, dict) or set(summary.keys()) != set(summary_fields):
+        errors.append("summary does not match the current Kubrick summary contract")
+        return errors
+
+    if summary.get("totalBets") != len(bets):
+        errors.append("summary.totalBets must equal bets.length")
+    wins = [b for b in bets if b.get("result") == "WIN"]
+    losses = [b for b in bets if b.get("result") == "LOSS"]
+    if summary.get("wins") != len(wins) or summary.get("losses") != len(losses) or len(wins) + len(losses) != len(bets):
+        errors.append("summary wins/losses do not match bet results")
+    meetings = {b.get("meeting") for b in bets if b.get("meeting")}
+    if summary.get("meetings") != len(meetings):
+        errors.append("summary.meetings must equal unique meeting count")
+
+    if semantics_possible:
+        total_staked = sum(float(b["stake"]) for b in bets)
+        total_returned = sum(float(b["return"]) for b in bets)
+        if not money_equal(summary.get("totalStaked"), total_staked):
+            errors.append("summary.totalStaked must equal sum(stake)")
+        if not money_equal(summary.get("totalReturned"), total_returned):
+            errors.append("summary.totalReturned must equal sum(return)")
+        if not money_equal(summary.get("finalPnl"), total_returned - total_staked):
+            errors.append("summary.finalPnl must equal totalReturned - totalStaked")
+        biggest_stake = max(float(b["stake"]) for b in bets)
+        if not money_equal(summary.get("biggestStake"), biggest_stake):
+            errors.append("summary.biggestStake must equal max(stake)")
+
+        def expected_sequence(items, key, highest):
+            if not items:
+                return None
+            target = (max if highest else min)(float(b[key]) for b in items)
+            return min(b["sequence"] for b in items if float(b[key]) == target)
+
+        positive_wins = [b for b in wins if float(b["profitLoss"]) > 0]
+        negative_losses = [b for b in losses if float(b["profitLoss"]) < 0]
+        if summary.get("biggestWinSequence") != expected_sequence(positive_wins, "profitLoss", True):
+            errors.append("summary.biggestWinSequence is inconsistent")
+        if summary.get("biggestLossSequence") != expected_sequence(negative_losses, "profitLoss", False):
+            errors.append("summary.biggestLossSequence is inconsistent")
+        if wins and all(isinstance(b.get("odds"), (int, float)) and not isinstance(b.get("odds"), bool) for b in wins):
+            if summary.get("highestOddsWinnerSequence") != expected_sequence(wins, "odds", True):
+                errors.append("summary.highestOddsWinnerSequence is inconsistent")
+        elif not wins and summary.get("highestOddsWinnerSequence") is not None:
+            errors.append("summary.highestOddsWinnerSequence must be null when there are no wins")
+
+    return errors
 
 
 # =============================================================================
@@ -1604,39 +1915,52 @@ def build_daily_bettings(enriched_payload, first_name="Customer", timezone="Aust
 
 
 # =============================================================================
-# COMBINED LOCAL HARNESS — one process, one future Lambda
+# COMBINED LOCAL CLIENT — CURRENT MILESTONE STOPS BEFORE KUBRICK POST
 # =============================================================================
 
-def process(path, root, index, total, api, store, first_name, timezone):
-    """Process one source CSV while preserving completed-stage evidence on failure."""
+def process_selected_day(path, selected_date, root, api, store, first_name, timezone_name):
     jid = job_id(path)
     job_dir = root / "working" / jid
     source_dir = job_dir / "source"
     normaliser_dir = job_dir / "normaliser"
     enrichment_dir = job_dir / "enrichment"
-    final_dir = job_dir / "final"
-    source_dir.mkdir(parents=True)
-    normaliser_dir.mkdir()
-    enrichment_dir.mkdir()
-    final_dir.mkdir()
+    candidate_dir = job_dir / "candidate"
+    for directory in (source_dir, normaliser_dir, enrichment_dir, candidate_dir):
+        directory.mkdir(parents=True, exist_ok=True)
+
     source_copy = source_dir / "original.csv"
     shutil.copy2(path, source_copy)
-    print(f"\n[{index}/{total}] {path.name}\n      Job ID : {jid}")
+    write_json(job_dir / "selection.json", {
+        "jobId": jid,
+        "sourceFile": path.name,
+        "selectedDate": selected_date,
+    })
 
     stage = "PASS_1_NORMALISE"
     try:
+        print("\n[PASS 1] Parsing selected monthly statement...")
         normalised, pass1_exceptions, pass1_summary = normalise_csv(source_copy, jid, path.name)
-        write_json(normaliser_dir / "normalised-bets.json", normalised)
+        selected = filter_normalised_to_day(normalised, selected_date)
+        write_json(normaliser_dir / "normalised-bets.json", selected)
         write_json(normaliser_dir / "exceptions.json", {"jobId": jid, "exceptions": pass1_exceptions})
-        pass1_summary["pass1Status"] = "COMPLETE"
+        pass1_summary.update({
+            "pass1Status": "COMPLETE",
+            "selectedDate": selected_date,
+            "selectedDayHorseBets": len(selected.get("bets", [])),
+        })
         write_json(normaliser_dir / "summary.json", pass1_summary)
-        print(f"      PASS 1 : {pass1_summary['recognisedLogicalBetTransactions']} recognised transactions -> {pass1_summary['canonicalBetRecords']} canonical records; {pass1_summary['exceptionCount']} exceptions")
+
+        if not selected.get("bets"):
+            raise RuntimeError(f"No eligible horse-racing bets remained for selected date {selected_date}.")
+        print(f"[PASS 1] Complete: {len(selected['bets'])} selected-day horse bet(s).")
 
         stage = "PASS_2_ENRICH"
-        enriched, pass2_exceptions, pass2_summary = enrich_normalised_payload(normalised, api, store)
+        print("\n[PASS 2] Enriching historical race data...")
+        enriched, pass2_exceptions, pass2_summary = enrich_normalised_payload(selected, api, store)
         write_json(enrichment_dir / "enriched-bets.json", enriched)
         write_json(enrichment_dir / "exceptions.json", {"jobId": jid, "exceptions": pass2_exceptions})
         pass2_summary.update({
+            "selectedDate": selected_date,
             "dateApiCallsCumulative": api.date_calls,
             "raceApiCallsCumulative": api.race_calls,
             "apiCacheHitsCumulative": api.cache_hits,
@@ -1647,50 +1971,73 @@ def process(path, root, index, total, api, store, first_name, timezone):
             "localLookupErrorsCumulative": store.errors,
         })
         write_json(enrichment_dir / "summary.json", pass2_summary)
-        print(f"      PASS 2 : ENRICHED={pass2_summary['enriched']} PARTIAL={pass2_summary['partial']} UNRESOLVED={pass2_summary['unresolved']} NOT_APPLICABLE={pass2_summary['notApplicable']}")
+        print(
+            f"[PASS 2] Complete: {pass2_summary['enriched']} enriched, "
+            f"{pass2_summary['partial']} partial, {pass2_summary['unresolved']} unresolved."
+        )
 
-        stage = "PASS_3_BUILD"
-        daily_outputs, unassigned = build_daily_bettings(enriched, first_name, timezone)
-        for day, payload in daily_outputs.items():
-            day_dir = final_dir / day
-            day_dir.mkdir(parents=True, exist_ok=True)
-            write_json(day_dir / "bettings.json", payload)
-        write_json(final_dir / "summary.json", {
+        stage = "KUBRICK_CANDIDATE"
+        print("\n[VALIDATION] Building candidate Kubrick payload...")
+        candidate = build_candidate_kubrick_payload(enriched, selected_date, first_name, timezone_name)
+        candidate_path = candidate_dir / "bettings.json"
+        write_json(candidate_path, candidate)
+        errors = validate_candidate_kubrick_payload(candidate)
+        write_json(candidate_dir / "validation.json", {
             "jobId": jid,
-            "dailyFiles": sorted(daily_outputs.keys()),
-            "dailyFileCount": len(daily_outputs),
-            "unassignedBetCount": len(unassigned),
-            "pass3Status": "BEST_EFFORT_COMPLETE",
+            "selectedDate": selected_date,
+            "valid": not errors,
+            "errorCount": len(errors),
+            "errors": errors,
         })
-        if unassigned:
-            write_json(final_dir / "unassigned-bets.json", {"bets": unassigned})
-        print(f"      PASS 3 : {len(daily_outputs)} daily bettings.json file(s); unassigned={len(unassigned)}")
-        print(f"      Output : {job_dir}")
-        return True, pass2_summary
+
+        if errors:
+            print(f"[VALIDATION] FAILED: {len(errors)} issue(s) found.")
+            for error in errors:
+                print(f"  - {error}")
+            print(f"\nEvidence: {job_dir}")
+            print("\nNOT READY TO SEND TO KUBRICK")
+            print("Kubrick request not sent.")
+            return False
+
+        print("[VALIDATION] Kubrick payload valid.")
+        print("\n============================================================")
+        print("CANDIDATE KUBRICK PAYLOAD")
+        print("============================================================")
+        print(json.dumps(candidate, indent=2, ensure_ascii=False))
+        print("\n============================================================")
+        print("READY TO SEND TO KUBRICK")
+        print("Kubrick request not sent in this build.")
+        print("============================================================")
+        print(f"Payload saved: {candidate_path}")
+        return True
 
     except Exception as ex:
-        fail = {
+        write_json(job_dir / "job-error.json", {
             "jobId": jid,
             "sourceFile": path.name,
+            "selectedDate": selected_date,
             "status": "SOURCE_PROCESSING_EXCEPTION",
             "stage": stage,
             "error": str(ex),
-        }
-        # Never overwrite evidence from an earlier stage that already completed.
-        write_json(job_dir / "job-error.json", fail)
-        print(f"      ERROR  : stage={stage}: {ex}\n      Output : {job_dir}")
-        return False, None
+        })
+        print("\n============================================================")
+        print("NORMALISER ERROR")
+        print("============================================================")
+        print(f"Stage   : {stage}")
+        print(f"Problem : {ex}")
+        print(f"Evidence: {job_dir}")
+        print("The script stopped safely; no Kubrick request was sent.")
+        return False
 
 
 def main():
-    parser = argparse.ArgumentParser(description="TAB Normaliser v0.9 local-only horse filter + local meeting lookup + best-effort bettings.json")
+    parser = argparse.ArgumentParser(description="TAB Daily Recap local Normaliser client")
     parser.add_argument("--root", type=Path, default=Path(__file__).resolve().parent)
-    parser.add_argument("--file")
     parser.add_argument("--base-url", default=ENRICH_BASE_URL)
     parser.add_argument("--jurisdiction", default=ENRICH_JURISDICTION)
     parser.add_argument("--timeout", type=int, default=ENRICH_TIMEOUT)
     parser.add_argument("--retries", type=int, default=ENRICH_RETRIES)
-    parser.add_argument("--lookup-file", default="meeting-resolution.json", help="Persistent local learned meeting lookup JSON (default: <root>/meeting-resolution.json)")
+    parser.add_argument("--lookup-file", default="meeting-resolution.json")
     parser.add_argument("--first-name", default="Customer")
     parser.add_argument("--timezone", default="Australia/Melbourne")
     args = parser.parse_args()
@@ -1700,56 +2047,67 @@ def main():
     working_dir = root / "working"
     input_dir.mkdir(parents=True, exist_ok=True)
     working_dir.mkdir(parents=True, exist_ok=True)
-    files = [input_dir / args.file] if args.file else sorted(input_dir.glob("*.csv"), key=lambda p: p.name.lower())
-    files = [p for p in files if p.exists() and p.is_file()]
+    files = sorted((p for p in input_dir.glob("*.csv") if p.is_file()), key=lambda p: p.name.lower())
 
-    api = TabHistoricalApi(args.base_url, args.jurisdiction, args.timeout, args.retries)
-    lookup_path = Path(args.lookup_file)
-    if not lookup_path.is_absolute():
-        lookup_path = root / lookup_path
-    store = MeetingResolutionStore(lookup_path)
-
-    print("=== TAB NORMALISER v0.9 — LOCAL ONLY + HORSE ONLY + LOCAL LOOKUP ===")
-    print(f"Root         : {root}")
-    print(f"Input        : {input_dir}")
-    print(f"Working      : {working_dir}")
-    print(f"CSV files    : {len(files)}")
-    print(f"TAB API      : {args.base_url}")
-    print(f"Jurisdiction : {args.jurisdiction}")
-    print(f"Lookup file  : {store.file_path}")
+    print("============================================================")
+    print("TAB DAILY RECAP - LOCAL NORMALISER")
+    print("============================================================")
+    print(f"Input   : {input_dir}")
+    print(f"Working : {working_dir}")
 
     if not files:
-        print("\nNo CSV files found in input\\")
+        print("\n[STAGE 0] No CSV files found in input\\.")
+        print("Add one or more monthly TAB account-history CSV files and run the script again.")
         return 1
 
-    succeeded = 0
-    pass2_totals = Counter()
-    for index, path in enumerate(files, 1):
-        ok, summary = process(path, root, index, len(files), api, store, args.first_name, args.timezone)
-        if ok:
-            succeeded += 1
-            if summary:
-                for key in ("enriched", "partial", "unresolved", "notApplicable", "requiredFinalisationUnresolved"):
-                    pass2_totals[key] += summary.get(key, 0)
+    print(f"\n[STAGE 0] Scanning {len(files)} input CSV file(s)...")
+    days, scan_errors = scan_racing_days(files)
+    if scan_errors:
+        print(f"[STAGE 0] Warning: {len(scan_errors)} file(s) could not be scanned:")
+        for error in scan_errors:
+            print(f"  - {error['sourceFile']}: {error['error']}")
 
-    print("\n=== RUN COMPLETE ===")
-    print(f"Jobs            : {len(files)}")
-    print(f"Succeeded       : {succeeded}")
-    print(f"Source failures : {len(files) - succeeded}")
-    print(f"Enriched        : {pass2_totals['enriched']}")
-    print(f"Partial         : {pass2_totals['partial']}")
-    print(f"Unresolved      : {pass2_totals['unresolved']}")
-    print(f"Not applicable  : {pass2_totals['notApplicable']}")
-    print(f"Required pending: {pass2_totals['requiredFinalisationUnresolved']}")
-    print(f"Date API calls  : {api.date_calls}")
-    print(f"Race API calls  : {api.race_calls}")
-    print(f"API cache hits  : {api.cache_hits}")
-    print(f"Lookup hits     : {store.hits}")
-    print(f"Lookup misses   : {store.misses}")
-    print(f"Lookup ambiguous: {store.ambiguous}")
-    print(f"Lookup writes   : {store.writes}")
-    print(f"Lookup errors   : {store.errors}")
-    return 0 if succeeded == len(files) else 2
+    if not days:
+        print("\n[STAGE 0] No eligible horse-racing days were found.")
+        print("No Kubrick request was sent.")
+        return 1
+
+    print(f"[STAGE 0] Found {len(days)} racing day(s).")
+    selection = choose_racing_day(days)
+    if selection is None:
+        return 1
+
+    selected_path = selection["sourceCsvPath"]
+    selected_date = selection["selectedDate"]
+    print("\n[STAGE 0] Selected:")
+    print(f"  Date : {selection['displayDate']}")
+    print(f"  Bets : {selection['eligibleHorseBetCount']}")
+    print(f"  CSV  : {selected_path.name}")
+
+    try:
+        api = TabHistoricalApi(args.base_url, args.jurisdiction, args.timeout, args.retries)
+        lookup_path = Path(args.lookup_file)
+        if not lookup_path.is_absolute():
+            lookup_path = root / lookup_path
+        store = MeetingResolutionStore(lookup_path)
+    except Exception as ex:
+        print("\n============================================================")
+        print("NORMALISER ERROR")
+        print("============================================================")
+        print(f"Problem : Could not initialise enrichment: {ex}")
+        print("No Kubrick request was sent.")
+        return 2
+
+    ok = process_selected_day(
+        selected_path,
+        selected_date,
+        root,
+        api,
+        store,
+        args.first_name,
+        args.timezone,
+    )
+    return 0 if ok else 2
 
 
 if __name__ == "__main__":
