@@ -1111,10 +1111,10 @@ def expected_enrichment_fields(bet):
     single-runner identity; the authoritative Kubrick validator will quarantine
     them until the Kubrick contract explicitly supports multi-runner selections.
     """
-    base = ["raceTime", "raceId", "raceName", "meeting", "state", "raceNumber"]
+    base = ["raceTime", "raceName", "meeting", "state", "raceNumber"]
     if bet.get("betType") in ("TRIFECTA", "FIRST_4"):
         return base
-    return base + ["runnerId", "runnerNumber", "runnerName", "finishingPosition"]
+    return base + ["runnerNumber", "runnerName", "finishingPosition"]
 
 
 def enrichment_missing_fields(bet, enrichment):
@@ -1517,12 +1517,15 @@ def filter_normalised_to_day(normalised, selected_date):
 # CANDIDATE KUBRICK PAYLOAD — BUILD + LOCAL CONTRACT VALIDATION
 # =============================================================================
 
-KUBRICK_BET_FIELDS = (
-    "sequence", "betTime", "raceTime", "raceId", "raceName", "meeting", "state",
-    "raceNumber", "runnerId", "runnerNumber", "runnerName", "betType", "stake",
+KUBRICK_REQUIRED_BET_FIELDS = (
+    "sequence", "betTime", "raceTime", "raceName", "meeting", "state",
+    "raceNumber", "runnerNumber", "runnerName", "betType", "stake",
     "odds", "result", "finishingPosition", "return", "profitLoss", "runningPnl",
     "replayUrl",
 )
+
+KUBRICK_OPTIONAL_BET_FIELDS = ("raceId", "runnerId")
+KUBRICK_ALLOWED_BET_FIELDS = KUBRICK_REQUIRED_BET_FIELDS + KUBRICK_OPTIONAL_BET_FIELDS
 
 
 def candidate_odds(bet):
@@ -1593,16 +1596,14 @@ def build_candidate_kubrick_payload(enriched_payload, selected_date, first_name=
             running = None
         else:
             running = round(running + pnl, 2)
-        final_bets.append({
+        record = {
             "sequence": sequence,
             "betTime": bet.get("betTime"),
             "raceTime": e.get("raceTime"),
-            "raceId": e.get("raceId"),
             "raceName": e.get("raceName"),
             "meeting": e.get("meeting") or bet.get("meeting"),
             "state": e.get("state"),
             "raceNumber": e.get("raceNumber") or bet.get("raceNumber"),
-            "runnerId": e.get("runnerId"),
             "runnerNumber": e.get("runnerNumber") or bet.get("runnerNumber"),
             "runnerName": e.get("runnerName") or bet.get("runnerName"),
             "betType": bet.get("betType"),
@@ -1614,7 +1615,12 @@ def build_candidate_kubrick_payload(enriched_payload, selected_date, first_name=
             "profitLoss": pnl,
             "runningPnl": running,
             "replayUrl": e.get("replayUrl"),
-        })
+        }
+        if e.get("raceId") not in (None, ""):
+            record["raceId"] = e.get("raceId")
+        if e.get("runnerId") not in (None, ""):
+            record["runnerId"] = e.get("runnerId")
+        final_bets.append(record)
 
     stakes = [b["stake"] for b in final_bets if isinstance(b.get("stake"), (int, float))]
     returns = [b["return"] for b in final_bets if isinstance(b.get("return"), (int, float))]
@@ -1851,12 +1857,10 @@ def map_to_final_bet(bet, sequence, running_pnl, running_complete):
         "sequence": sequence,
         "betTime": bet.get("betTime"),
         "raceTime": e.get("raceTime"),
-        "raceId": e.get("raceId"),
         "raceName": e.get("raceName"),
         "meeting": e.get("meeting") or bet.get("meeting"),
         "state": e.get("state"),
         "raceNumber": e.get("raceNumber") or bet.get("raceNumber"),
-        "runnerId": e.get("runnerId"),
         "runnerNumber": e.get("runnerNumber") or bet.get("runnerNumber"),
         "runnerName": e.get("runnerName") or bet.get("runnerName"),
         "betType": bet.get("betType"),
@@ -1877,6 +1881,10 @@ def map_to_final_bet(bet, sequence, running_pnl, running_complete):
         "enrichmentReason": e.get("reason"),
         "missingEnrichmentFields": missing,
     }
+    if e.get("raceId") not in (None, ""):
+        record["raceId"] = e.get("raceId")
+    if e.get("runnerId") not in (None, ""):
+        record["runnerId"] = e.get("runnerId")
     return record, running_pnl, running_complete
 
 def build_daily_bettings(enriched_payload, first_name="Customer", timezone="Australia/Melbourne"):
