@@ -354,6 +354,11 @@ The GET request itself succeeded, so the status endpoint returns HTTP `200` with
 
 Job failure fields are deliberately named `failureCode`, `failedStage` and `message` to distinguish them from pre-job API `errorCode` responses.
 
+The public failure code reflects the failed backend stage:
+
+- `KUBRICK_PLANNING_FAILED` with `failedStage: "PLANNING"`;
+- `KUBRICK_RENDERING_FAILED` with `failedStage: "RENDERING"`.
+
 The persisted/internal failure record may retain more diagnostic detail than is exposed to the client. Clients must not depend on raw Lambda/AWS exception text.
 
 ### Unknown job
