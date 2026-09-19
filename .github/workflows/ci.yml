@@ -88,6 +88,7 @@ jobs:
       - name: Verify canonical contract copies cannot drift
         run: |
           cmp -s contracts/bettings.schema.json lambda/builder-recap/contracts/bettings.schema.json
+          cmp -s contracts/bettings.schema.json local-normaliser/bettings.schema.json
           cmp -s contracts/planner-prompt.md lambda/builder-recap/contracts/planner-prompt.md
           cmp -s contracts/runtime-contract.json lambda/builder-recap/contracts/runtime-contract.json
           cmp -s contracts/scene-contracts.json lambda/builder-recap/contracts/scene-contracts.json
@@ -107,6 +108,13 @@ jobs:
           }
           console.log(`Scene 8 taxonomy/schema parity OK (${taxonomy.length} categories)`);
           NODE
+
+      - name: Syntax check Normaliser Python
+        run: |
+          python3 -m py_compile local-normaliser/normaliser.py
+          python3 -m py_compile tests/normaliser/normaliser.py
+          python3 -m py_compile tests/enrichment/enrich_pass2.py
+          echo "OK: Normaliser Python syntax validated."
 
       - name: Verify required builder baseline
         run: |
