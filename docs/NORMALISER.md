@@ -299,22 +299,100 @@ If validation fails, the script should identify the failing bet/field or semanti
 
 This milestone allows Pass 1, Pass 2, mapping and Kubrick compatibility to be proven against real selected racing days before any HTTP integration is enabled.
 
-### 2.10 Later Kubrick-client step
+### 2.10 Final Kubrick-client lifecycle
 
-Only after the candidate payload is proven will the same script add the final automated client step:
+Only after the candidate payload is proven will the same script enable the final automated client step.
+
+The local client owns the entire Kubrick request lifecycle:
 
 ```text
-read TAB_RECAP_API_KEY
--> POST /jobs
--> report synchronous admission result
--> if HTTP 202, retain jobId
--> poll GET /jobs/{jobId}
--> show RECEIVED / PLANNING / RENDERING progress
--> stop clearly on FAILED
--> when READY, print/open recapUrl
+validated canonical bettings.json
+    -> read TAB_RECAP_API_KEY
+    -> POST /jobs
+    -> inspect synchronous admission response
+    -> if HTTP 202, retain jobId
+    -> poll GET /jobs/{jobId}
+    -> report lifecycle status changes
+    -> when READY, receive fresh recapUrl
+    -> print recapUrl
+    -> automatically open recapUrl in the user's default browser
 ```
 
-The local client must distinguish Kubrick API admission errors from accepted-job processing failures exactly as defined in `docs/KUBRICK_API.md`.
+The client must distinguish **API admission** from **accepted-job processing** exactly as defined in `docs/KUBRICK_API.md`.
+
+For POST:
+
+```text
+non-202 response
+    -> report HTTP/errorCode clearly
+    -> no accepted Kubrick job
+    -> do not start polling
+
+HTTP 202
+    -> report accepted jobId
+    -> begin polling
+```
+
+For polling:
+
+```text
+RECEIVED  -> continue
+PLANNING  -> continue
+RENDERING -> continue
+FAILED    -> stop and report failureCode / failedStage / message
+READY     -> read recapUrl and complete
+```
+
+The user-facing output should remain concise and should normally print status only when it changes, for example:
+
+```text
+[KUBRICK] Submitting recap...
+[KUBRICK] Accepted. Job ID: 8d8c...
+
+[KUBRICK] Status: RECEIVED
+[KUBRICK] Status: PLANNING
+[KUBRICK] Status: RENDERING
+[KUBRICK] Status: READY
+
+============================================================
+RECAP READY
+============================================================
+
+Recap URL:
+https://...
+
+Opening recap in your default browser...
+```
+
+### 2.11 Launching the final recap
+
+When Kubrick returns `status: READY`, the response contains a fresh short-lived S3 presigned `recapUrl`.
+
+The local Python client should use the standard library `webbrowser` module to open that URL in the user's default browser.
+
+Conceptually:
+
+```python
+import webbrowser
+
+webbrowser.open(recap_url)
+```
+
+The script should **always print the URL as well as attempting to open it**, so the user still has a usable link if automatic browser launch fails.
+
+The presigned URL is temporary and must not be treated as durable state. The stable identifier is the Kubrick `jobId`; while the job remains READY, another `GET /jobs/{jobId}` can obtain a fresh presigned URL.
+
+The target local user experience is therefore:
+
+```text
+python normaliser.py
+-> select one racing day
+-> wait while the script normalises, enriches, validates and submits
+-> watch clear Kubrick status updates
+-> recap automatically opens in the browser when READY
+```
+
+No manual curl commands, S3 navigation, job-status lookups, URL copying, or AWS-console interaction should be required during normal use.
 
 ---
 
