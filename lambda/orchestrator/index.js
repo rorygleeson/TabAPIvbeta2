@@ -238,8 +238,15 @@ async function getJobStatus(event, requestId) {
   const status = response.Item.status?.S || 'UNKNOWN';
   const body = { jobId, status };
 
-  if (status === 'FAILED' && response.Item.error?.S) {
-    body.error = response.Item.error.S;
+  if (status === 'FAILED') {
+    const failedStage = response.Item.sceneS3Key?.S ? 'RENDERING' : 'PLANNING';
+    body.failureCode = failedStage === 'RENDERING'
+      ? 'KUBRICK_RENDERING_FAILED'
+      : 'KUBRICK_PLANNING_FAILED';
+    body.failedStage = failedStage;
+    body.message = failedStage === 'RENDERING'
+      ? 'Kubrick could not complete rendering.'
+      : 'Kubrick could not complete planning.';
   }
 
   if (status === 'READY' && response.Item.recapS3Key?.S) {
