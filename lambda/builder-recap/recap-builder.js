@@ -5,6 +5,11 @@ const path = require('path');
 const Ajv2020 = require('ajv/dist/2020');
 const addFormats = require('ajv-formats');
 
+const canonicalValidatorModule = fs.existsSync(path.join(__dirname, 'canonical-bettings-validator.js'))
+  ? './canonical-bettings-validator'
+  : '../../shared/canonical-bettings-validator';
+const { validateCanonicalBettingsSemantics } = require(canonicalValidatorModule);
+
 const ROOT = __dirname;
 const read = p => fs.readFileSync(path.join(ROOT, p), 'utf8');
 const json = p => JSON.parse(read(p));
@@ -25,9 +30,6 @@ class BuildError extends Error {
   constructor(stage, message) { super(message); this.name = 'BuildError'; this.stage = stage; }
 }
 const fail = (stage, message) => { throw new BuildError(stage, message); };
-const cents = n => Math.round(Number(n) * 100);
-const sameMoney = (a,b) => cents(a) === cents(b);
-const sum = xs => xs.reduce((a,b)=>a+Number(b),0);
 const signClass = n => Number(n) > 0 ? 'positive' : Number(n) < 0 ? 'negative' : 'zero';
 const esc = v => String(v ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 const fmtNum = n => Number.isInteger(Number(n)) ? String(Number(n)) : Number(n).toFixed(2).replace(/0+$/,'').replace(/\.$/,'');
@@ -48,21 +50,11 @@ function schemaCheck(validate, value, stage) {
 }
 
 function validateSource(b) {
-  const bets=b.bets, s=b.summary;
-  if (bets.length!==s.totalBets) fail('BETTINGS_SEMANTICS','summary.totalBets does not equal bets.length.');
-  bets.forEach((x,i)=>{ if(x.sequence!==i+1) fail('BETTINGS_SEMANTICS',`Bet sequence must be contiguous and ascending; expected ${i+1}.`); if(!sameMoney(x.profitLoss,x.return-x.stake)) fail('BETTINGS_SEMANTICS',`Bet ${x.sequence}: profitLoss must equal return - stake.`); const expected=i===0?x.profitLoss:bets[i-1].runningPnl+x.profitLoss; if(!sameMoney(x.runningPnl,expected)) fail('BETTINGS_SEMANTICS',`Bet ${x.sequence}: runningPnl is inconsistent.`); });
-  const wins=bets.filter(x=>x.result==='WIN'), losses=bets.filter(x=>x.result==='LOSS');
-  if(!sameMoney(s.totalStaked,sum(bets.map(x=>x.stake)))) fail('BETTINGS_SEMANTICS','summary.totalStaked mismatch.');
-  if(!sameMoney(s.totalReturned,sum(bets.map(x=>x.return)))) fail('BETTINGS_SEMANTICS','summary.totalReturned mismatch.');
-  if(s.wins!==wins.length||s.losses!==losses.length||s.wins+s.losses!==s.totalBets) fail('BETTINGS_SEMANTICS','summary win/loss counts mismatch.');
-  if(!sameMoney(s.finalPnl,bets.at(-1).runningPnl)||!sameMoney(s.finalPnl,s.totalReturned-s.totalStaked)) fail('BETTINGS_SEMANTICS','summary.finalPnl mismatch.');
-  if(s.meetings!==new Set(bets.map(x=>x.meeting)).size) fail('BETTINGS_SEMANTICS','summary.meetings mismatch.');
-  if(!sameMoney(s.biggestStake,Math.max(...bets.map(x=>x.stake)))) fail('BETTINGS_SEMANTICS','summary.biggestStake mismatch.');
-  checkSeqSummary(s.biggestWinSequence, earliestMax(wins.filter(x=>x.profitLoss>0),'profitLoss'), 'biggestWinSequence');
-  checkSeqSummary(s.biggestLossSequence, earliestMin(losses.filter(x=>x.profitLoss<0),'profitLoss'), 'biggestLossSequence');
-  checkSeqSummary(s.highestOddsWinnerSequence, earliestMax(wins,'odds'), 'highestOddsWinnerSequence');
+  validateCanonicalBettingsSemantics(
+    b,
+    message => fail('BETTINGS_SEMANTICS', message)
+  );
 }
-function checkSeqSummary(actual,bet,label){ const expected=bet?.sequence??null; if(actual!==expected) fail('BETTINGS_SEMANTICS',`summary.${label} must be ${expected}.`); }
 function earliestMax(xs,key){ if(!xs.length)return null; return xs.reduce((a,b)=>Number(b[key])>Number(a[key])?b:a); }
 function earliestMin(xs,key){ if(!xs.length)return null; return xs.reduce((a,b)=>Number(b[key])<Number(a[key])?b:a); }
 
