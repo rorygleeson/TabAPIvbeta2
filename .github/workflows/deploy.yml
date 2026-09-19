@@ -115,6 +115,7 @@ jobs:
           cp lambda/builder-recap/index.js dist/builder-recap-package/index.js
           cp lambda/builder-recap/recap-builder.js dist/builder-recap-package/recap-builder.js
           cp lambda/builder-recap/builder-plan-guard.js dist/builder-recap-package/builder-plan-guard.js
+          cp shared/canonical-bettings-validator.js dist/builder-recap-package/canonical-bettings-validator.js
           cp lambda/builder-recap/package.json dist/builder-recap-package/package.json
           cp -R lambda/builder-recap/node_modules dist/builder-recap-package/node_modules
           cp -R lambda/builder-recap/contracts dist/builder-recap-package/contracts
@@ -123,6 +124,7 @@ jobs:
           test -f dist/builder-recap-package/index.js
           test -f dist/builder-recap-package/recap-builder.js
           test -f dist/builder-recap-package/builder-plan-guard.js
+          test -f dist/builder-recap-package/canonical-bettings-validator.js
           test -f dist/builder-recap-package/runtime/recap-runtime.js
           test -d dist/builder-recap-package/templates
           test -d dist/builder-recap-package/contracts
@@ -133,6 +135,7 @@ jobs:
           unzip -l dist/builder-recap.zip | grep 'index.js'
           unzip -l dist/builder-recap.zip | grep 'recap-builder.js'
           unzip -l dist/builder-recap.zip | grep 'builder-plan-guard.js'
+          unzip -l dist/builder-recap.zip | grep 'canonical-bettings-validator.js'
           unzip -l dist/builder-recap.zip | grep 'runtime/recap-runtime.js'
           aws s3 cp \
             dist/builder-recap.zip \
