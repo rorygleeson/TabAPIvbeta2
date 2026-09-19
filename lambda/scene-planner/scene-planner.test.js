@@ -63,7 +63,6 @@ function assertCoreInvariants(bettings, plan) {
       assert.strictEqual(previous.betSequence, scene.betSequence, 'Scene 3 must match preceding Scene 2');
 
       const bet = bettings.bets[scene.betSequence - 1];
-      assert.strictEqual(bet.result, 'WIN', 'Replay bet must be a WIN');
       assert.match(bet.replayUrl || '', /^https:\/\//, 'Replay bet must have HTTPS footage');
     }
   }
@@ -84,9 +83,11 @@ function assertCoreInvariants(bettings, plan) {
   }
 
   if (totalBets > 40) {
-    const eligibleReplayCount = bettings.bets.filter(
-      bet => bet.result === 'WIN' && /^https:\/\//.test(bet.replayUrl || '')
-    ).length;
+    const eligibleReplayCount = new Set(
+      bettings.bets
+        .filter(bet => /^https:\/\//.test(bet.replayUrl || ''))
+        .map(bet => bet.replayUrl)
+    ).size;
     assert.ok(
       actualReplayCount >= Math.min(3, eligibleReplayCount),
       `${totalBets}-bet fixture must retain at least three eligible replays`
@@ -114,6 +115,59 @@ for (const totalBets of [5, 8, 16, 32, 75]) {
     const expected = readJson('deterministic-scene-plan-32.json');
     assert.deepStrictEqual(plan, expected, '32-bet planner output must match checked-in regression fixture');
   }
+}
+
+// Replay ranking is race/video based: unique replay URL, absolute net race P&L,
+// latest race wins only when the replay quota cuts through an equal-importance tie.
+{
+  const bettings = readJson('bettings-8.json');
+  const urls = {
+    a: 'https://example.com/replay-a.mp4',
+    b: 'https://example.com/replay-b.mp4',
+    c: 'https://example.com/replay-c.mp4',
+    d: 'https://example.com/replay-d.mp4'
+  };
+
+  bettings.bets.forEach(bet => { bet.replayUrl = null; });
+  bettings.bets[0].replayUrl = urls.a;
+  bettings.bets[0].profitLoss = 20;
+  bettings.bets[1].replayUrl = urls.a;
+  bettings.bets[1].profitLoss = -12; // replay A net = +8, importance 8
+  bettings.bets[2].replayUrl = urls.b;
+  bettings.bets[2].profitLoss = -30; // importance 30
+  bettings.bets[2].result = 'LOSS';
+  bettings.bets[3].replayUrl = urls.c;
+  bettings.bets[3].profitLoss = 15; // importance 15
+  bettings.bets[4].replayUrl = urls.d;
+  bettings.bets[4].profitLoss = -15; // importance 15, later than C
+  bettings.bets[4].result = 'LOSS';
+
+  const plan = buildDeterministicScenePlan(bettings);
+  assert.deepStrictEqual(
+    replaySequences(plan.scenes),
+    [3, 5],
+    '8-bet recap must select highest absolute net race P&L, with latest race winning cutoff tie'
+  );
+}
+
+// Multiple bets sharing the exact replay URL must never schedule the video twice.
+{
+  const bettings = readJson('bettings-8.json');
+  const shared = 'https://example.com/shared-replay.mp4';
+  bettings.bets.forEach(bet => { bet.replayUrl = null; });
+  bettings.bets[0].replayUrl = shared;
+  bettings.bets[0].profitLoss = 15;
+  bettings.bets[1].replayUrl = shared;
+  bettings.bets[1].profitLoss = 11;
+
+  const plan = buildDeterministicScenePlan(bettings);
+  const selected = replaySequences(plan.scenes);
+  assert.strictEqual(selected.length, 1, 'One unique replay URL must produce at most one Scene 3');
+  assert.strictEqual(
+    bettings.bets[selected[0] - 1].replayUrl,
+    shared,
+    'Selected Scene 3 must reference the shared replay URL'
+  );
 }
 
 console.log('Deterministic scene planner regression tests passed.');
