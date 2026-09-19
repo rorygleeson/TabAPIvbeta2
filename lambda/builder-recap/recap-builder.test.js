@@ -17,6 +17,12 @@ function edgeScenes(){return [{sceneType:1,openingTeaser:'A racing story is read
 function fastPlan(total,groupSize=5){const [s1,s6,s7]=edgeScenes(),scenes=[s1];let n=1;while(total-n+1>=2){const remaining=total-n+1,size=Math.min(groupSize,remaining===6?4:remaining);if(size<2)break;scenes.push({sceneType:8,betSequences:Array.from({length:size},(_,i)=>n+i),headline:'Quick results ahead',comments:Array.from({length:size},()=> 'On we go')});n+=size;}if(n<=total)scenes.push({sceneType:2,betSequence:n,tensionLine:'One runner remains before the finish.',reactionLine:'That completes the final result.'});scenes.push(s6,s7);return {planVersion:'2.0',scenes};}
 
 for(const count of [4,5]){const bettings=makeBettings(count),plan=fastPlan(count,count),out=buildRecap({bettings,scenePlan:plan});assert.match(out.html,new RegExp(`data-bet-count=\"${count}\"`));assert.match(out.html,new RegExp(`NEXT ${count}`));assert.match(out.html,/data-result-reveal-ms=/);assert.match(out.html,/data-scene-duration-ms=/);}
+const unplacedOut=buildRecap({bettings:makeBettings(5),scenePlan:fastPlan(5,5)});
+assert.match(unplacedOut.html,/UNPLACED/);
+assert.doesNotMatch(unplacedOut.html,/0TH/i);
+assert.match(unplacedOut.html,/1ST/);
+assert.match(unplacedOut.html,/4TH/);
+
 const optionalIdBettings=makeBettings(5);
 optionalIdBettings.bets.forEach(bet=>{delete bet.raceId;delete bet.runnerId;});
 const optionalIdOut=buildRecap({bettings:optionalIdBettings,scenePlan:fastPlan(5,5)});
