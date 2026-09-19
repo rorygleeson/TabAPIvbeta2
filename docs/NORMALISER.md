@@ -8,23 +8,37 @@ Current implementation baseline: local Python Normaliser derived from the v0.9 /
 
 The Normaliser converts TAB account-history CSV data into the factual betting input required by Kubrick.
 
-The Normaliser has three logical responsibilities:
+The local client has one selection stage in front of the existing three Normaliser passes:
 
 ```text
-TAB account-history CSV
+input\\ monthly TAB CSV files
+        |
+        v
+STAGE 0
+local CSV/day discovery and one-day selection
         |
         v
 PASS 1
 deterministic parsing, transaction grouping and horse-only classification
         |
         v
+SELECTED-DAY FILTER
+retain only the chosen eventDate before any historical enrichment
+        |
+        v
 PASS 2
-optional TAB historical enrichment / race identity resolution
+TAB historical enrichment / race identity resolution
         |
         v
 PASS 3
 finalise one racing day into canonical bettings.json
+        |
+        v
+KUBRICK CLIENT
+validate -> POST /jobs -> poll GET /jobs/{jobId} -> recapUrl
 ```
+
+Stage 0 is deliberately outside the Normaliser passes. It selects the source CSV and one event date; it does not replace or rewrite Pass 1.
 
 The Normaliser must never invent customer settlement facts or race facts.
 
@@ -60,7 +74,251 @@ Historical prices must never overwrite the customer's accepted Fixed price.
 
 ---
 
-## 2. Raw CSV shape
+
+## 2. Local client operating model
+
+The first working client is a **local Windows application/script**. It runs on the user's PC so it can continue to use the currently reachable TAB historical-results API for enrichment.
+
+The long-term hosted client will reuse the same parsing, enrichment, finalisation and Kubrick-client logic once the hosted AWS runtime is approved/allowlisted. Only the local input/menu shell should need to be replaced by a web upload/UI layer.
+
+### 2.1 Local directory model
+
+The local application owns a simple working directory:
+
+```text
+local-normaliser\\
+    normaliser.py
+    meeting-resolution.json
+    input\\
+        <monthly TAB account-history CSVs>
+    working\\
+        <generated run evidence>
+```
+
+The user places one or more TAB monthly account-history CSV files into:
+
+```text
+input\\
+```
+
+The user should not need to type a file name or date manually.
+
+### 2.2 Stage 0 — CSV scan and racing-day menu
+
+When the script starts, Stage 0 scans every `.csv` file under `input\\`.
+
+A TAB CSV normally represents a full statement period/month, so Stage 0 must inspect the CSV contents and identify the actual available **horse-racing event dates** rather than assuming that the file itself represents one recap day.
+
+Stage 0 builds one combined menu across all available monthly CSVs.
+
+Example:
+
+```text
+============================================================
+TAB DAILY RECAP - LOCAL NORMALISER
+============================================================
+
+Available racing days:
+
+  [1]  Tuesday 04 Nov 2025      12 bets
+  [2]  Saturday 18 Oct 2025      8 bets
+  [3]  Saturday 11 Oct 2025     14 bets
+  [4]  Saturday 27 Sep 2025      6 bets
+
+Select racing day [1-4]:
+```
+
+The first implementation uses **number + Enter** for reliability in Windows CMD. Arrow-key navigation may be added later, but it is not required for the first working client.
+
+Dates should normally be shown newest first.
+
+Each menu item internally retains at least:
+
+```text
+selectedDate
+sourceCsvPath
+displayDate
+eligibleHorseBetCount
+```
+
+The selected date must come from the parsed TAB `Event Date` evidence inside the CSV, not merely from the file name.
+
+### 2.3 Meaning of the displayed bet count
+
+The Stage 0 count should represent the logical horse-racing bet records that would proceed through the Normaliser, not raw CSV rows.
+
+Current counting model:
+
+```text
+Fixed WIN             -> 1
+Fixed PLACE           -> 1
+Fixed WIN & PLACE     -> 2 component records
+Tote WIN              -> 1
+Tote PLACE            -> 1
+Tote WIN & PLACE      -> 1 composite record
+```
+
+Unsupported/non-horse activity is not counted as an eligible recap bet.
+
+### 2.4 Stage 0 hand-off contract
+
+Stage 0 does **not** create a cut-down CSV and does not invent a new intermediate data format.
+
+Its hand-off is simply:
+
+```text
+sourceCsvPath
+selectedDate
+```
+
+For example:
+
+```text
+sourceCsvPath = input\\1st October 2025 - 31st October 2025.csv
+selectedDate  = 2025-10-18
+```
+
+The existing Pass 1 must then read the **original monthly CSV** using the existing parser and transaction-number grouping rules.
+
+This protects composite transactions and preserves the current source-evidence model.
+
+### 2.5 Selected-day filtering point
+
+The selected date is applied **after Pass 1 and before Pass 2**.
+
+Required flow:
+
+```text
+original monthly CSV
+    -> existing Pass 1
+    -> horse-only canonical internal records
+    -> retain eventDate == selectedDate only
+    -> existing Pass 2 historical enrichment
+```
+
+This is important because Pass 2 should not make historical API calls for every racing day in the month when the user selected only one recap day.
+
+### 2.6 Existing Normaliser logic to retain
+
+The working v0.9 logic should be preserved wherever possible, including:
+
+```text
+parse_csv()
+transaction-number grouping
+Fixed WIN / PLACE parsing
+Fixed WIN & PLACE parsing/reconciliation
+Tote WIN / PLACE parsing
+Tote WIN & PLACE parsing
+horse-only domain classification
+TAB historical API client
+DIRECT / LOCAL_LOOKUP / DEEP_API meeting resolution
+persistent meeting-resolution.json learning
+runner matching
+historical race/result/replay enrichment
+```
+
+Stage 0 is an outer client layer. It is not a reason to redesign these proven parsing/enrichment rules.
+
+### 2.7 User-facing progress and error behaviour
+
+The local script should behave like a small application rather than a raw developer harness.
+
+It should print clear progress messages for the major stages, for example:
+
+```text
+[STAGE 0] Scanning input files...
+[STAGE 0] Found 4 racing days.
+
+[PASS 1] Parsing selected monthly statement...
+[PASS 1] Complete: 8 selected-day horse bets.
+
+[PASS 2] Enriching historical race data...
+[PASS 2] Complete: 8 enriched, 0 partial, 0 unresolved.
+
+[VALIDATION] Building candidate Kubrick payload...
+[VALIDATION] Kubrick payload valid.
+
+READY TO SEND TO KUBRICK
+```
+
+Expected problems must be caught and reported clearly instead of allowing an unhandled Python traceback to be the primary user experience.
+
+Examples include:
+
+```text
+no CSV files in input\\
+invalid/unrecognised TAB statement format
+no horse-racing days found
+invalid menu selection
+selected date unexpectedly yields no bets
+TAB historical API unavailable
+meeting/race/runner cannot be resolved
+required enrichment is incomplete
+candidate Kubrick payload fails validation
+```
+
+Diagnostic evidence should still be written under `working\\` so failures remain inspectable.
+
+### 2.8 Kubrick API secret
+
+The eventual local Kubrick client reads the POC API key from the Windows environment:
+
+```text
+TAB_RECAP_API_KEY
+```
+
+The API key must not be hard-coded into `normaliser.py`, committed to GitHub, written into generated payloads, or stored in documentation.
+
+### 2.9 Current implementation milestone — stop before POST
+
+The immediate milestone is deliberately **not** to submit a job to Kubrick yet.
+
+The script should run:
+
+```text
+Stage 0
+-> Pass 1
+-> selected-day filter
+-> Pass 2 enrichment
+-> build candidate canonical Kubrick bettings.json
+-> validate candidate payload against the current Kubrick canonical contract
+-> report validation result
+-> print the complete candidate payload to the screen
+-> save the payload/evidence under working\\
+-> STOP
+```
+
+If validation passes, the final message should clearly state:
+
+```text
+READY TO SEND TO KUBRICK
+Kubrick request not sent in this build.
+```
+
+If validation fails, the script should identify the failing bet/field or semantic rule clearly and must not claim readiness.
+
+This milestone allows Pass 1, Pass 2, mapping and Kubrick compatibility to be proven against real selected racing days before any HTTP integration is enabled.
+
+### 2.10 Later Kubrick-client step
+
+Only after the candidate payload is proven will the same script add the final automated client step:
+
+```text
+read TAB_RECAP_API_KEY
+-> POST /jobs
+-> report synchronous admission result
+-> if HTTP 202, retain jobId
+-> poll GET /jobs/{jobId}
+-> show RECEIVED / PLANNING / RENDERING progress
+-> stop clearly on FAILED
+-> when READY, print/open recapUrl
+```
+
+The local client must distinguish Kubrick API admission errors from accepted-job processing failures exactly as defined in `docs/KUBRICK_API.md`.
+
+---
+
+## 3. Raw CSV shape
 
 The observed TAB statement format has these 11 transaction columns:
 
@@ -97,7 +355,7 @@ Related rows must be grouped by **Transaction Number**, not by row adjacency.
 
 ---
 
-## 3. Horse-only scope
+## 4. Horse-only scope
 
 Current recap scope is thoroughbred / gallops racing.
 
@@ -136,7 +394,7 @@ Sports Fixed bets normally do not follow that racing identity pattern.
 
 ---
 
-# 4. Final-design enrichment rules
+# 5. Final-design enrichment rules
 
 This section describes the intended **full/final Normaliser**.
 
@@ -151,7 +409,7 @@ There are two distinct reasons enrichment may be needed:
 
 These must not be confused.
 
-## 4.1 Fixed Odds WIN
+## 5.1 Fixed Odds WIN
 
 ### CSV structure
 
@@ -211,7 +469,7 @@ If the final Kubrick contract continues to require those fields, enrichment is t
 
 ---
 
-## 4.2 Fixed Odds PLACE
+## 5.2 Fixed Odds PLACE
 
 ### CSV structure
 
@@ -258,7 +516,7 @@ Enrichment is needed only for missing race/runner metadata, finishing position, 
 
 ---
 
-## 4.3 Fixed Odds WIN & PLACE
+## 5.3 Fixed Odds WIN & PLACE
 
 ### CSV structure
 
@@ -343,7 +601,7 @@ It must not fabricate component returns.
 
 ---
 
-## 4.4 Tote WIN
+## 5.4 Tote WIN
 
 ### CSV structure
 
@@ -411,7 +669,7 @@ Therefore, if Kubrick continues to require `odds > 0` for every record, **losing
 
 ---
 
-## 4.5 Tote PLACE
+## 5.5 Tote PLACE
 
 Tote PLACE follows the same settlement model as Tote WIN.
 
@@ -456,7 +714,7 @@ Again, a losing Tote PLACE has no positive odds/dividend that can honestly be de
 
 ---
 
-## 4.6 Tote WIN & PLACE
+## 5.6 Tote WIN & PLACE
 
 This is the main historical enrichment edge case.
 
@@ -567,7 +825,7 @@ Do not create two financial records unless the component settlement is actually 
 
 ---
 
-# 5. Observed sample audit — 10 supplied CSVs
+# 6. Observed sample audit — 10 supplied CSVs
 
 Audit basis:
 
@@ -609,10 +867,7 @@ These counts are evidence from the supplied sample set, not a guarantee about ev
 
 ---
 
-
----
-
-# 6. Melbourne Cup Fixed-format exception
+# 7. Melbourne Cup Fixed-format exception
 
 Two supplied horse-racing transactions use a non-standard Fixed selection shape:
 
@@ -656,7 +911,7 @@ potential return
 actual payout when applicable
 ```
 
-## 6.1 Final-design handling
+## 7.1 Final-design handling
 
 The full design should resolve this event through proper race/event enrichment rather than relying on display-name assumptions.
 
