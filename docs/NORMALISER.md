@@ -891,15 +891,79 @@ If the final product accepts the customer transaction as one combined Tote W&P b
 
 Race metadata enrichment may still be required separately.
 
+### Canonical Kubrick representation
+
+The preferred Kubrick representation is **one canonical bet record** for the whole Tote Win & Place transaction.
+
+Do not split the customer transaction into separate WIN and PLACE canonical bets merely to fit the Kubrick schema.
+
+The canonical financial values are:
+
+```text
+betType    = TOTE_WIN_PLACE
+stake      = totalStake
+return     = combinedPayout, or 0 for a settled loss
+profitLoss = return - stake
+```
+
+Kubrick currently requires one positive numeric `odds` value for every canonical bet. A Tote W&P transaction does not have one true quoted price because it has separate WIN and PLACE Tote dividends.
+
+For `TOTE_WIN_PLACE`, the canonical `odds` field is therefore defined as an **effective composite odds/multiple for the whole transaction**, not as a quoted single-market TAB price.
+
+For a transaction with a positive settled return:
+
+```text
+effectiveCompositeOdds = combinedReturn / totalStake
+```
+
+Example:
+
+```text
+WIN stake       = $5
+PLACE stake     = $15
+total stake     = $20
+combined return = $42
+
+Kubrick odds    = 42 / 20
+                = 2.10
+```
+
+This value describes the effective return multiple achieved by the combined customer transaction.
+
+The Normaliser should still preserve the actual historical Tote evidence obtained during enrichment:
+
+```text
+winDividend
+placeDividend
+winReturn
+placeReturn
+combinedReturn
+```
+
+Those component values remain useful for reconciliation and explanation, but they do not require the transaction to be split into two Kubrick bets.
+
+For a settled losing Tote W&P transaction, `return / stake` would be zero and therefore cannot satisfy Kubrick's current `odds > 0` contract. The Normaliser must use the enriched official WIN and PLACE Tote dividends to derive a positive effective composite odds value for the transaction. It must not use zero and must not invent a price without historical dividend evidence.
+
+The exact losing-transaction effective-odds calculation must be deterministic, documented in implementation, and based only on:
+
+```text
+winStake
+placeStake
+official winDividend
+official placeDividend
+```
+
+If the required historical dividends are unavailable, the record is not Kubrick-ready and validation must fail rather than fabricate a value.
+
 ### Record count
 
-Preferred transaction model:
+Locked transaction model:
 
 ```text
 1 Tote W&P transaction -> 1 combined TOTE_WIN_PLACE record
 ```
 
-Do not create two financial records unless the component settlement is actually proven.
+Do not create two financial records for Tote W&P. Component WIN/PLACE enrichment remains supporting evidence inside the Normaliser, while Kubrick receives one canonical transaction record.
 
 ---
 
