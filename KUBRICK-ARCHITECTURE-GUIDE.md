@@ -283,7 +283,7 @@ replayImportance = abs(raceNetPnl)
 
 Candidates rank by highest replayImportance first. If the replay quota cuts through an equal-importance tie, the later replay group is preferred. The existing replay-count/runtime policy still decides how many videos are included.
 
-Each selected replay group uses one representative bet for its Scene 2/Scene 3 attachment; Scene 3 must immediately follow that Scene 2.
+Each selected replay group uses one representative bet for its Scene 2/Scene 3 attachment. The representative is the bet in that replay group with the largest absolute individual profitLoss; an exact tie uses the later bet sequence. Scene 3 must immediately follow that Scene 2.
 
 ### Scene 2 allowance
 
