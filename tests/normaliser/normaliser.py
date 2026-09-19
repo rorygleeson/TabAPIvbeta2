@@ -644,7 +644,9 @@ class TabHistoricalApi:
             data = self._get(url, kind)
         except Exception as ex:
             message = str(ex)
-            self.error_cache[url] = message
+            cause = ex.__cause__ if ex.__cause__ is not None else ex
+            if self._non_retryable_http_error(cause):
+                self.error_cache[url] = message
             raise RuntimeError(message) from ex
 
         self.response_cache[url] = data
@@ -2033,7 +2035,7 @@ def process_selected_day(path, selected_date, root, api, store, first_name, time
             "selectedDate": selected_date,
             "dateApiCallsCumulative": api.date_calls,
             "raceApiCallsCumulative": api.race_calls,
-            "apiCacheHitsCumulative": api.cache_hits,
+            "apiCacheHitsCumulative": api.cache_hits,\n            "apiFailureCacheHitsCumulative": api.failure_cache_hits,
             "localLookupHitsCumulative": store.hits,
             "localLookupMissesCumulative": store.misses,
             "localLookupAmbiguousCumulative": store.ambiguous,
