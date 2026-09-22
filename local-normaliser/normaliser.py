@@ -931,6 +931,85 @@ def tote_wp_candidate_financial_match(bet, runner):
     return enrich_money2(win_return + place_return) == csv_combined
 
 
+def verify_ambiguous_racing_domain(date_payload, bet, api):
+    """Try to prove an ambiguous racing candidate across R/G/H before horse-only fallback.
+
+    This is deliberately conservative: candidate races must contain the exact CSV
+    runner name, and when the CSV also supplies a runner number the same API runner
+    must match that number. Exactly one surviving race is required. No fuzzy meeting
+    matching or guessed aliases are used.
+    """
+    race_number = enrich_to_int(bet.get("raceNumber"))
+    wanted_name = enrich_norm_text(bet.get("runnerName"))
+    wanted_number = enrich_to_int(bet.get("runnerNumber"))
+    if not isinstance(date_payload, dict) or race_number is None or not wanted_name:
+        return None, None, "domain verification lacks date payload, race number, or exact runner name"
+
+    meetings = [
+        m for m in enrich_as_list(date_payload.get("meetings"))
+        if isinstance(m, dict)
+        and enrich_norm_text(m.get("raceType")) in {"R", "G", "H"}
+        and race_number in meeting_race_numbers(m)
+    ]
+    candidates = []
+    race_errors = []
+
+    for meeting in meetings:
+        venue = meeting.get("venueMnemonic")
+        race_type = meeting.get("raceType")
+        if not venue or not race_type:
+            continue
+        try:
+            race = api.race(str(bet.get("eventDate")), str(venue), str(race_type), race_number)
+        except Exception as ex:
+            race_errors.append(f"{meeting.get('meetingName') or venue}: {str(ex)[:240]}")
+            continue
+        if not isinstance(race, dict):
+            continue
+
+        exact = [
+            r for r in enrich_as_list(race.get("runners"))
+            if isinstance(r, dict)
+            and enrich_norm_text(r.get("runnerName")) == wanted_name
+            and (
+                wanted_number is None
+                or enrich_to_int(r.get("runnerNumber")) == wanted_number
+            )
+        ]
+        if len(exact) != 1:
+            continue
+
+        runner = exact[0]
+        financial = tote_wp_candidate_financial_match(bet, runner)
+        if financial is None:
+            financial = tote_candidate_financial_match(bet, runner)
+        candidates.append({
+            "meeting": meeting,
+            "race": race,
+            "runner": runner,
+            "financialMatch": financial,
+        })
+
+    financial_true = [c for c in candidates if c["financialMatch"] is True]
+    if len(financial_true) == 1:
+        c = financial_true[0]
+        suffix = f"; raceLookupFailures={len(race_errors)}" if race_errors else ""
+        return c["meeting"], c["race"], f"DOMAIN_API_UNIQUE_FINANCIAL_MATCH{suffix}"
+
+    if len(candidates) == 1:
+        c = candidates[0]
+        suffix = f"; raceLookupFailures={len(race_errors)}" if race_errors else ""
+        return c["meeting"], c["race"], f"DOMAIN_API_UNIQUE_EXACT_RUNNER{suffix}"
+
+    if not candidates and race_errors:
+        return None, None, (
+            f"domain API could not prove a candidate; {len(race_errors)} race lookup(s) failed; "
+            f"first error: {race_errors[0]}"
+        )
+    suffix = f"; raceLookupFailures={len(race_errors)}" if race_errors else ""
+    return None, None, f"domain API resolution not unique: {len(candidates)} candidate race(s){suffix}"
+
+
 def deep_resolve_meeting(date_payload, bet, api):
     """Fallback only. Accepts exactly one API-proven candidate; never fuzzy-guesses.
 
@@ -1230,7 +1309,27 @@ def resolve_meeting_and_race(bet, api, store):
         else:
             lookup_reason = f"{lookup_reason}; no stored target valid for requested date/race"
 
-    # 3. Expensive fallback: horse candidates only.
+    # 3. Domain verification for ambiguous racing candidates. The CSV does not
+    # always say Gallops/Greyhounds/Harness, so prove the runner across R/G/H before
+    # restricting the expensive fallback to horse races.
+    domain_meeting, domain_race, domain_reason = verify_ambiguous_racing_domain(date_payload, bet, api)
+    if domain_meeting is not None and domain_race is not None:
+        domain_type = enrich_norm_text(domain_meeting.get("raceType"))
+        if domain_type != "R":
+            return domain_meeting, None, "NON_HORSE_API", (
+                f"{domain_reason}; exact runner resolved raceType={domain_meeting.get('raceType')!r} "
+                "is not horse raceType R"
+            )
+        # A uniquely proven horse candidate can proceed directly. Persist only R
+        # mappings, preserving the existing learned-lookup invariant.
+        try:
+            store.put_proven(source_meeting, source_meeting_type, domain_meeting)
+        except Exception as ex:
+            print(f"      [LOOKUP WARNING] proven meeting was not persisted: {ex}")
+            domain_reason = f"{domain_reason}; local lookup persist failed: {ex}"
+        return domain_meeting, domain_race, "DOMAIN_API", domain_reason
+
+    # 4. Existing expensive fallback: horse candidates only.
     meeting, race, deep_reason = deep_resolve_meeting(date_payload, bet, api)
     if meeting is not None and race is not None:
         if enrich_norm_text(meeting.get("raceType")) != "R":
@@ -1245,7 +1344,10 @@ def resolve_meeting_and_race(bet, api, store):
             deep_reason = f"{deep_reason}; local lookup persist failed: {ex}"
         return meeting, race, "DEEP_API", deep_reason
 
-    return None, None, "UNRESOLVED", f"direct={direct_reason}; localLookup={lookup_reason}; deep={deep_reason}"
+    return None, None, "UNRESOLVED", (
+        f"direct={direct_reason}; localLookup={lookup_reason}; "
+        f"domain={domain_reason}; deep={deep_reason}"
+    )
 
 
 def enrich_one_bet(bet, api, store):

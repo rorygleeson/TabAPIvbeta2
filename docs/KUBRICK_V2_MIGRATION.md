@@ -518,7 +518,7 @@ The Orchestrator reads the current DynamoDB state. Processing clients can observ
 
 When the job is `READY`, the Orchestrator generates a fresh short-lived S3 presigned URL from `recapS3Key` and returns it as `recapUrl`.
 
-The presigned URL is never persisted in DynamoDB. Current TTL is 15 minutes.
+The presigned URL is never persisted in DynamoDB. Current TTL is 7 days (604800 seconds).
 
 The client consumption sequence is:
 

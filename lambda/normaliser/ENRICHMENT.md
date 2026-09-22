@@ -177,8 +177,14 @@ No fuzzy runner matching is allowed.
 
 ### Racing
 
-- all current Tote wager types are treated as racing
-- Fixed bets are treated as racing only when Pass 1 has structured `meeting`, `raceNumber` and `runnerName`
+- all current Tote wager types are treated as racing candidates
+- Fixed bets are treated as racing candidates only when Pass 1 has structured `meeting`, `raceNumber` and `runnerName`
+- explicit CSV `Gallops` confirms horse racing
+- explicit CSV `Greyhounds` / `Harness` is excluded before horse enrichment
+- when the CSV carries no explicit racing type, Pass 2 verifies the candidate across TAB race types `R`, `G` and `H` before the existing horse-only deep fallback
+- ambiguous-domain verification requires exact runner name and, when present in the CSV, the same runner number on that API runner; exactly one candidate must survive
+- a unique `R` candidate continues horse enrichment; a unique `G` or `H` candidate becomes `EXCLUDED_NON_HORSE`
+- no fuzzy meeting-name matching or guessed non-horse aliases are introduced
 
 ### Not applicable to the racing API
 

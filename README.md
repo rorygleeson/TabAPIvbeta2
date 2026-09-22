@@ -1,5 +1,10 @@
 # TabAPIvbeta2 — Kubrick
 
+## Architecture
+
+![Kubrick backend + Normaliser client architecture](kubrick.png)
+
+
 `TabAPIvbeta2` is the active source repository for **Kubrick**, the TAB Daily Recap generation service.
 
 Kubrick is the complete backend pipeline:

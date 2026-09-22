@@ -115,10 +115,14 @@ jobs:
           python3 -m py_compile tests/normaliser/normaliser.py
           python3 -m py_compile tests/enrichment/enrich_pass2.py
           python3 -m py_compile tests/normaliser/test_finishing_position_zero.py
+          python3 -m py_compile tests/normaliser/test_domain_verification.py
           echo "OK: Normaliser Python syntax validated."
 
       - name: Run Normaliser finishing-position regression
         run: python3 tests/normaliser/test_finishing_position_zero.py
+
+      - name: Run Normaliser racing-domain regression
+        run: python3 tests/normaliser/test_domain_verification.py
 
       - name: Verify required builder baseline
         run: |

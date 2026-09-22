@@ -319,15 +319,21 @@ runner  = NANDO BLAST
 race    = 2
 ```
 
-Current chain:
+The previously unresolved 2025-06-27 HEALESVLL / NANDO BLAST case is now independently proven from TAB historical results as:
 
 ```text
-DIRECT exact meeting -> miss
-LOCAL_LOOKUP         -> miss
-DEEP_API             -> aborts candidate evaluation after SAN ISIDRO race lookup returns 404
+source meeting: HEALESVLL
+TAB meeting:    HEALESVILLE
+venueMnemonic:  E
+raceType:       G
+raceNumber:     2
+runnerNumber:   5
+runnerName:     NANDO BLAST
 ```
 
-Technical debt: DEEP_API candidate evaluation should tolerate an isolated non-retryable candidate lookup failure by recording that candidate error and continuing to evaluate the remaining candidates. This must not introduce fuzzy matching, guessed aliases or fabricated race identity. The HEALESVLL abbreviation/domain must be independently proven before adding any mapping or exclusion rule.
+This exposed a resolver gap rather than a settlement/enrichment defect: an ambiguous racing-looking CSV record with no explicit Gallops/Greyhounds/Harness marker could miss DIRECT because the source meeting was abbreviated, then enter a horse-only deep resolver that never considered the real G/H meeting.
+
+The targeted fix adds deterministic domain verification across TAB race types `R`, `G` and `H` before the existing horse-only deep fallback. It requires an exact runner-name match and, when the CSV provides runner number, the same API runner must match that number. Exactly one surviving candidate is required. No fuzzy meeting matching or guessed alias is introduced.
 
 ## 8. Exact non-horse hard stop
 
@@ -350,6 +356,21 @@ EXCLUDED_NON_HORSE
 and is removed from final recap output.
 
 The resolver must not continue into LOCAL_LOOKUP or DEEP_API and reinterpret that same source bet as a different horse race.
+
+For an ambiguous racing candidate that was not directly identified by CSV text or exact meeting name, the resolver now performs an all-racing domain check:
+
+```text
+candidate with no explicit racing type
+    -> inspect date/race candidates across R/G/H
+    -> require exact runnerName
+    -> if runnerNumber exists, require it on the same runner
+    -> exactly one candidate:
+         R   -> continue as horse
+         G/H -> EXCLUDED_NON_HORSE
+    -> zero/multiple candidates -> preserve existing unresolved/fallback behaviour
+```
+
+This is a verification step, not fuzzy resolution. Non-horse mappings are not persisted into the horse-only learned mapping store.
 
 ## 9. Local learned meeting store
 
