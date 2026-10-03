@@ -288,7 +288,7 @@ Each selected replay group uses one representative bet for Scene 3 attachment. T
 
 ### Scene 2 allowance
 
-Replay-backed Scene 2s are mandatory.
+Replay-selected bets must be attached to either a matching Scene 2 or a protected Scene 5 containing the selected replay representative.
 
 Additional non-replay Scene 2 allowance:
 
