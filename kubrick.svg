@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
+<defs>
+  <linearGradient id="blue" x1="0" x2="1"><stop stop-color="#0785c8"/><stop offset="1" stop-color="#0aa0d8"/></linearGradient>
+  <linearGradient id="purple" x1="0" x2="1"><stop stop-color="#5a35ed"/><stop offset="1" stop-color="#7b86f7"/></linearGradient>
+  <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><path d="M0,0 L10,3 L0,6 Z" fill="#4b59d8"/></marker>
+  <style>
+    .t{font-family:Arial,Helvetica,sans-serif;fill:#0b1d4d}.h{font-size:42px;font-weight:700}.sub{font-size:21px;fill:#35527f}
+    .section{font-size:24px;font-weight:700;fill:white}.box{fill:white;stroke:#3f7bd8;stroke-width:2;rx:10}
+    .btxt{font-size:20px;font-weight:700;text-anchor:middle}.small{font-size:15px;fill:#35527f;text-anchor:middle}
+    .flow{stroke:#4b59d8;stroke-width:4;fill:none;marker-end:url(#arrow)}.green{stroke:#18843b}.api{fill:#fff1f7;stroke:#d81b60}
+    .queue{fill:#fff7df;stroke:#e79b19}.lambda{fill:#f4f2ff;stroke:#7a6df0}.store{fill:#ecfff1;stroke:#43a85f}.llm{fill:#f6efff;stroke:#7b4ddb;stroke-width:3}
+  </style>
+</defs>
+<rect width="1600" height="900" fill="#ffffff"/>
+<text x="55" y="55" class="t h">Kubrick backend + Normaliser client architecture</text>
+<text x="55" y="90" class="t sub">Normaliser creates valid canonical bettings.json; Kubrick owns orchestration, planning, AI copy, rendering and delivery.</text>
+
+<rect x="35" y="125" width="430" height="710" rx="15" fill="#f2fbff" stroke="#0b91d1" stroke-width="2"/>
+<rect x="35" y="125" width="430" height="58" rx="15" fill="url(#blue)"/>
+<text x="55" y="162" class="section">CLIENT APP — Local Normaliser</text>
+
+<rect x="80" y="220" width="150" height="80" class="box"/><text x="155" y="253" class="t btxt">TAB CSV files</text><text x="155" y="278" class="t btxt">input</text>
+<rect x="270" y="220" width="150" height="80" class="box"/><text x="345" y="253" class="t btxt">Select day</text><text x="345" y="278" class="t btxt">+ scan</text>
+<rect x="80" y="345" width="150" height="80" class="box"/><text x="155" y="378" class="t btxt">Pass 1</text><text x="155" y="403" class="t btxt">parse bets</text>
+<rect x="270" y="345" width="150" height="80" class="box"/><text x="345" y="378" class="t btxt">Pass 2</text><text x="345" y="403" class="t btxt">TAB enrichment</text>
+<rect x="105" y="485" width="285" height="80" class="box"/><text x="247" y="518" class="t btxt">Canonical bettings.json</text><text x="247" y="545" class="small">validated source-of-truth payload</text>
+<rect x="105" y="610" width="285" height="80" class="box"/><text x="247" y="643" class="t btxt">Validate + quarantine</text><text x="247" y="668" class="t btxt">only good records</text>
+<rect x="105" y="735" width="285" height="70" class="api" rx="10"/><text x="247" y="765" class="t btxt">POST /jobs</text><text x="247" y="790" class="t btxt">Poll /jobs/{jobId}</text>
+
+<path d="M155 300 V345" class="flow"/><path d="M345 300 V345" class="flow"/>
+<path d="M155 425 V465 H247 V485" class="flow"/><path d="M345 425 V465 H247" class="flow"/>
+<path d="M247 565 V610" class="flow"/><path d="M247 690 V735" class="flow"/>
+
+<rect x="500" y="125" width="1065" height="710" rx="15" fill="#f8f8ff" stroke="#6a64ef" stroke-width="2"/>
+<rect x="500" y="125" width="1065" height="58" rx="15" fill="url(#purple)"/>
+<text x="525" y="162" class="section">KUBRICK BACKEND — Public API + async recap engine</text>
+
+<rect x="545" y="350" width="155" height="105" class="api" rx="10"/><text x="622" y="390" class="t btxt">API Gateway</text><text x="622" y="420" class="t btxt">/poc</text>
+<rect x="745" y="350" width="155" height="105" class="lambda" rx="10"/><text x="822" y="390" class="t btxt">Orchestrator</text><text x="822" y="420" class="t btxt">Lambda</text>
+<rect x="945" y="350" width="155" height="105" class="queue" rx="10"/><text x="1022" y="390" class="t btxt">SQS</text><text x="1022" y="420" class="t btxt">Planner queue</text>
+<rect x="1145" y="350" width="155" height="105" class="lambda" rx="10"/><text x="1222" y="390" class="t btxt">Planner</text><text x="1222" y="420" class="t btxt">Lambda</text>
+<rect x="1345" y="350" width="155" height="105" class="queue" rx="10"/><text x="1422" y="390" class="t btxt">SQS</text><text x="1422" y="420" class="t btxt">Builder queue</text>
+
+<rect x="1345" y="570" width="155" height="105" class="lambda" rx="10"/><text x="1422" y="610" class="t btxt">Builder</text><text x="1422" y="640" class="t btxt">Lambda</text>
+
+<rect x="1115" y="570" width="185" height="105" class="llm" rx="12"/>
+<text x="1207" y="602" class="t btxt">Amazon Bedrock</text><text x="1207" y="628" class="t btxt">LLM copy call</text><text x="1207" y="652" class="small">exactly one grounded call</text>
+
+<rect x="860" y="220" width="190" height="95" class="store" rx="10"/><text x="955" y="257" class="t btxt">DynamoDB</text><text x="955" y="285" class="t btxt">job status</text>
+<rect x="1090" y="220" width="225" height="95" class="store" rx="10"/><text x="1202" y="257" class="t btxt">S3</text><text x="1202" y="285" class="t btxt">working + output</text>
+<rect x="1345" y="720" width="155" height="75" class="api" rx="10"/><text x="1422" y="752" class="t btxt">recap.html</text><text x="1422" y="778" class="t btxt">in S3</text>
+
+<path d="M390 770 H515 V402 H545" class="flow"/>
+<path d="M700 402 H745" class="flow"/><path d="M900 402 H945" class="flow"/><path d="M1100 402 H1145" class="flow"/><path d="M1300 402 H1345" class="flow"/>
+<path d="M1422 455 V570" class="flow"/>
+<path d="M1222 455 V570" class="flow"/><path d="M1207 570 V455" class="flow"/>
+<path d="M1422 675 V720" class="flow"/>
+
+<path d="M822 350 V270 H860" class="flow green"/><path d="M1222 350 V315 H955" class="flow green"/>
+<path d="M822 350 V300 H1090" class="flow green"/><path d="M1422 570 V315 H1202" class="flow green"/>
+
+<text x="1185" y="530" class="t small">deterministic scene structure → Bedrock copy → deterministic merge/fallback</text>
+<text x="805" y="505" class="t small">schema + semantic validation</text>
+<text x="535" y="815" class="t sub" style="font-size:16px">GET /jobs/{jobId} returns status + fresh presigned recapUrl when READY</text>
+</svg>
