@@ -6,3 +6,4 @@ Rory16BetTest.json
 test-main.html
 v36.html
 tests/results/
+local-normaliser/input/*.csv
