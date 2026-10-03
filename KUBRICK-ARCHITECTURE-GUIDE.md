@@ -197,7 +197,7 @@ The deterministic planner currently:
 5. selects a replay count within policy;
 6. ranks additional Scene 2 candidates;
 7. builds grouped primary scenes;
-8. inserts Scene 3 immediately after matching Scene 2;
+8. inserts Scene 3 immediately after the matching Scene 2, or after a protected Scene 5 containing the selected replay representative;
 9. places Scene 4 at the nearest legal primary-scene boundary to 50% coverage;
 10. appends Scene 6 and Scene 7;
 11. calculates duration;
@@ -284,7 +284,7 @@ implementation compares monetary values in integer cents to avoid floating-point
 
 Candidates rank by highest replayImportance first. If the replay quota cuts through an equal-importance tie, the later replay group is preferred. The existing replay-count/runtime policy still decides how many videos are included.
 
-Each selected replay group uses one representative bet for its Scene 2/Scene 3 attachment. The representative is the bet in that replay group with the largest absolute individual profitLoss; an exact tie uses the later bet sequence. Scene 3 must immediately follow that Scene 2.
+Each selected replay group uses one representative bet for Scene 3 attachment. The representative is the bet in that replay group with the largest absolute individual profitLoss; an exact tie uses the later bet sequence. Scene 3 must immediately follow either the matching Scene 2 or a protected Scene 5 containing that representative bet.
 
 ### Scene 2 allowance
 
@@ -308,6 +308,8 @@ total bets >= 17
 ```
 
 ### Grouping
+
+Before ordinary gap grouping, consecutive wagers on the same runner in the same race are protected as one Scene 5 when the run contains 2 or 3 bets. This protected group is not split by Scene 2 scoring and is not absorbed into Scene 8. If its replay is selected, Scene 3 follows the Scene 5.
 
 For recaps below 17 bets, Scene 8 is not used.
 
@@ -1063,7 +1065,7 @@ Template: `templates/scene-4-status-story-summary-template.html`
 
 LLM contribution: `lookingBackStory`, `lookingAheadTeaser`.
 
-### Scene 5 — Multi-race scene
+### Scene 5 — Multi-bet scene
 
 Template: `templates/scene-5-multi-race-scene-template.html`
 
