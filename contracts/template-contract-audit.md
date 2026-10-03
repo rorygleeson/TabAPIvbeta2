@@ -147,7 +147,7 @@ The Builder HTML-escapes display substitutions.
 
 - optional replay;
 - for a replay-eligible WIN or LOSS bet selected as the representative of a unique replay video;
-- immediately follows matching Scene 2;
+- immediately follows the matching primary Scene 2, or a Scene 5 containing the selected replay bet;
 - replay URL comes from canonical factual input; exact replayUrl is the duplicate identity and the same video may appear at most once;
 - WIN and LOSS replays share the same video lifecycle, but loss replays must not trigger the WIN payoff/celebration package.
 
@@ -160,6 +160,7 @@ The Builder HTML-escapes display substitutions.
 ### Scene 5
 
 - covers 2 or 3 consecutive primary bets;
+- consecutive wagers on the same runner in the same race are kept together here rather than split into separate Scene 2 cards;
 - grouping is structural;
 - customer copy should not expose internal planner vocabulary such as “block”.
 
