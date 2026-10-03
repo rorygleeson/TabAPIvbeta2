@@ -93,6 +93,58 @@ function replayPlan(total,replaySequences){
   );
 }
 
+
+// Scene 3 may follow a Scene 5 when its representative bet is contained in that group.
+{
+  const bettings=makeBettings(5);
+  bettings.bets[0].runnerName='VERZAIN';
+  bettings.bets[0].betType='WIN';
+  bettings.bets[0].replayUrl='https://example.com/verzain-replay.mp4';
+  bettings.bets[1].raceId=bettings.bets[0].raceId;
+  bettings.bets[1].raceName=bettings.bets[0].raceName;
+  bettings.bets[1].meeting=bettings.bets[0].meeting;
+  bettings.bets[1].state=bettings.bets[0].state;
+  bettings.bets[1].raceNumber=bettings.bets[0].raceNumber;
+  bettings.bets[1].raceTime=bettings.bets[0].raceTime;
+  bettings.bets[1].runnerId=bettings.bets[0].runnerId;
+  bettings.bets[1].runnerNumber=bettings.bets[0].runnerNumber;
+  bettings.bets[1].runnerName='VERZAIN';
+  bettings.bets[1].betType='PLACE';
+
+  const [s1,s6,s7]=edgeScenes();
+  const scene5={
+    sceneType:5,
+    betSequences:[1,2],
+    setupKicker:'NEXT UP',
+    setupHeadline:'Two bets on one runner',
+    payoffHeadline:'Those results are in',
+    contextLine:'The day keeps moving.'
+  };
+  const plan={planVersion:'2.0',scenes:[
+    s1,
+    scene5,
+    {sceneType:3,betSequence:1,replayLabel:'RACE REPLAY',replayComments:['Result in','Race complete']},
+    {sceneType:5,betSequences:[3,4],setupKicker:'NEXT UP',setupHeadline:'Two more bets',payoffHeadline:'Those results are in',contextLine:'The day keeps moving.'},
+    {sceneType:2,betSequence:5,tensionLine:'Final bet ready.',reactionLine:'Result recorded.'},
+    s6,
+    s7
+  ]};
+
+  const out=buildRecap({bettings,scenePlan:plan});
+  assert.strictEqual(out.replayCount,1);
+  assert.match(out.html,/VERZAIN/);
+  assert.match(out.html,/WIN/);
+  assert.match(out.html,/PLACE/);
+
+  const bad=JSON.parse(JSON.stringify(plan));
+  bad.scenes[2].betSequence=3;
+  bettings.bets[2].replayUrl='https://example.com/wrong-replay.mp4';
+  assert.throws(
+    ()=>buildRecap({bettings,scenePlan:bad}),
+    e=>e instanceof BuildError&&/replay must immediately follow Scene 2 or Scene 5 containing the same bet/.test(e.message)
+  );
+}
+
 const runtimeContract=JSON.parse(fs.readFileSync(path.resolve(__dirname,'contracts/runtime-contract.json'),'utf8'));
 assert.strictEqual(runtimeContract.timeline.scene3.replayClipSeconds,17);
 assert.strictEqual(runtimeContract.timeline.scene3.replayStartSecondsBeforeEnd,48);
