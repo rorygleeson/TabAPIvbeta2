@@ -335,7 +335,7 @@
       "name": "Status / Story summary",
       "template": "templates/scene-4-status-story-summary-template.html",
       "position": "optional-deterministic-midpoint",
-      "placementRule": "Deterministic planner code exclusively decides whether Scene 4 is present, its final position, and checkpointAfterBetSequence. When present, choose the primary Scene 2/5/8 boundary minimizing abs(completed/totalBets-.5), earlier tie. If the selected boundary ends in a Scene 2 with attached Scene 3, Scene 4 renders after that replay while the checkpoint remains the same completed-primary count. Never split a Scene 8 group to create a midpoint.",
+      "placementRule": "Deterministic planner code exclusively decides whether Scene 4 is present, its final position, and checkpointAfterBetSequence. When present, choose the primary Scene 2/5/8 boundary minimizing abs(completed/totalBets-.5), earlier tie. If the selected boundary ends in a Scene 2 or Scene 5 with attached Scene 3, Scene 4 renders after that replay while the checkpoint remains the same completed-primary count. Never split a Scene 8 group to create a midpoint.",
       "fields": {
         "checkpointAfterBetSequence": {
           "source": "PLANNER_DERIVED"
