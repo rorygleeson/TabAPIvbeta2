@@ -242,6 +242,46 @@ function isHttpsUrl(value) {
   }
 }
 
+function normalizedIdentityPart(value) {
+  return String(value ?? '').trim().toUpperCase();
+}
+
+function sameRaceAndRunner(a, b) {
+  const sameRace = a.raceId && b.raceId
+    ? a.raceId === b.raceId
+    : normalizedIdentityPart(a.meeting) === normalizedIdentityPart(b.meeting) &&
+      Number(a.raceNumber) === Number(b.raceNumber);
+
+  if (!sameRace) return false;
+
+  return a.runnerId && b.runnerId
+    ? a.runnerId === b.runnerId
+    : Number(a.runnerNumber) === Number(b.runnerNumber) &&
+      normalizedIdentityPart(a.runnerName) === normalizedIdentityPart(b.runnerName);
+}
+
+function buildProtectedSameRunnerRaceGroups(bets) {
+  const groupsByStart = new Map();
+  let index = 0;
+
+  while (index < bets.length) {
+    let end = index + 1;
+    while (end < bets.length && sameRaceAndRunner(bets[index], bets[end])) {
+      end += 1;
+    }
+
+    const size = end - index;
+    if (size === 2 || size === 3) {
+      const sequences = bets.slice(index, end).map(bet => bet.sequence);
+      groupsByStart.set(sequences[0], sequences);
+    }
+
+    index = end;
+  }
+
+  return groupsByStart;
+}
+
 function scoreBet(bet, facts, policy) {
   const weights = policy.scoring;
   const previousPnl = bet.sequence === 1 ? 0 : facts.bets[bet.sequence - 2].runningPnl;
@@ -278,9 +318,17 @@ function selectFeaturedSequences(facts, policy, requiredSequences, targetCount) 
 
 function buildScenes(facts, policy, featuredSequences, replaySequences) {
   const primaryScenes = [];
+  const protectedGroups = buildProtectedSameRunnerRaceGroups(facts.bets);
   let sequence = 1;
 
   while (sequence <= facts.totalBets) {
+    const protectedGroup = protectedGroups.get(sequence);
+    if (protectedGroup) {
+      primaryScenes.push({ sceneType: 5, betSequences: protectedGroup });
+      sequence += protectedGroup.length;
+      continue;
+    }
+
     if (featuredSequences.has(sequence)) {
       primaryScenes.push({ sceneType: 2, betSequence: sequence });
       sequence += 1;
@@ -288,7 +336,11 @@ function buildScenes(facts, policy, featuredSequences, replaySequences) {
     }
 
     const gap = [];
-    while (sequence <= facts.totalBets && !featuredSequences.has(sequence)) {
+    while (
+      sequence <= facts.totalBets &&
+      !featuredSequences.has(sequence) &&
+      !protectedGroups.has(sequence)
+    ) {
       gap.push(sequence);
       sequence += 1;
     }
@@ -302,8 +354,9 @@ function buildScenes(facts, policy, featuredSequences, replaySequences) {
   for (const primaryScene of primaryScenes) {
     scenes.push(primaryScene);
 
-    if (primaryScene.sceneType === 2 && replaySequences.has(primaryScene.betSequence)) {
-      scenes.push({ sceneType: 3, betSequence: primaryScene.betSequence });
+    const replaySequence = replaySequenceForPrimaryScene(primaryScene, replaySequences);
+    if (replaySequence !== null) {
+      scenes.push({ sceneType: 3, betSequence: replaySequence });
     }
 
     const completedSequence = lastCoveredSequence(primaryScene);
@@ -315,6 +368,29 @@ function buildScenes(facts, policy, featuredSequences, replaySequences) {
   scenes.push({ sceneType: 6 });
   scenes.push({ sceneType: 7 });
   return scenes;
+}
+
+function replaySequenceForPrimaryScene(scene, replaySequences) {
+  if (scene.sceneType === 2) {
+    return replaySequences.has(scene.betSequence) ? scene.betSequence : null;
+  }
+
+  if (scene.sceneType === 5) {
+    const matches = scene.betSequences.filter(sequence => replaySequences.has(sequence));
+    if (matches.length > 1) {
+      throw new Error('A Scene 5 group may contain at most one selected replay representative.');
+    }
+    return matches[0] ?? null;
+  }
+
+  return null;
+}
+
+function replayAttachedToPreviousPrimary(previous, replaySequence) {
+  if (!previous) return false;
+  if (previous.sceneType === 2) return previous.betSequence === replaySequence;
+  if (previous.sceneType === 5) return previous.betSequences.includes(replaySequence);
+  return false;
 }
 
 function groupGap(sequences, allowScene8) {
@@ -444,8 +520,10 @@ function validateDeterministicPlan(scenes, facts, replaySequences) {
 
     if (scene.sceneType === 3) {
       const previous = scenes[index - 1];
-      if (!previous || previous.sceneType !== 2 || previous.betSequence !== scene.betSequence) {
-        throw new Error(`Scene 3 for bet ${scene.betSequence} must immediately follow its Scene 2.`);
+      if (!replayAttachedToPreviousPrimary(previous, scene.betSequence)) {
+        throw new Error(
+          `Scene 3 for bet ${scene.betSequence} must immediately follow the Scene 2 or Scene 5 containing that bet.`
+        );
       }
       const bet = facts.bets[scene.betSequence - 1];
       if (!isReplayEligible(bet)) {

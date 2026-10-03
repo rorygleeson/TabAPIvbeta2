@@ -223,7 +223,7 @@ if the replay quota cuts through an equal-importance tie, prefer the later repla
 the same replayUrl may be selected at most once
 ```
 
-Within a selected replay group, the representative bet used for the Scene 2/Scene 3 attachment is the bet with the largest absolute individual profitLoss; an exact tie uses the later bet sequence.
+Within a selected replay group, the representative bet used for the Scene 3 attachment is the bet with the largest absolute individual profitLoss; an exact tie uses the later bet sequence. The replay follows either its matching Scene 2 or a protected Scene 5 containing that representative bet.
 
 Replay count remains owned by the existing bet-volume/runtime planner policy; this ranking only decides which unique replay videos fill those slots.
 
@@ -247,6 +247,8 @@ totalBets >= 17
 ```
 
 ### Grouping
+
+Before ordinary gap grouping, consecutive wagers on the same runner in the same race are protected as one Scene 5 when the run contains 2 or 3 bets. Race identity uses raceId when both bets provide it, otherwise meeting + raceNumber. Runner identity uses runnerId when both bets provide it, otherwise runnerNumber + runnerName. A selected Scene 3 replay may immediately follow that Scene 5 when its representative bet is contained in the group. Scene 8 never absorbs a protected same-runner/race group and does not directly own replay attachment.
 
 Below 17 bets:
 
