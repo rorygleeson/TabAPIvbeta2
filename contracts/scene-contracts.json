@@ -286,7 +286,7 @@
     "3": {
       "name": "Race replay",
       "template": "templates/scene-3-race-replay-template.html",
-      "position": "immediately-after-scene-2-same-bet",
+      "position": "immediately-after-primary-scene-containing-selected-replay-bet",
       "eligibility": "valid non-empty HTTPS replayUrl; WIN and LOSS bets are both eligible. Replay selection groups bets by exact replayUrl so the same video is selected at most once. Unique replay groups rank by absolute net race P&L using integer cents; equal-importance cutoff ties prefer the later replay group. The representative bet is the largest absolute individual P&L in the group, with an exact tie preferring the later bet sequence.",
       "fields": {
         "meetingRace": "DERIVED",
@@ -367,7 +367,7 @@
       }
     },
     "5": {
-      "name": "Multi-race scene",
+      "name": "Multi-bet scene",
       "template": "templates/scene-5-multi-race-scene-template.html",
       "plannerInput": {
         "betSequences": {
