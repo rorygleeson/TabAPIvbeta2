@@ -200,4 +200,104 @@ for (const totalBets of [5, 8, 16, 32, 75]) {
   );
 }
 
+
+// Consecutive bets on the same runner in the same race are an atomic Scene 5 group.
+// A selected replay for that race follows the Scene 5 exactly once.
+{
+  const bettings = readJson('bettings-8.json');
+  const first = bettings.bets[0];
+  const second = bettings.bets[1];
+  second.raceId = first.raceId;
+  second.raceName = first.raceName;
+  second.meeting = first.meeting;
+  second.state = first.state;
+  second.raceNumber = first.raceNumber;
+  second.raceTime = first.raceTime;
+  second.runnerId = first.runnerId;
+  second.runnerNumber = first.runnerNumber;
+  second.runnerName = first.runnerName;
+  second.betType = 'PLACE';
+
+  const shared = 'https://example.com/verzain-race.mp4';
+  bettings.bets.forEach(bet => { bet.replayUrl = null; });
+  first.replayUrl = shared;
+  second.replayUrl = shared;
+
+  const plan = buildDeterministicScenePlan(bettings);
+  const groupedIndex = plan.scenes.findIndex(scene =>
+    scene.sceneType === 5 &&
+    JSON.stringify(scene.betSequences) === JSON.stringify([1, 2])
+  );
+
+  assert.ok(groupedIndex >= 0, 'Same race/runner consecutive wagers must share one Scene 5');
+  assert.strictEqual(
+    plan.scenes.some(scene => scene.sceneType === 2 && [1, 2].includes(scene.betSequence)),
+    false,
+    'Protected same race/runner wagers must not split into Scene 2'
+  );
+  assert.strictEqual(plan.scenes[groupedIndex + 1].sceneType, 3, 'Replay must immediately follow grouped Scene 5');
+  assert.ok([1, 2].includes(plan.scenes[groupedIndex + 1].betSequence));
+  assert.strictEqual(
+    bettings.bets[plan.scenes[groupedIndex + 1].betSequence - 1].replayUrl,
+    shared
+  );
+}
+
+// Same race with different runners must not activate protected grouping.
+{
+  const bettings = readJson('bettings-8.json');
+  const first = bettings.bets[0];
+  const second = bettings.bets[1];
+  second.raceId = first.raceId;
+  second.raceName = first.raceName;
+  second.meeting = first.meeting;
+  second.state = first.state;
+  second.raceNumber = first.raceNumber;
+  second.raceTime = first.raceTime;
+
+  bettings.bets.forEach(bet => { bet.replayUrl = null; });
+  first.replayUrl = 'https://example.com/race-runner-a.mp4';
+  second.replayUrl = 'https://example.com/race-runner-b.mp4';
+  first.profitLoss = 100;
+  second.profitLoss = 90;
+
+  const plan = buildDeterministicScenePlan(bettings);
+  assert.strictEqual(
+    plan.scenes.some(scene =>
+      scene.sceneType === 5 &&
+      scene.betSequences[0] === 1 &&
+      scene.betSequences.includes(2)
+    ),
+    false,
+    'Different runners in the same race must not be protected as one Scene 5'
+  );
+}
+
+// Same runner identity in different races must not activate protected grouping.
+{
+  const bettings = readJson('bettings-8.json');
+  const first = bettings.bets[0];
+  const second = bettings.bets[1];
+  second.runnerId = first.runnerId;
+  second.runnerNumber = first.runnerNumber;
+  second.runnerName = first.runnerName;
+
+  bettings.bets.forEach(bet => { bet.replayUrl = null; });
+  first.replayUrl = 'https://example.com/runner-race-a.mp4';
+  second.replayUrl = 'https://example.com/runner-race-b.mp4';
+  first.profitLoss = 100;
+  second.profitLoss = 90;
+
+  const plan = buildDeterministicScenePlan(bettings);
+  assert.strictEqual(
+    plan.scenes.some(scene =>
+      scene.sceneType === 5 &&
+      scene.betSequences[0] === 1 &&
+      scene.betSequences.includes(2)
+    ),
+    false,
+    'Same runner in different races must not be protected as one Scene 5'
+  );
+}
+
 console.log('Deterministic scene planner regression tests passed.');
