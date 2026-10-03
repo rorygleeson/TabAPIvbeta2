@@ -8,7 +8,7 @@ const FALLBACK_TEXT = {
   lookingBackStory: 'The day has already taken a few turns.',
   lookingAheadTeaser: 'There is still more to come.',
   setupKicker: 'Next up',
-  setupHeadline: 'A quick run of races',
+  setupHeadline: 'A quick run of bets',
   payoffHeadline: 'Those results are in',
   contextLine: 'The day keeps moving.',
   dayVerdict: 'A racing day with plenty of movement from start to finish.',
