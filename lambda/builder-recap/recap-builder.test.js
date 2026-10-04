@@ -58,6 +58,11 @@ const scene7Template=fs.readFileSync(path.resolve(__dirname,'templates/scene-7-f
 assert.match(scene7Template,/Gamble responsibly\. Call Gambling Help on 1800 858 858 or visit gamblinghelponline\.org\.au/);
 assert.match(scene7Template,/\.scene-type-7 \.s7-safe\{position:absolute;[^}]*bottom:12px;[^}]*font-size:10px/);
 assert.match(scene7Template,/@media\(max-width:620px\)\{[^]*\.scene-type-7 \.s7-safe\{left:5vw;right:5vw;bottom:9px;font-size:9px\}/);
+assert.match(scene7Template,/@media\(orientation:landscape\) and \(max-height:900px\)\{/);
+assert.match(scene7Template,/\.scene-type-7\{align-items:flex-start;padding:12px 5vw 48px\}/);
+assert.match(scene7Template,/\.scene-type-7 \.s7-hero\{margin-top:8px;font-size:clamp\(40px,5vw,66px\);line-height:\.92\}/);
+assert.match(scene7Template,/\.scene-type-7 \.s7-summary\{margin-top:14px;max-width:760px;font-size:clamp\(15px,1\.55vw,21px\);line-height:1\.16\}/);
+assert.match(scene7Template,/\.scene-type-7 \.s7-safe\{left:8vw;right:8vw;bottom:9px;font-size:9px;line-height:1\.15\}/);
 const scene6Template=fs.readFileSync(path.resolve(__dirname,'templates/scene-6-daily-summary-template.html'),'utf8');
 assert.match(scene6Template,/@media \(orientation:portrait\) and \(max-width:640px\)\{/);
 assert.match(scene6Template,/\.scene-type-6\{align-items:flex-start;justify-content:center;padding:18px 6vw 22px\}/);
