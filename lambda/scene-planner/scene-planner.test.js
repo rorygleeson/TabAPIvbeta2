@@ -239,8 +239,8 @@ for (const totalBets of [5, 8, 16, 32, 75]) {
 }
 
 
-// Consecutive bets on the same runner in the same race are an atomic Scene 5 group.
-// A selected replay for that race follows the Scene 5 exactly once.
+// Consecutive bets on the same runner in the same race are protected as one Scene 5
+// only when that group owns a selected replay. The replay then follows exactly once.
 {
   const bettings = readJson('bettings-8.json');
   const first = bettings.bets[0];
@@ -278,6 +278,51 @@ for (const totalBets of [5, 8, 16, 32, 75]) {
   assert.strictEqual(
     bettings.bets[plan.scenes[groupedIndex + 1].betSequence - 1].replayUrl,
     shared
+  );
+}
+
+// Same-runner/race wagers without a selected replay are not protected and may compact into Scene 8.
+{
+  const bettings = readJson('bettings-32.json');
+  const first = bettings.bets[0];
+  const second = bettings.bets[1];
+
+  second.raceId = first.raceId;
+  second.raceName = first.raceName;
+  second.meeting = first.meeting;
+  second.state = first.state;
+  second.raceNumber = first.raceNumber;
+  second.raceTime = first.raceTime;
+  second.runnerId = first.runnerId;
+  second.runnerNumber = first.runnerNumber;
+  second.runnerName = first.runnerName;
+  second.betType = 'PLACE';
+
+  bettings.bets.forEach(bet => { bet.replayUrl = null; });
+  bettings.bets[9].replayUrl = 'https://example.com/replay-10.mp4';
+  bettings.bets[9].result = 'WIN';
+  bettings.bets[19].replayUrl = 'https://example.com/replay-20.mp4';
+  bettings.bets[19].result = 'WIN';
+
+  const plan = buildDeterministicScenePlan(bettings);
+
+  assert.strictEqual(
+    plan.scenes.some(scene =>
+      scene.sceneType === 5 &&
+      scene.betSequences[0] === 1 &&
+      scene.betSequences.includes(2)
+    ),
+    false,
+    'Same-runner/race wagers without a selected replay must not be protected as Scene 5'
+  );
+
+  assert.ok(
+    plan.scenes.some(scene =>
+      scene.sceneType === 8 &&
+      scene.betSequences.includes(1) &&
+      scene.betSequences.includes(2)
+    ),
+    'Unprotected same-runner/race wagers should be eligible for Scene 8 compression'
   );
 }
 
