@@ -142,13 +142,16 @@ for (const totalBets of [5, 8, 16, 32, 75]) {
   bettings.bets.forEach(bet => { bet.replayUrl = null; });
   bettings.bets[0].replayUrl = urls.a;
   bettings.bets[0].profitLoss = 20;
+  bettings.bets[0].result = 'WIN';
   bettings.bets[1].replayUrl = urls.a;
   bettings.bets[1].profitLoss = -12; // replay A net = +8, importance 8
+  bettings.bets[1].result = 'LOSS';
   bettings.bets[2].replayUrl = urls.b;
   bettings.bets[2].profitLoss = -30; // importance 30
   bettings.bets[2].result = 'LOSS';
   bettings.bets[3].replayUrl = urls.c;
   bettings.bets[3].profitLoss = 15; // importance 15
+  bettings.bets[3].result = 'WIN';
   bettings.bets[4].replayUrl = urls.d;
   bettings.bets[4].profitLoss = -15; // importance 15, later than C
   bettings.bets[4].result = 'LOSS';
