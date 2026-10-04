@@ -201,11 +201,9 @@ Scene 4 is placed after the legal primary-scene boundary nearest the target.
 
 ```text
 <=5   -> 1 desired
-<=10  -> 2 desired
-<=20  -> 3 desired
-<=40  -> 4 desired
->40   -> 5 desired
-max   -> 5
+6-40  -> 2 desired
+>40   -> 3 desired
+max   -> 3
 ```
 
 For >40 bets, retain at least 3 when 3+ unique eligible replay videos exist.

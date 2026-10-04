@@ -94,16 +94,16 @@
         "race": 0,
         "bet": 0.09,
         "tension": 0.22,
-        "dot1": 0.31,
-        "dot2": 0.35,
-        "dot3": 0.39,
-        "dot4": 0.43,
-        "dot5": 0.47,
-        "finish": 0.49,
-        "verdict": 0.53,
-        "fxStart": 0.57,
-        "reaction": 0.74,
-        "pnl": 0.84
+        "dot1": 0.25,
+        "dot2": 0.278,
+        "dot3": 0.306,
+        "dot4": 0.333,
+        "dot5": 0.361,
+        "finish": 0.394,
+        "verdict": 0.428,
+        "fxStart": 0.461,
+        "reaction": 0.583,
+        "pnl": 0.711
       }
     },
     "scene3": {
@@ -135,7 +135,9 @@
       "plannedPlaybackMs": 17000,
       "exitFadeMs": 550,
       "commentBaseClipSeconds": 11,
-      "commentLeadInMs": 3000
+      "commentLeadInMs": 3000,
+      "outcomeFxAtMs": 12400,
+      "secondaryLossFxAtMs": 13550
     },
     "scene4": {
       "durationMs": 8000
@@ -197,7 +199,7 @@
     "start": "After loadedmetadata, targetStart=max(0,duration-48). For normal long-form race replays this starts 48 seconds before the MP4 end.",
     "failure": "Metadata timeout/error, play rejection/timeout or media error: restore music, show exit veil, wait 550ms then advance. Replay failure never stalls recap.",
     "end": "Successful playback runs on the existing 17-second runtime timeline, then uses a 550ms exit veil before advancing; media ended/failure may finish earlier.",
-    "outcomeFx": "replayResult is required in the Scene 3 runtime payload. WIN replays may use the existing payoff/celebration package; LOSS replays must not trigger WINNER/BOOM/coins/confetti payoff celebration."
+    "outcomeFx": "replayResult is required in the Scene 3 runtime payload. At 12400ms every WIN replay shows the standard win payoff plus a mandatory 42-coin gold burst and one existing secondary celebration package. LOSS replays show a large frustrated payoff plus five sad/frustrated emoji pops, then a second distinct loss payoff at 13550ms. LOSS never triggers WINNER/BOOM/coins/confetti celebration. Outcome FX overlap the existing 17-second replay and add no duration."
   },
   "sharing": {
     "shareTitle": "Runtime derives '<user visible recap title>' as 'My TAB Racing Day Recap'.",

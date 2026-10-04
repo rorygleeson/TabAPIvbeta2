@@ -43,14 +43,12 @@ module.exports = {
     // videos cap what can actually be selected; WIN and LOSS bets are eligible.
     minimumByBets: [
       { maxBets: 5, minCount: 1 },
-      { maxBets: 10, minCount: 2 },
-      { maxBets: 20, minCount: 3 },
-      { maxBets: 40, minCount: 4 },
-      { maxBets: null, minCount: 5 }
+      { maxBets: 40, minCount: 2 },
+      { maxBets: null, minCount: 3 }
     ],
 
     // Absolute editorial ceiling for Scene 3 replay moments in one recap.
-    maxCount: 5,
+    maxCount: 3,
 
     // Minimum replay floor after eligibility is known. Large days should retain
     // enough actual race footage to keep the recap feeling like racing content.

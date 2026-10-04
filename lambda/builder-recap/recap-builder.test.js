@@ -78,7 +78,11 @@ function replayPlan(total,replaySequences){
   assert.strictEqual(bettings.bets[1].result,'LOSS');
   const out=buildRecap({bettings,scenePlan:replayPlan(5,[2])});
   assert.match(out.html,/"replayResult":"LOSS"/);
-  assert.match(out.html,/if\(data\.replayResult==='WIN'\)replayCelebrationFx\(root\)/);
+  assert.match(out.html,/if\(data\.replayResult==='WIN'\)replayCelebrationFx\(root\);else replayLossFx\(root\)/);
+  assert.match(out.html,/replayLossPayoffFx\(root\)/);
+  assert.match(out.html,/replayCoinExplosion\(root,42\)/);
+  assert.match(out.html,/NOOOO!/);
+  assert.match(out.html,/PATHETIC!/);
 }
 
 // The Builder independently protects the planner invariant that one video cannot appear twice.
@@ -146,9 +150,35 @@ function replayPlan(total,replaySequences){
 }
 
 const runtimeContract=JSON.parse(fs.readFileSync(path.resolve(__dirname,'contracts/runtime-contract.json'),'utf8'));
+assert.strictEqual(runtimeContract.timeline.scene2.durationMs,9000);
+assert.deepStrictEqual(runtimeContract.timeline.scene2.actionsRatio,{
+  race:0,
+  bet:0.09,
+  tension:0.22,
+  dot1:0.25,
+  dot2:0.278,
+  dot3:0.306,
+  dot4:0.333,
+  dot5:0.361,
+  finish:0.394,
+  verdict:0.428,
+  fxStart:0.461,
+  reaction:0.583,
+  pnl:0.711
+});
+assert.match(runtime,/\['finish',\.394\]/);
+assert.match(runtime,/\['reaction',\.583\]/);
+assert.match(runtime,/\['pnl',\.711\]/);
+assert.match(runtime,/\[\.25,\.278,\.306,\.333,\.361\]/);
+assert.match(runtime,/at:\.461\*d/);
+
 assert.strictEqual(runtimeContract.timeline.scene3.replayClipSeconds,17);
 assert.strictEqual(runtimeContract.timeline.scene3.replayStartSecondsBeforeEnd,48);
 assert.strictEqual(runtimeContract.timeline.scene3.replayEndSecondsBeforeEnd,31);
 assert.strictEqual(runtimeContract.timeline.scene3.plannedPlaybackMs,17000);
 assert.strictEqual(runtimeContract.timeline.scene3.exitFadeMs,550);
+assert.strictEqual(runtimeContract.timeline.scene3.outcomeFxAtMs,12400);
+assert.strictEqual(runtimeContract.timeline.scene3.secondaryLossFxAtMs,13550);
+assert.match(runtime,/at:12400,fn:\(\)=>\{if\(data\.replayResult==='WIN'\)replayCelebrationFx\(root\);else replayLossFx\(root\)\}/);
+assert.match(runtime,/at:13550,fn:\(\)=>\{if\(data\.replayResult==='LOSS'\)replayLossPayoffFx\(root\)\}/);
 console.log('Builder Scene 8 audit regression tests passed.');
