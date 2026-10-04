@@ -214,10 +214,10 @@ function buildAllowedGlobalFactIdsByPhase(scene, bettings) {
 
     case 5: {
       const first = Math.min(...scene.betSequences);
-      const last = Math.max(...scene.betSequences);
+      const priorCompletedScope = chronologyScope(first - 1);
       return {
-        PRE_RESULT_BLOCK: chronologyScope(first - 1),
-        POST_RESULT_BLOCK: chronologyScope(last)
+        PRE_RESULT_BLOCK: priorCompletedScope,
+        POST_RESULT_BLOCK: priorCompletedScope
       };
     }
 
