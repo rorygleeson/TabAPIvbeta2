@@ -214,7 +214,7 @@ Additionally:
 - comment item N may use only `POST_RESULT_BY_BET[N]`;
 - `blockReaction` is a POST_RESULT_BLOCK payoff shown only after every result in the group has been revealed;
 - make `blockReaction` the personality moment: concise, witty, conversational and racing/betting-flavoured;
-- for this field use the supplied semantic resultPattern (ALL_LOSSES, ALL_WINS or MIXED) and pnlDirection (POSITIVE, NEGATIVE or EVEN) qualitatively; the separate deterministic summary line owns exact counts and money;
+- for this field use the supplied compact `reactionContext` value, formatted as `RESULT_PATTERN|PNL_DIRECTION` (for example `ALL_LOSSES|NEGATIVE`), qualitatively; the separate deterministic summary line owns exact counts and money;
 - do not invent exact numbers, race-running action, incidents, stewards activity, form, conditions or any unsupported event;
 - when resultPattern is ALL_LOSSES or ALL_WINS, acknowledge that streak naturally rather than sounding like a statistical report.
 
