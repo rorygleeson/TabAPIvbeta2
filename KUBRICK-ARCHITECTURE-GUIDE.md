@@ -256,11 +256,9 @@ Desired replay count by recap size:
 
 ```text
 <= 5 bets   -> 1
-<= 10 bets  -> 2
-<= 20 bets  -> 3
-<= 40 bets  -> 4
-> 40 bets   -> 5
-absolute max -> 5
+6-40 bets    -> 2
+> 40 bets    -> 3
+absolute max -> 3
 ```
 
 For recaps above 40 bets, at least 3 replays are retained when at least 3 unique eligible replay videos exist.
