@@ -597,6 +597,14 @@
           "itemMaxChars": 64,
           "cardinality": "Must exactly equal betSequences.length; item i belongs to betSequences[i]."
         },
+        "blockReaction": {
+          "source": "LLM",
+          "maxWords": 16,
+          "maxChars": 150,
+          "phase": "POST_RESULT_BLOCK",
+          "rule": "A witty, conversational post-block payoff reacting to the supplied aggregate result mix and P&L. Do not repeat row-level facts or invent race action."
+        },
+        "blockSummaryLine": "DERIVED",
         "races": {
           "source": "DERIVED",
           "items": {

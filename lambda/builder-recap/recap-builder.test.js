@@ -14,10 +14,12 @@ function makeBettings(total){
   return {schemaVersion:'1.0',user:{firstName:'Rory'},day:{date:'2026-09-12',timezone:'Australia/Melbourne'},bets,summary:{totalBets:total,totalStaked:bets.reduce((n,x)=>n+x.stake,0),totalReturned:bets.reduce((n,x)=>n+x.return,0),wins:wins.length,losses:losses.length,finalPnl:running,meetings:1,biggestStake:10,biggestWinSequence:bw?.sequence??null,biggestLossSequence:bl?.sequence??null,highestOddsWinnerSequence:ho?.sequence??null}};
 }
 function edgeScenes(){return [{sceneType:1,openingTeaser:'A racing story is ready to unfold today.'},{sceneType:6,dayVerdict:'The day moved around before reaching its final shape.',standoutHighlightType:'strongestFinish',standoutCopy:'The closing stretch completed the story.'},{sceneType:7,selectedFinalHighlights:['totalBets','wins','finalPnl'],finalSummary:'The full racing day is wrapped with every bet accounted for.',shareCaption:'My racing day recap covered every bet from start to finish.'}];}
-function fastPlan(total,groupSize=5){const [s1,s6,s7]=edgeScenes(),scenes=[s1];let n=1;while(total-n+1>=2){const remaining=total-n+1,size=Math.min(groupSize,remaining===6?4:remaining);if(size<2)break;scenes.push({sceneType:8,betSequences:Array.from({length:size},(_,i)=>n+i),headline:'Quick results ahead',comments:Array.from({length:size},()=> 'On we go')});n+=size;}if(n<=total)scenes.push({sceneType:2,betSequence:n,tensionLine:'One runner remains before the finish.',reactionLine:'That completes the final result.'});scenes.push(s6,s7);return {planVersion:'2.0',scenes};}
+function fastPlan(total,groupSize=5){const [s1,s6,s7]=edgeScenes(),scenes=[s1];let n=1;while(total-n+1>=2){const remaining=total-n+1,size=Math.min(groupSize,remaining===6?4:remaining);if(size<2)break;scenes.push({sceneType:8,betSequences:Array.from({length:size},(_,i)=>n+i),headline:'Quick results ahead',comments:Array.from({length:size},()=> 'On we go'),blockReaction:'That run of results had some bite.'});n+=size;}if(n<=total)scenes.push({sceneType:2,betSequence:n,tensionLine:'One runner remains before the finish.',reactionLine:'That completes the final result.'});scenes.push(s6,s7);return {planVersion:'2.0',scenes};}
 
 for(const count of [4,5]){const bettings=makeBettings(count),plan=fastPlan(count,count),out=buildRecap({bettings,scenePlan:plan});assert.match(out.html,new RegExp(`data-bet-count=\"${count}\"`));assert.match(out.html,new RegExp(`NEXT ${count}`));assert.match(out.html,/data-result-reveal-ms=/);assert.match(out.html,/data-scene-duration-ms=/);}
 const unplacedOut=buildRecap({bettings:makeBettings(5),scenePlan:fastPlan(5,5)});
+assert.match(unplacedOut.html,/That run of results had some bite\./);
+assert.match(unplacedOut.html,/2 WINS • 3 LOSSES • \$0/);
 assert.match(unplacedOut.html,/UNPLACED/);
 assert.doesNotMatch(unplacedOut.html,/0TH/i);
 assert.match(unplacedOut.html,/1ST/);
@@ -35,6 +37,11 @@ assert.match(template,/\.s8-bet:nth-child\(5\)\{animation-delay:5\.55s\}/);
 assert.match(template,/\.s8-result\{[^}]*opacity:0;visibility:hidden/);
 assert.match(template,/\.s8-bet\.is-resolved \.s8-result\{opacity:1;visibility:visible/);
 assert.match(template,/\.s8-horse\{[^}]*white-space:normal;[^}]*text-overflow:clip/);
+assert.match(template,/\.s8-wrap\{[^}]*display:grid;[^}]*grid-template-rows:auto auto minmax\(0,1fr\);[^}]*align-content:start/);
+assert.match(template,/\.s8-footer\{[^}]*align-self:end/);
+assert.match(template,/data-role="s8-footer"/);
+assert.match(template,/\{\{blockReaction\}\}/);
+assert.match(template,/\{\{blockSummaryLine\}\}/);
 assert.match(template,/NEXT \{\{betCount\}\}/);
 const runtime=fs.readFileSync(path.resolve(__dirname,'runtime/recap-runtime.js'),'utf8');
 const soundtrackCorsIndex=runtime.indexOf("audio.crossOrigin='anonymous';");
@@ -44,6 +51,8 @@ assert.ok(soundtrackSrcIndex>soundtrackCorsIndex,'Soundtrack crossOrigin must be
 assert.doesNotMatch(runtime,/durations=\{2:5000,3:6500,4:8000,5:9500\}/);
 assert.doesNotMatch(runtime,/marks=\[900,2200,3500,4800,6100\]/);
 assert.match(runtime,/root\.dataset\.resultRevealMs/);
+assert.match(runtime,/data-role="s8-footer"/);
+assert.match(runtime,/marks\.at\(-1\)\+550/);
 assert.strictEqual(__test.durationWithinHardMaxMs(300000),true);
 assert.strictEqual(__test.durationWithinHardMaxMs(300001),false);
 __test.validateScene8RuntimeContract();

@@ -61,6 +61,7 @@ function mockCopyFromInput(copyInput) {
           item.headline = text('THE NEXT RUN OF BETS');
           item.headlineCategory = 'RACE_SEQUENCE_OR_DAY_STAGE';
           item.comments = scene.betSequences.map(() => text('Result locked in'));
+          item.blockReaction = text('That run left a mark on the day.');
           break;
         default:
           throw new Error('Unsupported scene type ' + scene.sceneType);

@@ -98,8 +98,14 @@ function assertGroundingScopes(payload) {
     if (scene.sceneType === 8) {
       const pre = scene.context.factAtomsByPhase.PRE_RESULT_BLOCK;
       const byBet = scene.context.factAtomsByPhase.POST_RESULT_BY_BET;
+      const post = scene.context.factAtomsByPhase.POST_RESULT_BLOCK;
       const sem = scene.context.semanticContextByPhase.PRE_RESULT_BLOCK.groupPosition;
       assert.ok(pre.BLOCK_TOTAL_STAKE);
+      assert.deepStrictEqual(post, {});
+      const postSem = scene.context.semanticContextByPhase.POST_RESULT_BLOCK;
+      assert.ok(['ALL_LOSSES','ALL_WINS','MIXED'].includes(postSem.resultPattern));
+      assert.ok(['POSITIVE','NEGATIVE','EVEN'].includes(postSem.pnlDirection));
+      assert.strictEqual(scene.requiredFields.blockReaction.phase, 'POST_RESULT_BLOCK');
       assert.strictEqual(typeof sem.isFinalGroup, 'boolean');
       assert.ok(['FINAL_GROUP','MORE_BETS_REMAIN'].includes(sem.finality));
       assert.strictEqual(sem.finality, sem.isFinalGroup ? 'FINAL_GROUP' : 'MORE_BETS_REMAIN');
@@ -146,6 +152,11 @@ for (const totalBets of [5, 8, 16, 32, 75]) {
     assert.ok(scene.context.factAtomsByPhase, 'Model payload keeps scene-local facts');
     assert.strictEqual(Object.prototype.hasOwnProperty.call(scene.context, 'allowedGlobalFactIdsByPhase'), false);
     assert.strictEqual(Object.prototype.hasOwnProperty.call(scene.context, 'protectedTerms'), false);
+    if (scene.sceneType === 8) {
+      assert.match(scene.context.reactionContext, /^(?:ALL_LOSSES|ALL_WINS|MIXED)\|(?:POSITIVE|NEGATIVE|EVEN)$/);
+      assert.strictEqual(Object.prototype.hasOwnProperty.call(scene.context.factAtomsByPhase, 'POST_RESULT_BLOCK'), false);
+      assert.strictEqual(Object.prototype.hasOwnProperty.call(scene.context.semanticContextByPhase || {}, 'POST_RESULT_BLOCK'), false);
+    }
   }
 
   payload.scenes.forEach((scene, index) => {

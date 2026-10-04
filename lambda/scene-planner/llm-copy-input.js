@@ -11,7 +11,7 @@ const FIELD_PHASES = {
   5: { setupKicker: 'PRE_RESULT_BLOCK', setupHeadline: 'PRE_RESULT_BLOCK', payoffHeadline: 'POST_RESULT_BLOCK', contextLine: 'POST_RESULT_BLOCK' },
   6: { dayVerdict: 'POST_DAY', standoutHighlightType: 'POST_DAY', standoutCopy: 'POST_DAY' },
   7: { selectedFinalHighlights: 'POST_DAY', finalSummary: 'POST_DAY', shareCaption: 'POST_DAY' },
-  8: { headline: 'PRE_RESULT_BLOCK', headlineCategory: 'PRE_RESULT_BLOCK', comments: 'POST_RESULT_BY_BET' }
+  8: { headline: 'PRE_RESULT_BLOCK', headlineCategory: 'PRE_RESULT_BLOCK', comments: 'POST_RESULT_BY_BET', blockReaction: 'POST_RESULT_BLOCK' }
 };
 
 function buildLlmCopyInput(bettings, deterministicPlan, contracts = sceneContracts) {
@@ -44,18 +44,29 @@ function buildLlmModelPayload(copyInput) {
     groundingProtocol: 'FACT_SEMANTIC_TEMPLATE_V1',
     semanticPolicy: cloneJson(copyInput.semanticPolicy || {}),
     scenes: copyInput.scenes.map(scene => {
+      const factAtomsByPhase = cloneJson(scene.context?.factAtomsByPhase || {});
+      const semanticContextByPhase = cloneJson(scene.context?.semanticContextByPhase || {});
+
       const item = {
         sceneIndex: scene.sceneIndex,
         sceneType: scene.sceneType,
         requiredFields: compactRequiredFields(scene.requiredFields),
-        context: {
-          factAtomsByPhase: cloneJson(scene.context?.factAtomsByPhase || {})
-        }
+        context: { factAtomsByPhase }
       };
 
-      if (scene.context?.semanticContextByPhase &&
-          Object.keys(scene.context.semanticContextByPhase).length > 0) {
-        item.context.semanticContextByPhase = cloneJson(scene.context.semanticContextByPhase);
+      if (scene.sceneType === 8) {
+        // Keep the rich validation input phase-shaped, but send the model a
+        // compact reaction signal instead of duplicating another full phase.
+        delete item.context.factAtomsByPhase.POST_RESULT_BLOCK;
+        const reaction = semanticContextByPhase.POST_RESULT_BLOCK;
+        if (reaction?.resultPattern && reaction?.pnlDirection) {
+          item.context.reactionContext = reaction.resultPattern + '|' + reaction.pnlDirection;
+        }
+        delete semanticContextByPhase.POST_RESULT_BLOCK;
+      }
+
+      if (Object.keys(semanticContextByPhase).length > 0) {
+        item.context.semanticContextByPhase = semanticContextByPhase;
       }
 
       if (scene.betSequence !== undefined) item.betSequence = scene.betSequence;
@@ -229,7 +240,10 @@ function buildAllowedGlobalFactIdsByPhase(scene, bettings) {
       const first = Math.min(...scene.betSequences);
       return {
         PRE_RESULT_BLOCK: chronologyScope(first - 1),
-        POST_RESULT_BY_BET: scene.betSequences.map(sequence => chronologyScope(sequence))
+        POST_RESULT_BY_BET: scene.betSequences.map(sequence => chronologyScope(sequence)),
+        // blockReaction is intentionally grounded only in Scene 8's compact
+        // local POST_RESULT_BLOCK atoms. Do not duplicate recap-wide history here.
+        POST_RESULT_BLOCK: []
       };
     }
 
@@ -305,13 +319,22 @@ function groupedContext(bettings, sequences, scene8) {
   };
 
   if (scene8) {
+    const winningBets = bets.filter(bet => bet.result === 'WIN').length;
+    const groupPnl = sum(bets.map(bet => bet.profitLoss));
+    const reactionSemantics = {
+      ...groupSemantics,
+      resultPattern: winningBets === 0 ? 'ALL_LOSSES' : winningBets === bets.length ? 'ALL_WINS' : 'MIXED',
+      pnlDirection: groupPnl > 0 ? 'POSITIVE' : groupPnl < 0 ? 'NEGATIVE' : 'EVEN'
+    };
     return {
       factAtomsByPhase: {
         PRE_RESULT_BLOCK: preBlock,
-        POST_RESULT_BY_BET: bets.map(bet => mergeAtoms(preBetAtoms(bet), postBetAtoms(bet)))
+        POST_RESULT_BY_BET: bets.map(bet => mergeAtoms(preBetAtoms(bet), postBetAtoms(bet))),
+        POST_RESULT_BLOCK: {}
       },
       semanticContextByPhase: {
-        PRE_RESULT_BLOCK: groupSemantics
+        PRE_RESULT_BLOCK: groupSemantics,
+        POST_RESULT_BLOCK: reactionSemantics
       },
       protectedTerms: protectedTerms(bettings, bets)
     };
@@ -421,6 +444,7 @@ function groupPostAtoms(bets) {
   const raceWinners = bets.filter(bet => Number(bet.finishingPosition) === 1).length;
   return mergeAtoms({
     BLOCK_WINNING_BETS: String(winningBets),
+    BLOCK_LOSING_BETS: String(bets.length - winningBets),
     BLOCK_RACE_WINNERS: String(raceWinners)
   },
   typedPnlAtoms('BLOCK', pl),

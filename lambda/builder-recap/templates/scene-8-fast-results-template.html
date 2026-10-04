@@ -1,11 +1,15 @@
 <!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>Scene 8 Fast Results</title><style>
 /* SCENE_PRODUCTION_CSS_START */
 .scene-type-8{--green:#22dc80;--green-soft:#8af0b7;--red:#ff5b6b;--white:#f7f9f8;--muted:#96a39d;--line:rgba(255,255,255,.12);position:absolute;left:0;right:0;top:var(--shell-top);bottom:var(--shell-bottom);padding:18px 5vw 82px;overflow:hidden;background:radial-gradient(circle at 50% 18%,rgba(34,220,128,.09),transparent 34%),linear-gradient(180deg,#07100c,#050807 62%,#020403)}
-.scene-type-8 .s8-wrap{width:min(900px,90vw);height:100%;margin:auto;display:flex;flex-direction:column;justify-content:center;position:relative;z-index:1}
+.scene-type-8 .s8-wrap{width:min(900px,90vw);height:100%;margin:auto;display:grid;grid-template-rows:auto auto minmax(0,1fr);align-content:start;position:relative;z-index:1}
 .scene-type-8 .s8-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px}
 .scene-type-8 .s8-kicker{font-size:11px;letter-spacing:.16em;font-weight:900;color:var(--green-soft)}
 .scene-type-8 .s8-headline{font-size:clamp(22px,5.8vw,38px);line-height:1;font-weight:950;text-align:right}
-.scene-type-8 .s8-list{display:grid;gap:6px}
+.scene-type-8 .s8-list{display:grid;gap:6px;align-content:start}
+.scene-type-8 .s8-footer{align-self:end;width:100%;padding:18px 2px 2px;border-top:1px solid rgba(255,255,255,.1);opacity:0;transform:translateY(10px);transition:opacity .42s ease,transform .42s ease}
+.scene-type-8 .s8-footer.is-visible{opacity:1;transform:none}
+.scene-type-8 .s8-block-reaction{font-size:clamp(24px,6.2vw,42px);line-height:1.02;font-weight:950;letter-spacing:-.02em;max-width:820px}
+.scene-type-8 .s8-block-summary{margin-top:8px;color:var(--muted);font-size:clamp(11px,2.6vw,15px);font-weight:900;letter-spacing:.09em;text-transform:uppercase}
 .scene-type-8 .s8-bet{position:relative;min-height:38px;border:1px solid var(--line);border-radius:11px;background:rgba(8,13,11,.8);padding:4px 8px;display:grid;grid-template-columns:minmax(0,1.45fr) minmax(100px,.75fr);gap:9px;align-items:center;overflow:hidden;opacity:0;transform:translateY(7px);transition:border-color .18s ease,background .18s ease,transform .18s ease}
 .scene-type-8.play .s8-bet{animation:s8rowin .28s ease forwards}
 .scene-type-8.play .s8-bet:nth-child(1){animation-delay:.35s}.scene-type-8.play .s8-bet:nth-child(2){animation-delay:1.65s}.scene-type-8.play .s8-bet:nth-child(3){animation-delay:2.95s}.scene-type-8.play .s8-bet:nth-child(4){animation-delay:4.25s}.scene-type-8.play .s8-bet:nth-child(5){animation-delay:5.55s}
@@ -34,8 +38,8 @@
 @keyframes s8sweep{from{transform:translateX(-110%)}to{transform:translateX(110%)}}
 @keyframes s8pop{0%{opacity:0;transform:scale(.55) rotate(-10deg)}25%{opacity:1;transform:scale(1.15) rotate(5deg)}70%{opacity:1}100%{opacity:0;transform:scale(.95) translateY(-8px)}}
 .scene-type-8[data-bet-count="5"] .s8-list{gap:3px}.scene-type-8[data-bet-count="5"] .s8-bet{min-height:28px}
-@media(orientation:portrait){.scene-type-8{padding:8px 4vw 86px}.scene-type-8 .s8-wrap{width:92vw}.scene-type-8 .s8-head{margin-bottom:7px}.scene-type-8 .s8-headline{font-size:clamp(20px,5.8vw,30px)}.scene-type-8 .s8-list{gap:4px}.scene-type-8 .s8-bet{min-height:30px;padding:2px 6px;border-radius:9px;grid-template-columns:minmax(0,1.52fr) minmax(88px,.72fr);gap:6px}.scene-type-8 .s8-main{gap:6px}.scene-type-8 .s8-meta{font-size:8px}.scene-type-8 .s8-horse{font-size:12px}.scene-type-8 .s8-outcome{font-size:12px}.scene-type-8 .s8-comment{font-size:9px}.scene-type-8 .s8-emoji{font-size:17px}}
-@media(orientation:landscape) and (max-height:900px){.scene-type-8{padding:8px 7vw 100px}.scene-type-8 .s8-wrap{width:min(840px,84vw)}.scene-type-8 .s8-head{margin-bottom:5px}.scene-type-8 .s8-headline{font-size:24px}.scene-type-8 .s8-list{gap:4px}.scene-type-8 .s8-bet{min-height:30px;padding:2px 6px}.scene-type-8 .s8-horse{font-size:15px}.scene-type-8 .s8-meta{font-size:9px}.scene-type-8 .s8-outcome{font-size:14px}.scene-type-8 .s8-comment{font-size:9px}}
+@media(orientation:portrait){.scene-type-8{padding:12px 4vw 86px}.scene-type-8 .s8-wrap{width:92vw}.scene-type-8 .s8-head{margin-bottom:7px}.scene-type-8 .s8-headline{font-size:clamp(20px,5.8vw,30px)}.scene-type-8 .s8-list{gap:4px}.scene-type-8 .s8-bet{min-height:30px;padding:2px 6px;border-radius:9px;grid-template-columns:minmax(0,1.52fr) minmax(88px,.72fr);gap:6px}.scene-type-8 .s8-main{gap:6px}.scene-type-8 .s8-meta{font-size:8px}.scene-type-8 .s8-horse{font-size:12px}.scene-type-8 .s8-outcome{font-size:12px}.scene-type-8 .s8-comment{font-size:9px}.scene-type-8 .s8-emoji{font-size:17px}.scene-type-8 .s8-footer{padding-top:14px}.scene-type-8 .s8-block-reaction{font-size:clamp(23px,6.6vw,34px);max-width:94%}.scene-type-8 .s8-block-summary{margin-top:6px;font-size:10px}}
+@media(orientation:landscape) and (max-height:900px){.scene-type-8{padding:8px 7vw 100px}.scene-type-8 .s8-wrap{width:min(840px,84vw)}.scene-type-8 .s8-head{margin-bottom:5px}.scene-type-8 .s8-headline{font-size:24px}.scene-type-8 .s8-list{gap:4px}.scene-type-8 .s8-bet{min-height:30px;padding:2px 6px}.scene-type-8 .s8-horse{font-size:15px}.scene-type-8 .s8-meta{font-size:9px}.scene-type-8 .s8-outcome{font-size:14px}.scene-type-8 .s8-comment{font-size:9px}.scene-type-8 .s8-footer{padding-top:10px}.scene-type-8 .s8-block-reaction{font-size:clamp(22px,2.4vw,34px)}.scene-type-8 .s8-block-summary{margin-top:5px;font-size:10px}}
 /* SCENE_PRODUCTION_CSS_END */
 </style></head><body>
 <!-- SCENE_PRODUCTION_MARKUP_START -->
@@ -47,6 +51,10 @@
         <div class="s8-main"><span class="s8-dot"></span><div><div class="s8-horse">{{horseName}}</div><div class="s8-meta">{{meetingName}} • R{{raceNumber}} • {{betType}} @ {{oddsDisplay}} • {{stakeDisplay}}</div></div></div>
         <div class="s8-result"><div class="s8-topline"><span class="s8-finish">{{finishingPositionText}}</span><span class="s8-outcome">{{betResult}} {{betProfitLossDisplay}}</span></div><div class="s8-comment">{{comment}}</div></div><span class="s8-emoji"></span>
       </article>{{/races}}
+    </div>
+    <div class="s8-footer" data-role="s8-footer">
+      <div class="s8-block-reaction">{{blockReaction}}</div>
+      <div class="s8-block-summary">{{blockSummaryLine}}</div>
     </div>
   </div>
 </section>
