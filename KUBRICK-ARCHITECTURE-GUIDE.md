@@ -280,7 +280,7 @@ replayImportance = abs(raceNetPnl)
 implementation compares monetary values in integer cents to avoid floating-point tie drift
 ```
 
-Candidates rank by highest replayImportance first. If the replay quota cuts through an equal-importance tie, the later replay group is preferred. The existing replay-count/runtime policy still decides how many videos are included.
+Candidates whose selected representative bet is a WIN rank ahead of LOSS candidates. Within each outcome class, candidates rank by highest replayImportance first; an equal-importance cutoff tie prefers the later replay group. If there are not enough WIN candidates to fill the replay quota, the remaining slots are filled by the highest-ranked LOSS candidates. The existing replay-count/runtime policy still decides how many videos are included.
 
 Each selected replay group uses one representative bet for Scene 3 attachment. The representative is the bet in that replay group with the largest absolute individual profitLoss; an exact tie uses the later bet sequence. Scene 3 must immediately follow either the matching Scene 2 or a protected Scene 5 containing that representative bet.
 
@@ -293,8 +293,8 @@ Additional non-replay Scene 2 allowance:
 ```text
 <= 10 bets  -> max 4 extra
 <= 20 bets  -> max 3 extra
-<= 40 bets  -> max 2 extra
-> 40 bets   -> max 1 extra
+21-40 bets   -> max 0 extra
+> 40 bets    -> max 1 extra
 ```
 
 ### Scene 8 threshold
