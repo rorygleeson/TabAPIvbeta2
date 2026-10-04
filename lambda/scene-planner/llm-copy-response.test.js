@@ -73,14 +73,19 @@ const groupedPnlId = Object.keys(groupedPostAtoms).find(id =>
 );
 assert.ok(groupedPnlId);
 const groundedGroup = goodResponse();
-groundedGroup.scenes[groupedIndex].contextLine =
-  '<B' + groupedFirst + '_FINISH> then <B' + groupedSecond + '_FINISH>. Net <' + groupedPnlId + '>.';
+groundedGroup.scenes[groupedIndex].contextLine = 'Net <' + groupedPnlId + '> across the grouped wagers.';
 const groundedGroupNormalized = validateCopyResponse(input, groundedGroup);
 assert.strictEqual(
   groundedGroupNormalized.scenes[groupedIndex].contextLine,
-  groupedPostAtoms['B' + groupedFirst + '_FINISH'] + ' then ' +
-    groupedPostAtoms['B' + groupedSecond + '_FINISH'] + '. Net ' +
-    groupedPostAtoms[groupedPnlId] + '.'
+  'Net ' + groupedPostAtoms[groupedPnlId] + ' across the grouped wagers.'
+);
+
+const repeatedRowFacts = goodResponse();
+repeatedRowFacts.scenes[groupedIndex].contextLine =
+  '<B' + groupedFirst + '_FINISH> then <B' + groupedSecond + '_FINISH>.';
+assert.throws(
+  () => validateCopyResponse(input, repeatedRowFacts),
+  /unknown or wrong-phase fact atom/
 );
 
 const dayIndex = input.scenes.findIndex(scene => scene.sceneType === 6);
