@@ -109,9 +109,7 @@ function replayPlan(total,replaySequences){
 {
   const bettings=makeBettings(5);
   bettings.bets[0].betType='PLACE';
-  bettings.bets[0].result='WIN';
-  bettings.bets[0].return=18;
-  bettings.bets[0].profitLoss=8;
+  bettings.bets[0].finishingPosition=2;
   bettings.bets[0].replayUrl='https://example.com/place-win-replay.mp4';
   const out=buildRecap({bettings,scenePlan:replayPlan(5,[1])});
   assert.match(out.html,/"replayResult":"WIN"/);
