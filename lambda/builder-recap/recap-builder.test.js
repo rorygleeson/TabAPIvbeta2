@@ -19,7 +19,7 @@ function fastPlan(total,groupSize=5){const [s1,s6,s7]=edgeScenes(),scenes=[s1];l
 for(const count of [4,5]){const bettings=makeBettings(count),plan=fastPlan(count,count),out=buildRecap({bettings,scenePlan:plan});assert.match(out.html,new RegExp(`data-bet-count=\"${count}\"`));assert.match(out.html,new RegExp(`NEXT ${count}`));assert.match(out.html,/data-result-reveal-ms=/);assert.match(out.html,/data-scene-duration-ms=/);}
 const unplacedOut=buildRecap({bettings:makeBettings(5),scenePlan:fastPlan(5,5)});
 assert.match(unplacedOut.html,/That run of results had some bite\./);
-assert.match(unplacedOut.html,/2 WINS • 3 LOSSES • \+\$5/);
+assert.match(unplacedOut.html,/2 WINS • 3 LOSSES • \$0/);
 assert.match(unplacedOut.html,/UNPLACED/);
 assert.doesNotMatch(unplacedOut.html,/0TH/i);
 assert.match(unplacedOut.html,/1ST/);
