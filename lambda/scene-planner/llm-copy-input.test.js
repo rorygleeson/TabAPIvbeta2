@@ -213,6 +213,32 @@ for (const totalBets of [5, 8, 16, 32, 75]) {
   assert.ok(strongest.factAtomIds.includes('STANDOUT_STRONGEST_FINISH_BET_COUNT'));
 }
 
+// Scene 5 payoff copy must summarize the group, not repeat row-level result facts already rendered.
+// Keep aggregate block outcome/P&L atoms, but do not expose individual finish/result/P&L atoms in POST_RESULT_BLOCK.
+{
+  const bettings = readJson('bettings-8.json');
+  const plan = {
+    artifactType: 'deterministicScenePlan',
+    artifactVersion: '1.0',
+    scenes: [{ sceneType: 5, betSequences: [1, 2] }]
+  };
+  const payload = buildLlmCopyInput(bettings, plan);
+  const scene = payload.scenes[0];
+  const post = scene.context.factAtomsByPhase.POST_RESULT_BLOCK;
+
+  assert.ok(post.BLOCK_WINNING_BETS !== undefined);
+  assert.ok(
+    Object.keys(post).some(id => /^BLOCK_(?:PROFIT|LOSS|BREAK_EVEN)_TEXT$/u.test(id)),
+    'Scene 5 must retain aggregate group P&L wording'
+  );
+  for (const sequence of [1, 2]) {
+    assert.strictEqual(Object.prototype.hasOwnProperty.call(post, 'B' + sequence + '_FINISH'), false);
+    assert.strictEqual(Object.prototype.hasOwnProperty.call(post, 'B' + sequence + '_BET_RESULT'), false);
+    assert.strictEqual(Object.prototype.hasOwnProperty.call(post, 'B' + sequence + '_PROFIT_TEXT'), false);
+    assert.strictEqual(Object.prototype.hasOwnProperty.call(post, 'B' + sequence + '_LOSS_TEXT'), false);
+  }
+}
+
 // Historical failure backfeed: 75-bet group 36-38 is NOT final; 74-75 IS final.
 {
   const bettings = readJson('bettings-75.json');
