@@ -11,7 +11,7 @@ const FIELD_PHASES = {
   5: { setupKicker: 'PRE_RESULT_BLOCK', setupHeadline: 'PRE_RESULT_BLOCK', payoffHeadline: 'POST_RESULT_BLOCK', contextLine: 'POST_RESULT_BLOCK' },
   6: { dayVerdict: 'POST_DAY', standoutHighlightType: 'POST_DAY', standoutCopy: 'POST_DAY' },
   7: { selectedFinalHighlights: 'POST_DAY', finalSummary: 'POST_DAY', shareCaption: 'POST_DAY' },
-  8: { headline: 'PRE_RESULT_BLOCK', headlineCategory: 'PRE_RESULT_BLOCK', comments: 'POST_RESULT_BY_BET' }
+  8: { headline: 'PRE_RESULT_BLOCK', headlineCategory: 'PRE_RESULT_BLOCK', comments: 'POST_RESULT_BY_BET', blockReaction: 'POST_RESULT_BLOCK' }
 };
 
 function buildLlmCopyInput(bettings, deterministicPlan, contracts = sceneContracts) {
@@ -227,9 +227,11 @@ function buildAllowedGlobalFactIdsByPhase(scene, bettings) {
 
     case 8: {
       const first = Math.min(...scene.betSequences);
+      const priorCompletedScope = chronologyScope(first - 1);
       return {
-        PRE_RESULT_BLOCK: chronologyScope(first - 1),
-        POST_RESULT_BY_BET: scene.betSequences.map(sequence => chronologyScope(sequence))
+        PRE_RESULT_BLOCK: priorCompletedScope,
+        POST_RESULT_BY_BET: scene.betSequences.map(sequence => chronologyScope(sequence)),
+        POST_RESULT_BLOCK: priorCompletedScope
       };
     }
 
@@ -308,10 +310,12 @@ function groupedContext(bettings, sequences, scene8) {
     return {
       factAtomsByPhase: {
         PRE_RESULT_BLOCK: preBlock,
-        POST_RESULT_BY_BET: bets.map(bet => mergeAtoms(preBetAtoms(bet), postBetAtoms(bet)))
+        POST_RESULT_BY_BET: bets.map(bet => mergeAtoms(preBetAtoms(bet), postBetAtoms(bet))),
+        POST_RESULT_BLOCK: postBlock
       },
       semanticContextByPhase: {
-        PRE_RESULT_BLOCK: groupSemantics
+        PRE_RESULT_BLOCK: groupSemantics,
+        POST_RESULT_BLOCK: groupSemantics
       },
       protectedTerms: protectedTerms(bettings, bets)
     };
@@ -421,6 +425,7 @@ function groupPostAtoms(bets) {
   const raceWinners = bets.filter(bet => Number(bet.finishingPosition) === 1).length;
   return mergeAtoms({
     BLOCK_WINNING_BETS: String(winningBets),
+    BLOCK_LOSING_BETS: String(bets.length - winningBets),
     BLOCK_RACE_WINNERS: String(raceWinners)
   },
   typedPnlAtoms('BLOCK', pl),
