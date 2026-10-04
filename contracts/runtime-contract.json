@@ -65,7 +65,8 @@
         "required": [
           "replayUrl",
           "replayComments",
-          "replayResult"
+          "replayResult",
+          "replayBetType"
         ]
       },
       "7": {
@@ -199,7 +200,7 @@
     "start": "After loadedmetadata, targetStart=max(0,duration-48). For normal long-form race replays this starts 48 seconds before the MP4 end.",
     "failure": "Metadata timeout/error, play rejection/timeout or media error: restore music, show exit veil, wait 550ms then advance. Replay failure never stalls recap.",
     "end": "Successful playback runs on the existing 17-second runtime timeline, then uses a 550ms exit veil before advancing; media ended/failure may finish earlier.",
-    "outcomeFx": "replayResult is required in the Scene 3 runtime payload. At 12400ms every WIN replay shows the standard win payoff plus a mandatory 42-coin gold burst and one existing secondary celebration package. LOSS replays show a large frustrated payoff plus five sad/frustrated emoji pops, then a second distinct loss payoff at 13550ms. LOSS never triggers WINNER/BOOM/coins/confetti celebration. Outcome FX overlap the existing 17-second replay and add no duration."
+    "outcomeFx": "replayResult and replayBetType are required in the Scene 3 runtime payload. At 12400ms every winning wager shows the standard celebration package plus a mandatory 42-coin gold burst and one existing secondary celebration package. Payoff wording is wager-type aware: PLACE wins say PLACE BET WON!, WIN wagers may use the existing stronger win payoff pool, and other winning wager types use BET WON! so the UI never implies the replayed runner won the race when only the wager won. LOSS replays show a large frustrated payoff plus five sad/frustrated emoji pops, then a second distinct loss payoff at 13550ms. LOSS never triggers WINNER/BOOM/coins/confetti celebration. Outcome FX overlap the existing 17-second replay and add no duration."
   },
   "sharing": {
     "shareTitle": "Runtime derives '<user visible recap title>' as 'My TAB Racing Day Recap'.",
