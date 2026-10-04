@@ -61,6 +61,8 @@ assert.match(runtime,/function scene8ResultFx\(bet,outcomeIndex\)/);
 assert.match(runtime,/coinFx\(22\)/);
 assert.match(runtime,/emojiFx\(\['🎉','🏆','🙌','🔥','✨'\],10,'burst'\)/);
 assert.match(runtime,/const lossIcons=\['😩','😬','🤦‍♂️','🙈','💔','😖','🫣'\]/);
+assert.match(runtime,/emojiFx\(lossIcons,8,'burst'\)/);
+assert.doesNotMatch(runtime,/emojiFx\(lossIcons,8,'fall'\)/);
 assert.doesNotMatch(runtime,/scene8ResultFx[^\n]*💸/);
 assert.match(runtime,/let winFxIndex=0,lossFxIndex=0/);
 assert.match(runtime,/scene8ResultFx\(bet,fxIndex\)/);
