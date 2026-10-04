@@ -15,7 +15,8 @@ const FALLBACK_TEXT = {
   standoutCopy: 'One moment stood out from the rest.',
   finalSummary: 'That wraps the racing day.',
   shareCaption: 'My racing day recap is complete.',
-  headline: 'Next up'
+  headline: 'Next up',
+  blockReaction: 'That run of results changed the shape of the day.'
 };
 
 function fallbackText(field) {
