@@ -66,6 +66,7 @@ assert.doesNotMatch(runtime,/emojiFx\(lossIcons,8,'fall'\)/);
 assert.doesNotMatch(runtime,/scene8ResultFx[^\n]*💸/);
 assert.match(runtime,/let winFxIndex=0,lossFxIndex=0/);
 assert.match(runtime,/scene8ResultFx\(bet,fxIndex\)/);
+assert.match(runtime,/function beginScene\(i,cls='is-active'\)\{[^\n]*resetGlobalFx\(\)/);
 assert.strictEqual(__test.durationWithinHardMaxMs(300000),true);
 assert.strictEqual(__test.durationWithinHardMaxMs(300001),false);
 __test.validateScene8RuntimeContract();
