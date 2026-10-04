@@ -78,7 +78,11 @@ function replayPlan(total,replaySequences){
   assert.strictEqual(bettings.bets[1].result,'LOSS');
   const out=buildRecap({bettings,scenePlan:replayPlan(5,[2])});
   assert.match(out.html,/"replayResult":"LOSS"/);
-  assert.match(out.html,/if\(data\.replayResult==='WIN'\)replayCelebrationFx\(root\)/);
+  assert.match(out.html,/if\(data\.replayResult==='WIN'\)replayCelebrationFx\(root\);else replayLossFx\(root\)/);
+  assert.match(out.html,/replayLossPayoffFx\(root\)/);
+  assert.match(out.html,/replayCoinExplosion\(root,42\)/);
+  assert.match(out.html,/NOOOO!/);
+  assert.match(out.html,/PATHETIC!/);
 }
 
 // The Builder independently protects the planner invariant that one video cannot appear twice.
@@ -173,4 +177,8 @@ assert.strictEqual(runtimeContract.timeline.scene3.replayStartSecondsBeforeEnd,4
 assert.strictEqual(runtimeContract.timeline.scene3.replayEndSecondsBeforeEnd,31);
 assert.strictEqual(runtimeContract.timeline.scene3.plannedPlaybackMs,17000);
 assert.strictEqual(runtimeContract.timeline.scene3.exitFadeMs,550);
+assert.strictEqual(runtimeContract.timeline.scene3.outcomeFxAtMs,12400);
+assert.strictEqual(runtimeContract.timeline.scene3.secondaryLossFxAtMs,13550);
+assert.match(runtime,/at:12400,fn:\(\)=>\{if\(data\.replayResult==='WIN'\)replayCelebrationFx\(root\);else replayLossFx\(root\)\}/);
+assert.match(runtime,/at:13550,fn:\(\)=>\{if\(data\.replayResult==='LOSS'\)replayLossPayoffFx\(root\)\}/);
 console.log('Builder Scene 8 audit regression tests passed.');
