@@ -307,7 +307,7 @@ total bets >= 17
 
 ### Grouping
 
-Before ordinary gap grouping, consecutive wagers on the same runner in the same race are protected as one Scene 5 when the run contains 2 or 3 bets. This protected group is not split by Scene 2 scoring and is not absorbed into Scene 8. If its replay is selected, Scene 3 follows the Scene 5.
+Before ordinary gap grouping, consecutive wagers on the same runner in the same race are protected as one Scene 5 only when the 2- or 3-bet run contains a selected replay representative. That protected group is not split by Scene 2 scoring and is not absorbed into Scene 8; its Scene 3 replay follows the Scene 5. Same-runner/race runs without a selected replay are not protected and may be compacted into normal Scene 8 grouping.
 
 For recaps below 17 bets, Scene 8 is not used.
 
