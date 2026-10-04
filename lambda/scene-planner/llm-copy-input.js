@@ -227,11 +227,12 @@ function buildAllowedGlobalFactIdsByPhase(scene, bettings) {
 
     case 8: {
       const first = Math.min(...scene.betSequences);
-      const priorCompletedScope = chronologyScope(first - 1);
       return {
-        PRE_RESULT_BLOCK: priorCompletedScope,
+        PRE_RESULT_BLOCK: chronologyScope(first - 1),
         POST_RESULT_BY_BET: scene.betSequences.map(sequence => chronologyScope(sequence)),
-        POST_RESULT_BLOCK: priorCompletedScope
+        // blockReaction is intentionally grounded only in Scene 8's compact
+        // local POST_RESULT_BLOCK atoms. Do not duplicate recap-wide history here.
+        POST_RESULT_BLOCK: []
       };
     }
 
