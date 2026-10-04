@@ -312,7 +312,7 @@ function groupedContext(bettings, sequences, scene8) {
       factAtomsByPhase: {
         PRE_RESULT_BLOCK: preBlock,
         POST_RESULT_BY_BET: bets.map(bet => mergeAtoms(preBetAtoms(bet), postBetAtoms(bet))),
-        POST_RESULT_BLOCK: postBlock
+        POST_RESULT_BLOCK: groupPostAtoms(bets)
       },
       semanticContextByPhase: {
         PRE_RESULT_BLOCK: groupSemantics,
