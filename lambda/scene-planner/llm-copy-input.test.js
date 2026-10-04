@@ -98,8 +98,13 @@ function assertGroundingScopes(payload) {
     if (scene.sceneType === 8) {
       const pre = scene.context.factAtomsByPhase.PRE_RESULT_BLOCK;
       const byBet = scene.context.factAtomsByPhase.POST_RESULT_BY_BET;
+      const post = scene.context.factAtomsByPhase.POST_RESULT_BLOCK;
       const sem = scene.context.semanticContextByPhase.PRE_RESULT_BLOCK.groupPosition;
       assert.ok(pre.BLOCK_TOTAL_STAKE);
+      assert.ok(post.BLOCK_WINNING_BETS);
+      assert.ok(post.BLOCK_LOSING_BETS);
+      assert.ok(post.BLOCK_RUNNING_AFTER_PROFIT_TEXT || post.BLOCK_RUNNING_AFTER_LOSS_TEXT || post.BLOCK_RUNNING_AFTER_BREAK_EVEN_TEXT);
+      assert.strictEqual(scene.requiredFields.blockReaction.phase, 'POST_RESULT_BLOCK');
       assert.strictEqual(typeof sem.isFinalGroup, 'boolean');
       assert.ok(['FINAL_GROUP','MORE_BETS_REMAIN'].includes(sem.finality));
       assert.strictEqual(sem.finality, sem.isFinalGroup ? 'FINAL_GROUP' : 'MORE_BETS_REMAIN');
