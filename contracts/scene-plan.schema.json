@@ -315,6 +315,11 @@
             "type": "string",
             "pattern": "\\S"
           }
+        },
+        "blockReaction": {
+          "description": "Fresh Kubrick V2 LLM copy generation emits this post-result Scene 8 payoff. It remains schema-optional only for compatibility with previously stored plans.",
+          "type": "string",
+          "pattern": "\\S"
         }
       }
     }
@@ -326,7 +331,7 @@
     "Every input bet sequence appears exactly once as primary coverage in Scene 2, Scene 5 or Scene 8; Scene 3 never counts.",
     "Primary coverage is ascending with no gaps, duplicates or reordering.",
     "Scene 5 contains exactly 2 or 3 consecutive ascending sequences.",
-    "Scene 8 contains exactly 4 or 5 consecutive ascending sequences and comments.length must equal betSequences.length. Fresh LLM copy generation emits headlineCategory; the field remains schema-optional only for compatibility with previously stored plans. Category meaning, eligibility and diversity policy are owned by scene-contracts.json.",
+    "Scene 8 contains exactly 4 or 5 consecutive ascending sequences and comments.length must equal betSequences.length. Fresh LLM copy generation emits headlineCategory and blockReaction; both remain schema-optional only for compatibility with previously stored plans. Category meaning, eligibility, diversity and blockReaction ownership are owned by scene-contracts.json.",
     "Scene 8 headlines are PRE_RESULT_BLOCK. Fact-part chronology is mechanically enforced; semantic spoiler wording in narrative prose is prompt-owned and non-fatal.",
     "Scene 3 immediately follows Scene 2 for the same sequence and requires WIN plus a valid non-empty HTTPS replayUrl in bettings.json; Scene 3 may not attach to Scene 5 or Scene 8.",
     "Final scene-plan contains only structural planner fields plus contract-declared LLM-owned fields. FACT, builder-DERIVED, CONTROLLED and RUNTIME display fields remain outside scene-plan.json.",
