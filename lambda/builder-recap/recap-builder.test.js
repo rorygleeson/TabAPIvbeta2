@@ -47,6 +47,12 @@ assert.match(template,/data-role="s8-footer"/);
 assert.match(template,/\{\{blockReaction\}\}/);
 assert.match(template,/\{\{blockSummaryLine\}\}/);
 assert.match(template,/NEXT \{\{betCount\}\}/);
+const scene6Template=fs.readFileSync(path.resolve(__dirname,'templates/scene-6-daily-summary-template.html'),'utf8');
+assert.match(scene6Template,/@media \(orientation:portrait\) and \(max-width:640px\)\{/);
+assert.match(scene6Template,/\.scene-type-6\{align-items:flex-start;justify-content:center;padding:18px 6vw 22px\}/);
+assert.match(scene6Template,/\.scene-type-6 \.s6-hero\{margin-top:7px;font-size:clamp\(34px,9\.2vw,46px\);line-height:\.94\}/);
+assert.match(scene6Template,/\.scene-type-6 \.s6-tile\{padding:10px 12px;min-height:82px;border-radius:16px\}/);
+assert.match(scene6Template,/\.scene-type-6 \.s6-verdict\{margin-top:10px;font-size:clamp\(19px,5\.2vw,26px\);line-height:1\.08\}/);
 const runtime=fs.readFileSync(path.resolve(__dirname,'runtime/recap-runtime.js'),'utf8');
 const soundtrackCorsIndex=runtime.indexOf("audio.crossOrigin='anonymous';");
 const soundtrackSrcIndex=runtime.indexOf('audio.src=CONTRACT.soundtrack;');
@@ -60,9 +66,13 @@ assert.match(runtime,/marks\.at\(-1\)\+550/);
 assert.match(runtime,/function scene8ResultFx\(bet,outcomeIndex\)/);
 assert.match(runtime,/coinFx\(22\)/);
 assert.match(runtime,/emojiFx\(\['🎉','🏆','🙌','🔥','✨'\],10,'burst'\)/);
-assert.match(runtime,/reactionFx\('💸'\)/);
+assert.match(runtime,/const lossIcons=\['😩','😬','🤦‍♂️','🙈','💔','😖','🫣'\]/);
+assert.match(runtime,/emojiFx\(lossIcons,8,'burst'\)/);
+assert.doesNotMatch(runtime,/emojiFx\(lossIcons,8,'fall'\)/);
+assert.doesNotMatch(runtime,/scene8ResultFx[^\n]*💸/);
 assert.match(runtime,/let winFxIndex=0,lossFxIndex=0/);
 assert.match(runtime,/scene8ResultFx\(bet,fxIndex\)/);
+assert.match(runtime,/function beginScene\(i,cls='is-active'\)\{[^\n]*resetGlobalFx\(\)/);
 assert.strictEqual(__test.durationWithinHardMaxMs(300000),true);
 assert.strictEqual(__test.durationWithinHardMaxMs(300001),false);
 __test.validateScene8RuntimeContract();
@@ -97,11 +107,25 @@ function replayPlan(total,replaySequences){
   assert.strictEqual(bettings.bets[1].result,'LOSS');
   const out=buildRecap({bettings,scenePlan:replayPlan(5,[2])});
   assert.match(out.html,/"replayResult":"LOSS"/);
-  assert.match(out.html,/if\(data\.replayResult==='WIN'\)replayCelebrationFx\(root\);else replayLossFx\(root\)/);
+  assert.match(out.html,/"replayBetType":"WIN"/);
+  assert.match(out.html,/if\(data\.replayResult==='WIN'\)replayCelebrationFx\(root,data\.replayBetType\);else replayLossFx\(root\)/);
   assert.match(out.html,/replayLossPayoffFx\(root\)/);
   assert.match(out.html,/replayCoinExplosion\(root,42\)/);
   assert.match(out.html,/NOOOO!/);
   assert.match(out.html,/PATHETIC!/);
+}
+
+// A winning PLACE wager must celebrate the wager outcome without implying the runner won the race.
+{
+  const bettings=makeBettings(5);
+  bettings.bets[0].betType='PLACE';
+  bettings.bets[0].finishingPosition=2;
+  bettings.bets[0].replayUrl='https://example.com/place-win-replay.mp4';
+  const out=buildRecap({bettings,scenePlan:replayPlan(5,[1])});
+  assert.match(out.html,/"replayResult":"WIN"/);
+  assert.match(out.html,/"replayBetType":"PLACE"/);
+  assert.match(out.html,/PLACE BET WON!/);
+  assert.match(out.html,/type==='PLACE'\?\['PLACE BET WON!'\]/);
 }
 
 // The Builder independently protects the planner invariant that one video cannot appear twice.
@@ -198,6 +222,8 @@ assert.strictEqual(runtimeContract.timeline.scene3.plannedPlaybackMs,17000);
 assert.strictEqual(runtimeContract.timeline.scene3.exitFadeMs,550);
 assert.strictEqual(runtimeContract.timeline.scene3.outcomeFxAtMs,12400);
 assert.strictEqual(runtimeContract.timeline.scene3.secondaryLossFxAtMs,13550);
-assert.match(runtime,/at:12400,fn:\(\)=>\{if\(data\.replayResult==='WIN'\)replayCelebrationFx\(root\);else replayLossFx\(root\)\}/);
+assert.match(runtime,/at:12400,fn:\(\)=>\{if\(data\.replayResult==='WIN'\)replayCelebrationFx\(root,data\.replayBetType\);else replayLossFx\(root\)\}/);
+assert.match(runtime,/function replayPayoffFx\(root,betType='WIN'\)/);
+assert.match(runtime,/PLACE BET WON!/);
 assert.match(runtime,/at:13550,fn:\(\)=>\{if\(data\.replayResult==='LOSS'\)replayLossPayoffFx\(root\)\}/);
 console.log('Builder Scene 8 audit regression tests passed.');
