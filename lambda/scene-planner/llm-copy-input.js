@@ -294,7 +294,7 @@ function scene4Context(bettings, checkpoint) {
 function groupedContext(bettings, sequences, scene8) {
   const bets = sequences.map(sequence => betBySequence(bettings, sequence));
   const preBlock = mergeAtoms(groupPreAtoms(bettings, bets), ...bets.map(preBetAtoms));
-  const postBlock = mergeAtoms(preBlock, groupPostAtoms(bets), ...bets.map(postBetAtoms));
+  const postBlock = mergeAtoms(preBlock, groupPostAtoms(bets));
   const position = groupPositionSemantics(bettings, bets);
   const groupSemantics = {
     groupPosition: {
