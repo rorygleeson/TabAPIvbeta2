@@ -197,14 +197,18 @@ for (const totalBets of [5, 8, 16, 32, 75]) {
   bettings.bets.forEach(bet => { bet.replayUrl = null; });
   bettings.bets[0].replayUrl = urls.high;
   bettings.bets[0].profitLoss = 50;
+  bettings.bets[0].result = 'WIN';
 
   bettings.bets[1].replayUrl = urls.earlierTie;
-  bettings.bets[1].profitLoss = 10.1;
+  bettings.bets[1].profitLoss = -10.1;
+  bettings.bets[1].result = 'LOSS';
   bettings.bets[2].replayUrl = urls.earlierTie;
-  bettings.bets[2].profitLoss = 10.2; // exact cents total = 20.30
+  bettings.bets[2].profitLoss = -10.2; // exact cents total = -20.30
+  bettings.bets[2].result = 'LOSS';
 
   bettings.bets[3].replayUrl = urls.laterTie;
-  bettings.bets[3].profitLoss = 20.3; // exact cents total = 20.30
+  bettings.bets[3].profitLoss = -20.3; // exact cents total = -20.30
+  bettings.bets[3].result = 'LOSS';
 
   const plan = buildDeterministicScenePlan(bettings);
   assert.deepStrictEqual(
