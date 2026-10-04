@@ -216,8 +216,9 @@ group candidates by exact replayUrl
 raceNetPnl = sum(profitLoss for all bets sharing that replayUrl)
 replayImportance = abs(raceNetPnl)
 monetary comparison is performed in integer cents to avoid floating-point tie drift
-rank highest replayImportance first
-if the replay quota cuts through an equal-importance tie, prefer the later replay group
+rank replay groups whose selected representative bet is WIN before LOSS groups
+within WIN and LOSS groups, rank highest replayImportance first
+if the replay quota cuts through an equal-importance tie within the same outcome class, prefer the later replay group
 the same replayUrl may be selected at most once
 ```
 
@@ -232,7 +233,7 @@ Scene 3 runtime treatment is outcome-aware. The Builder passes the exact wager r
 ```text
 <=10 -> max 4 extra
 <=20 -> max 3 extra
-<=40 -> max 2 extra
+21-40 -> max 0 extra
 >40  -> max 1 extra
 ```
 
