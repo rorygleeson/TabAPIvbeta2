@@ -266,7 +266,7 @@ function sameRaceAndRunner(a, b) {
       normalizedIdentityPart(a.runnerName) === normalizedIdentityPart(b.runnerName);
 }
 
-function buildProtectedSameRunnerRaceGroups(bets) {
+function buildProtectedSameRunnerRaceGroups(bets, replaySequences) {
   const groupsByStart = new Map();
   let index = 0;
 
@@ -279,7 +279,8 @@ function buildProtectedSameRunnerRaceGroups(bets) {
     const size = end - index;
     if (size === 2 || size === 3) {
       const sequences = bets.slice(index, end).map(bet => bet.sequence);
-      groupsByStart.set(sequences[0], sequences);
+      const ownsSelectedReplay = sequences.some(sequence => replaySequences.has(sequence));
+      if (ownsSelectedReplay) groupsByStart.set(sequences[0], sequences);
     }
 
     index = end;
@@ -324,7 +325,7 @@ function selectFeaturedSequences(facts, policy, requiredSequences, targetCount) 
 
 function buildScenes(facts, policy, featuredSequences, replaySequences) {
   const primaryScenes = [];
-  const protectedGroups = buildProtectedSameRunnerRaceGroups(facts.bets);
+  const protectedGroups = buildProtectedSameRunnerRaceGroups(facts.bets, replaySequences);
   let sequence = 1;
 
   while (sequence <= facts.totalBets) {
