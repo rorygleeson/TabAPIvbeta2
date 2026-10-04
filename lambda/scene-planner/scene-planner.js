@@ -18,7 +18,13 @@ function buildDeterministicScenePlan(bettings, options = {}) {
 
   const desiredReplayCount = calculateDesiredReplayCount(facts.totalBets, policy.replay);
   const eligibleReplayGroups = buildReplayGroups(facts.bets)
-    .sort((a, b) => b.importanceCents - a.importanceCents || b.latestSequence - a.latestSequence);
+    .sort((a, b) => {
+      const aWin = a.representative.result === 'WIN' ? 1 : 0;
+      const bWin = b.representative.result === 'WIN' ? 1 : 0;
+      return bWin - aWin ||
+        b.importanceCents - a.importanceCents ||
+        b.latestSequence - a.latestSequence;
+    });
 
   const maximumReplayCount = Math.min(
     desiredReplayCount,

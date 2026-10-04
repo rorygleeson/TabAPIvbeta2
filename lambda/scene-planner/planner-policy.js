@@ -70,7 +70,7 @@ module.exports = {
     extraScene2ByBets: [
       { maxBets: 10, maxExtra: 4 },
       { maxBets: 20, maxExtra: 3 },
-      { maxBets: 40, maxExtra: 2 },
+      { maxBets: 40, maxExtra: 0 },
       { maxBets: null, maxExtra: 1 }
     ]
   },

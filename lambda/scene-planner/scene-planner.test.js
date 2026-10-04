@@ -37,6 +37,8 @@ assert.strictEqual(calculateDesiredReplayCount(32, policy.replay), 2);
 assert.strictEqual(calculateDesiredReplayCount(50, policy.replay), 3);
 assert.strictEqual(calculateDesiredReplayCount(75, policy.replay), 3);
 
+assert.strictEqual(policy.feature.extraScene2ByBets.find(x => x.maxBets === 40).maxExtra, 0);
+
 function assertCoreInvariants(bettings, plan) {
   const scenes = plan.scenes;
   const totalBets = bettings.bets.length;
@@ -126,8 +128,8 @@ for (const totalBets of [5, 8, 16, 32, 75]) {
   }
 }
 
-// Replay ranking is race/video based: unique replay URL, absolute net race P&L,
-// latest race wins only when the replay quota cuts through an equal-importance tie.
+// Replay ranking is race/video based. WIN representative groups are preferred
+// before LOSS groups; monetary importance and latest-sequence tie-breaks apply within each outcome class.
 {
   const bettings = readJson('bettings-8.json');
   const urls = {
@@ -140,13 +142,16 @@ for (const totalBets of [5, 8, 16, 32, 75]) {
   bettings.bets.forEach(bet => { bet.replayUrl = null; });
   bettings.bets[0].replayUrl = urls.a;
   bettings.bets[0].profitLoss = 20;
+  bettings.bets[0].result = 'WIN';
   bettings.bets[1].replayUrl = urls.a;
   bettings.bets[1].profitLoss = -12; // replay A net = +8, importance 8
+  bettings.bets[1].result = 'LOSS';
   bettings.bets[2].replayUrl = urls.b;
   bettings.bets[2].profitLoss = -30; // importance 30
   bettings.bets[2].result = 'LOSS';
   bettings.bets[3].replayUrl = urls.c;
   bettings.bets[3].profitLoss = 15; // importance 15
+  bettings.bets[3].result = 'WIN';
   bettings.bets[4].replayUrl = urls.d;
   bettings.bets[4].profitLoss = -15; // importance 15, later than C
   bettings.bets[4].result = 'LOSS';
@@ -154,11 +159,31 @@ for (const totalBets of [5, 8, 16, 32, 75]) {
   const plan = buildDeterministicScenePlan(bettings);
   assert.deepStrictEqual(
     replaySequences(plan.scenes),
-    [3, 5],
-    '8-bet recap must select highest absolute net race P&L, with latest race winning cutoff tie'
+    [1, 4],
+    '8-bet recap must prefer eligible WIN replay groups before higher-value LOSS groups'
   );
 }
 
+
+// If WIN replay groups do not fill the quota, the planner fills remaining slots with LOSS groups.
+{
+  const bettings = readJson('bettings-8.json');
+  bettings.bets.forEach(bet => { bet.replayUrl = null; bet.result = 'LOSS'; });
+  bettings.bets[0].replayUrl = 'https://example.com/win-replay.mp4';
+  bettings.bets[0].result = 'WIN';
+  bettings.bets[0].profitLoss = 12;
+  bettings.bets[1].replayUrl = 'https://example.com/loss-high.mp4';
+  bettings.bets[1].profitLoss = -40;
+  bettings.bets[2].replayUrl = 'https://example.com/loss-low.mp4';
+  bettings.bets[2].profitLoss = -15;
+
+  const plan = buildDeterministicScenePlan(bettings);
+  assert.deepStrictEqual(
+    replaySequences(plan.scenes),
+    [1, 2],
+    'Replay quota should use the available WIN first, then the strongest LOSS fallback'
+  );
+}
 
 // Currency ranking must compare exact cents, not floating-point accumulation artifacts.
 {
@@ -172,14 +197,18 @@ for (const totalBets of [5, 8, 16, 32, 75]) {
   bettings.bets.forEach(bet => { bet.replayUrl = null; });
   bettings.bets[0].replayUrl = urls.high;
   bettings.bets[0].profitLoss = 50;
+  bettings.bets[0].result = 'WIN';
 
   bettings.bets[1].replayUrl = urls.earlierTie;
-  bettings.bets[1].profitLoss = 10.1;
+  bettings.bets[1].profitLoss = -10.1;
+  bettings.bets[1].result = 'LOSS';
   bettings.bets[2].replayUrl = urls.earlierTie;
-  bettings.bets[2].profitLoss = 10.2; // exact cents total = 20.30
+  bettings.bets[2].profitLoss = -10.2; // exact cents total = -20.30
+  bettings.bets[2].result = 'LOSS';
 
   bettings.bets[3].replayUrl = urls.laterTie;
-  bettings.bets[3].profitLoss = 20.3; // exact cents total = 20.30
+  bettings.bets[3].profitLoss = -20.3; // exact cents total = -20.30
+  bettings.bets[3].result = 'LOSS';
 
   const plan = buildDeterministicScenePlan(bettings);
   assert.deepStrictEqual(
