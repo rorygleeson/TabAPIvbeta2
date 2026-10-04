@@ -44,18 +44,29 @@ function buildLlmModelPayload(copyInput) {
     groundingProtocol: 'FACT_SEMANTIC_TEMPLATE_V1',
     semanticPolicy: cloneJson(copyInput.semanticPolicy || {}),
     scenes: copyInput.scenes.map(scene => {
+      const factAtomsByPhase = cloneJson(scene.context?.factAtomsByPhase || {});
+      const semanticContextByPhase = cloneJson(scene.context?.semanticContextByPhase || {});
+
       const item = {
         sceneIndex: scene.sceneIndex,
         sceneType: scene.sceneType,
         requiredFields: compactRequiredFields(scene.requiredFields),
-        context: {
-          factAtomsByPhase: cloneJson(scene.context?.factAtomsByPhase || {})
-        }
+        context: { factAtomsByPhase }
       };
 
-      if (scene.context?.semanticContextByPhase &&
-          Object.keys(scene.context.semanticContextByPhase).length > 0) {
-        item.context.semanticContextByPhase = cloneJson(scene.context.semanticContextByPhase);
+      if (scene.sceneType === 8) {
+        // Keep the rich validation input phase-shaped, but send the model a
+        // compact reaction signal instead of duplicating another full phase.
+        delete item.context.factAtomsByPhase.POST_RESULT_BLOCK;
+        const reaction = semanticContextByPhase.POST_RESULT_BLOCK;
+        if (reaction?.resultPattern && reaction?.pnlDirection) {
+          item.context.reactionContext = reaction.resultPattern + '|' + reaction.pnlDirection;
+        }
+        delete semanticContextByPhase.POST_RESULT_BLOCK;
+      }
+
+      if (Object.keys(semanticContextByPhase).length > 0) {
+        item.context.semanticContextByPhase = semanticContextByPhase;
       }
 
       if (scene.betSequence !== undefined) item.betSequence = scene.betSequence;
