@@ -213,9 +213,10 @@ Additionally:
 - `comments` must contain exactly one grounded string per bet, in `betSequences` order;
 - comment item N may use only `POST_RESULT_BY_BET[N]`;
 - `blockReaction` is a POST_RESULT_BLOCK payoff shown only after every result in the group has been revealed;
-- make `blockReaction` the personality moment: concise, witty, conversational and racing/betting-flavoured, reacting to the overall supplied result mix and group P&L rather than repeating individual rows;
-- light figurative humour is welcome, but never invent race-running action, incidents, stewards activity, form, conditions or any unsupported event;
-- when the supplied aggregate facts show a clean streak such as all losses or all wins, acknowledge that pattern directly and make the wording feel human rather than like a statistical report.
+- make `blockReaction` the personality moment: concise, witty, conversational and racing/betting-flavoured;
+- for this field use the supplied semantic resultPattern (ALL_LOSSES, ALL_WINS or MIXED) and pnlDirection (POSITIVE, NEGATIVE or EVEN) qualitatively; the separate deterministic summary line owns exact counts and money;
+- do not invent exact numbers, race-running action, incidents, stewards activity, form, conditions or any unsupported event;
+- when resultPattern is ALL_LOSSES or ALL_WINS, acknowledge that streak naturally rather than sounding like a statistical report.
 
 ## If uncertain
 
