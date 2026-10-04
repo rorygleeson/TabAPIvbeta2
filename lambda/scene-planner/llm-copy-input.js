@@ -308,15 +308,22 @@ function groupedContext(bettings, sequences, scene8) {
   };
 
   if (scene8) {
+    const winningBets = bets.filter(bet => bet.result === 'WIN').length;
+    const groupPnl = sum(bets.map(bet => bet.profitLoss));
+    const reactionSemantics = {
+      ...groupSemantics,
+      resultPattern: winningBets === 0 ? 'ALL_LOSSES' : winningBets === bets.length ? 'ALL_WINS' : 'MIXED',
+      pnlDirection: groupPnl > 0 ? 'POSITIVE' : groupPnl < 0 ? 'NEGATIVE' : 'EVEN'
+    };
     return {
       factAtomsByPhase: {
         PRE_RESULT_BLOCK: preBlock,
         POST_RESULT_BY_BET: bets.map(bet => mergeAtoms(preBetAtoms(bet), postBetAtoms(bet))),
-        POST_RESULT_BLOCK: groupPostAtoms(bets)
+        POST_RESULT_BLOCK: {}
       },
       semanticContextByPhase: {
         PRE_RESULT_BLOCK: groupSemantics,
-        POST_RESULT_BLOCK: groupSemantics
+        POST_RESULT_BLOCK: reactionSemantics
       },
       protectedTerms: protectedTerms(bettings, bets)
     };
