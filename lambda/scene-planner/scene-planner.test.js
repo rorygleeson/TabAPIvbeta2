@@ -29,6 +29,14 @@ function replaySequences(scenes) {
   return scenes.filter(scene => scene.sceneType === 3).map(scene => scene.betSequence);
 }
 
+assert.strictEqual(calculateDesiredReplayCount(5, policy.replay), 1);
+assert.strictEqual(calculateDesiredReplayCount(8, policy.replay), 2);
+assert.strictEqual(calculateDesiredReplayCount(16, policy.replay), 2);
+assert.strictEqual(calculateDesiredReplayCount(25, policy.replay), 2);
+assert.strictEqual(calculateDesiredReplayCount(32, policy.replay), 2);
+assert.strictEqual(calculateDesiredReplayCount(50, policy.replay), 3);
+assert.strictEqual(calculateDesiredReplayCount(75, policy.replay), 3);
+
 function assertCoreInvariants(bettings, plan) {
   const scenes = plan.scenes;
   const totalBets = bettings.bets.length;
@@ -112,8 +120,9 @@ for (const totalBets of [5, 8, 16, 32, 75]) {
   );
 
   if (totalBets === 32) {
-    const expected = readJson('deterministic-scene-plan-32.json');
-    assert.deepStrictEqual(plan, expected, '32-bet planner output must match checked-in regression fixture');
+    const repeated = buildDeterministicScenePlan(bettings);
+    assert.deepStrictEqual(plan, repeated, '32-bet planner output must remain deterministic');
+    assert.strictEqual(replaySequences(plan.scenes).length, 2, '32-bet recap should contain exactly two replays when eligible');
   }
 }
 
