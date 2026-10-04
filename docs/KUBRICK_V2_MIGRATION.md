@@ -247,7 +247,7 @@ totalBets >= 17
 
 ### Grouping
 
-Before ordinary gap grouping, consecutive wagers on the same runner in the same race are protected as one Scene 5 when the run contains 2 or 3 bets. Race identity uses raceId when both bets provide it, otherwise meeting + raceNumber. Runner identity uses runnerId when both bets provide it, otherwise runnerNumber + runnerName. A selected Scene 3 replay may immediately follow that Scene 5 when its representative bet is contained in the group. Scene 8 never absorbs a protected same-runner/race group and does not directly own replay attachment.
+Before ordinary gap grouping, consecutive wagers on the same runner in the same race are protected as one Scene 5 only when the 2- or 3-bet run contains a selected replay representative. Race identity uses raceId when both bets provide it, otherwise meeting + raceNumber. Runner identity uses runnerId when both bets provide it, otherwise runnerNumber + runnerName. The selected Scene 3 replay immediately follows that protected Scene 5. Same-runner/race runs without a selected replay are not protected and may be absorbed into normal Scene 8 compression. Scene 8 does not directly own replay attachment.
 
 Below 17 bets:
 
