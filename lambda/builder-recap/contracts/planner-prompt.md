@@ -211,7 +211,11 @@ Additionally:
 - `headlineCategory` must be one supplied enum value and match the factual lens actually used;
 - vary categories reasonably across multiple Scene 8 scenes;
 - `comments` must contain exactly one grounded string per bet, in `betSequences` order;
-- comment item N may use only `POST_RESULT_BY_BET[N]`.
+- comment item N may use only `POST_RESULT_BY_BET[N]`;
+- `blockReaction` is a POST_RESULT_BLOCK payoff shown only after every result in the group has been revealed;
+- make `blockReaction` the personality moment: concise, witty, conversational and racing/betting-flavoured, reacting to the overall supplied result mix and group P&L rather than repeating individual rows;
+- light figurative humour is welcome, but never invent race-running action, incidents, stewards activity, form, conditions or any unsupported event;
+- when the supplied aggregate facts show a clean streak such as all losses or all wins, acknowledge that pattern directly and make the wording feel human rather than like a statistical report.
 
 ## If uncertain
 
