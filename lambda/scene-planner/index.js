@@ -9,7 +9,7 @@ const { BedrockRuntimeClient, ConverseCommand } = require('@aws-sdk/client-bedro
 
 const { buildDeterministicScenePlan } = require('./scene-planner');
 const { buildLlmCopyInput, buildLlmModelPayload } = require('./llm-copy-input');
-const { parseJsonObject, validateCopyResponse } = require('./llm-copy-response');
+const { parseJsonObject, validateCopyResponseWithFieldFallback } = require('./llm-copy-response');
 const { mergeCopyIntoPlan } = require('./llm-copy-merge');
 const { buildFallbackCopy } = require('./llm-copy-fallback');
 const { loadContract, loadContractText } = require('./contract-loader');
@@ -230,11 +230,22 @@ async function invokeCopyModel(copyInput) {
     }));
 
     const parsed = parseJsonObject(outputText);
-    const validatedCopy = validateCopyResponse(copyInput, parsed);
+    const fallbackCopy = buildFallbackCopy(copyInput);
+    const { copy: validatedCopy, repairs } = validateCopyResponseWithFieldFallback(copyInput, parsed, fallbackCopy);
+
+    if (repairs.length > 0) {
+      console.warn(JSON.stringify({
+        event: 'llm-copy-field-fallback',
+        fallbackUsed: 'partial',
+        fallbackFieldCount: repairs.length,
+        repairs
+      }));
+    }
 
     console.log(JSON.stringify({
       event: 'llm-copy-completed',
-      fallbackUsed: false,
+      fallbackUsed: repairs.length > 0,
+      fallbackFieldCount: repairs.length,
       modelPayloadBytes: Buffer.byteLength(JSON.stringify(modelPayload), 'utf8'),
       inputTokens: response.usage?.inputTokens,
       outputTokens: response.usage?.outputTokens,
