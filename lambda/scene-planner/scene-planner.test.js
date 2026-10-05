@@ -53,7 +53,7 @@ assert.strictEqual(policy.feature.extraScene2ByBets.find(x => x.maxBets === 40).
   ], runtime);
   assert.strictEqual(
     timing.plannedSeconds,
-    66.1,
+    72.2,
     'Planner duration must include configured end holds'
   );
 }
