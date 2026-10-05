@@ -266,6 +266,8 @@ Keep comments very short. They should feel like reactions, not miniature result 
 
 `blockReaction` appears after the complete group resolves and is the main personality line.
 
+`blockReaction` must not contain any `<ATOM_ID>` placeholders. Use only `reactionContext` qualitatively and write a non-factual reaction line.
+
 For `blockReaction`, use `reactionContext` qualitatively:
 
 ```text

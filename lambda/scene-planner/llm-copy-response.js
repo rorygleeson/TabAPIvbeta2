@@ -82,6 +82,87 @@ function validateCopyResponse(copyInput, response) {
   return normalized;
 }
 
+function validateCopyResponseWithFieldFallback(copyInput, response, fallbackCopy) {
+  if (!response || typeof response !== 'object' || Array.isArray(response)) {
+    throw new Error('LLM copy response must be an object.');
+  }
+  if (!Array.isArray(response.scenes)) {
+    throw new Error('LLM copy response must contain a scenes array.');
+  }
+  if (response.scenes.length !== copyInput.scenes.length) {
+    throw new Error('LLM copy response scene count does not match copy input.');
+  }
+  if (!fallbackCopy || !Array.isArray(fallbackCopy.scenes) || fallbackCopy.scenes.length !== copyInput.scenes.length) {
+    throw new Error('Field fallback copy does not match copy input.');
+  }
+
+  const normalized = { scenes: [] };
+  const repairs = [];
+
+  response.scenes.forEach((item, index) => {
+    const source = copyInput.scenes[index];
+    if (!item || typeof item !== 'object' || Array.isArray(item)) {
+      throw new Error('LLM copy scene ' + index + ' must be an object.');
+    }
+    if (item.sceneIndex !== index) {
+      throw new Error('LLM copy sceneIndex mismatch at scene ' + index + '.');
+    }
+
+    const fallbackItem = fallbackCopy.scenes[index] || {};
+    const normalizedItem = { sceneIndex: index };
+
+    for (const [field, rule] of Object.entries(source.requiredFields || {})) {
+      try {
+        if (!Object.prototype.hasOwnProperty.call(item, field)) {
+          throw new Error('LLM copy scene ' + index + ' missing field ' + field + '.');
+        }
+        const value = normalizeGroundedValue(item[field], rule, source, index, field, copyInput);
+        validateField(value, rule, index, field);
+        validateSceneSpecificField(source, field, value);
+        normalizedItem[field] = value;
+      } catch (error) {
+        if (!Object.prototype.hasOwnProperty.call(fallbackItem, field)) throw error;
+        const fallbackValue = normalizeGroundedValue(fallbackItem[field], rule, source, index, field, copyInput);
+        validateField(fallbackValue, rule, index, field);
+        validateSceneSpecificField(source, field, fallbackValue);
+        normalizedItem[field] = fallbackValue;
+        repairs.push({
+          sceneIndex: index,
+          field,
+          reason: String(error?.message || error).slice(0, 1000)
+        });
+      }
+    }
+
+    normalized.scenes.push(normalizedItem);
+  });
+
+  return { copy: normalized, repairs };
+}
+
+function validateSceneSpecificField(source, field, value) {
+  if (source.sceneType === 8 && field === 'comments') {
+    if (!Array.isArray(value) || value.length !== source.betSequences.length) {
+      throw new Error('Scene 8 comments count must equal betSequences count.');
+    }
+  }
+
+  if (source.sceneType === 6 && field === 'standoutHighlightType') {
+    const eligible = new Set((source.context?.standoutOptions || []).map(x => x.type));
+    if (!eligible.has(value)) throw new Error('Scene 6 standoutHighlightType is not eligible.');
+  }
+
+  if (source.sceneType === 7 && field === 'selectedFinalHighlights') {
+    const eligible = new Set((source.context?.availableFinalHighlights || []).map(x => x.type));
+    for (const item of value) {
+      if (!eligible.has(item)) throw new Error('Scene 7 selectedFinalHighlights contains ineligible value ' + item + '.');
+    }
+    if (new Set(value).size !== value.length) {
+      throw new Error('Scene 7 selectedFinalHighlights must be unique.');
+    }
+  }
+}
+
 function normalizeGroundedValue(value, rule, source, sceneIndex, field, copyInput) {
   if (rule.responseType === 'enum' || rule.enum) return clone(value);
 
@@ -200,6 +281,7 @@ function clone(value) {
 module.exports = {
   parseJsonObject,
   validateCopyResponse,
+  validateCopyResponseWithFieldFallback,
   countWords,
   hardCharLimit,
   __test: {
