@@ -5,7 +5,8 @@ const fs = require('fs');
 const path = require('path');
 const {
   buildDeterministicScenePlan,
-  calculateDesiredReplayCount
+  calculateDesiredReplayCount,
+  calculatePlanDurationSeconds
 } = require('./scene-planner');
 const policy = require('./planner-policy');
 
@@ -38,6 +39,21 @@ assert.strictEqual(calculateDesiredReplayCount(50, policy.replay), 3);
 assert.strictEqual(calculateDesiredReplayCount(75, policy.replay), 3);
 
 assert.strictEqual(policy.feature.extraScene2ByBets.find(x => x.maxBets === 40).maxExtra, 0);
+
+{
+  const runtime = require('./contract-loader').loadContract('runtime-contract.json');
+  assert.strictEqual(runtime.durationPolicy.hardMaxSeconds,330);
+  const timing = calculatePlanDurationSeconds([
+    { sceneType: 1 },
+    { sceneType: 2, betSequence: 1 },
+    { sceneType: 4 },
+    { sceneType: 5, betSequences: [2,3] },
+    { sceneType: 6 },
+    { sceneType: 8, betSequences: [4,5,6,7,8] },
+    { sceneType: 7 }
+  ], runtime);
+  assert.strictEqual(timing.plannedSeconds,72.2);
+}
 
 function assertCoreInvariants(bettings, plan) {
   const scenes = plan.scenes;
