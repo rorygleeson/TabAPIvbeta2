@@ -94,8 +94,8 @@ assert.doesNotMatch(runtime,/scene8ResultFx[^\n]*💸/);
 assert.match(runtime,/let winFxIndex=0,lossFxIndex=0/);
 assert.match(runtime,/scene8ResultFx\(bet,fxIndex\)/);
 assert.match(runtime,/function beginScene\(i,cls='is-active'\)\{[^\n]*resetGlobalFx\(\)/);
-assert.strictEqual(__test.durationWithinHardMaxMs(300000),true);
-assert.strictEqual(__test.durationWithinHardMaxMs(300001),false);
+assert.strictEqual(__test.durationWithinHardMaxMs(330000),true);
+assert.strictEqual(__test.durationWithinHardMaxMs(330001),false);
 __test.validateScene8RuntimeContract();
 const bad=fastPlan(5,5);bad.scenes.find(x=>x.sceneType===8).comments=['one'];
 assert.throws(()=>buildRecap({bettings:makeBettings(5),scenePlan:bad}),e=>e instanceof BuildError&&(/comments.length/.test(e.message)||e.stage==='SCENE_PLAN_SCHEMA'));
@@ -241,6 +241,11 @@ assert.strictEqual(runtimeContract.timeline.scene6.durationMs,9500);
 assert.strictEqual(runtimeContract.timeline.scene6.endHoldMs,3000);
 assert.deepStrictEqual(runtimeContract.timeline.scene8.durationMsByBetCount,{2:5000,3:6500,4:8000,5:9500});
 assert.strictEqual(runtimeContract.timeline.scene8.endHoldMs,2000);
+assert.strictEqual(
+  __test.calculatePlanDurationMs(fastPlan(5,5)),
+  38900,
+  'Builder duration must include configured scene end holds'
+);
 assert.match(runtime,/const END_HOLD_MS=\{2:1000,4:2000,5:2000,6:3000,8:2000\}/);
 assert.strictEqual((runtime.match(/tasks\.push\(\{at:d\+\(END_HOLD_MS\[type\]\|\|0\),fn:next\}\)/g)||[]).length,2);
 assert.deepStrictEqual(runtimeContract.timeline.scene2.actionsRatio,{
