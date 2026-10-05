@@ -1,6 +1,6 @@
 (()=>{'use strict';
 const CONTRACT={normalVolume:.28,replayVolume:.055,fadeMs:850,transitionMs:300,replayFadeMs:550,playTimeoutMs:3000,soundtrack:'https://d1dcueurs1xl4v.cloudfront.net/hitslab-sport-football-baseball-music-334834.mp3'};
-const END_HOLD_MS={2:1000,4:2000,5:2000,6:2000,8:2000};
+const END_HOLD_MS={2:1000,4:2000,5:2000,6:3000,8:2000};
 const q=(s,r=document)=>r.querySelector(s),qa=(s,r=document)=>[...r.querySelectorAll(s)];
 const scenes=qa('.recap-scenes>[data-scene-type]'),audio=q('[data-role="soundtrack"]'),btn=q('[data-role="play-pause"]'),bar=q('[data-role="progress-bar"]'),progressTrack=q('[data-role="progress-track"]'),pt=q('[data-role="progress-text"]'),startGate=q('[data-role="start-gate"]'),startBtn=q('[data-role="start-recap"]');
 const fxFlash=q('[data-role="fx-flash"]'),fxRing=q('[data-role="fx-ring"]'),fxReaction=q('[data-role="fx-reaction"]'),fxReactionFace=q('[data-role="fx-reaction-face"]'),fxReactionCopy=q('[data-role="fx-reaction-copy"]'),fxLossStamp=q('[data-role="fx-loss-stamp"]'),fxParticles=q('[data-role="fx-particles"]'),fxCoins=q('[data-role="fx-coins"]'),fxEmojis=q('[data-role="fx-emojis"]');
