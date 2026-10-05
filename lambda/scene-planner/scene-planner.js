@@ -486,6 +486,9 @@ function calculatePlanDurationSeconds(scenes, runtime) {
         runtime.timeline.scene3.playTimeoutMs;
     }
 
+    const endHoldMs = Number(runtime.timeline[`scene${scene.sceneType}`]?.endHoldMs || 0);
+    plannedSceneMs += endHoldMs;
+    if (conservativeSceneMs) conservativeSceneMs += endHoldMs;
     if (!conservativeSceneMs) conservativeSceneMs = plannedSceneMs;
     plannedMs += plannedSceneMs;
     conservativeMs += conservativeSceneMs;
@@ -560,5 +563,6 @@ module.exports = {
   calculateTargetDurationSeconds,
   calculateDesiredReplayCount,
   calculateMinimumRequiredReplayCount,
-  calculateExtraScene2Allowance
+  calculateExtraScene2Allowance,
+  calculatePlanDurationSeconds
 };

@@ -154,7 +154,7 @@
     },
     "scene6": {
       "durationMs": 9500,
-      "endHoldMs": 2000
+      "endHoldMs": 3000
     },
     "scene7": {
       "permanent": true
@@ -267,7 +267,7 @@
   "durationPolicy": {
     "definition": "Planned recap duration is time from Scene1 start until Scene7 activation; Scene7 is permanent and excluded from timed duration.",
     "softMinimumSeconds": 45,
-    "hardMaxSeconds": 300,
+    "hardMaxSeconds": 330,
     "targetBands": [
       {
         "maxBets": 3,
@@ -295,7 +295,7 @@
       }
     ],
     "priority": "Exact chronological coverage and factual correctness always outrank duration targets. Never drop, duplicate, reorder or pad bets merely to hit a target.",
-    "hardMaxBasis": "The 300-second hard maximum applies to the deterministic user-visible planned timeline: scene durations, scene transitions, and Scene3 plannedPlaybackMs + exitFadeMs. Scene3 metadata/play timeout allowances are runtime failure-safety behaviour and are tracked conservatively but do not consume editorial duration budget.",
+    "hardMaxBasis": "The 330-second hard maximum applies to the deterministic user-visible planned timeline: scene durations, scene transitions, and Scene3 plannedPlaybackMs + exitFadeMs. Scene3 metadata/play timeout allowances are runtime failure-safety behaviour and are tracked conservatively but do not consume editorial duration budget.",
     "feasibility": "Before LLM copy generation the deterministic planner must produce a legal structural plan whose user-visible planned duration does not exceed hardMaxSeconds. Exact chronological coverage and factual correctness remain mandatory."
   },
   "scene8": {
