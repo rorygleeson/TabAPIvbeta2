@@ -54,6 +54,11 @@ assert.match(scene3Template,/@keyframes s3CommentZoom\{[^]*82%\{opacity:1/);
 assert.match(scene3Template,/@keyframes s3CommentSwipe\{[^]*82%\{opacity:1/);
 assert.match(scene3Template,/@keyframes s3CommentPulse\{[^]*82%\{opacity:1/);
 assert.match(scene3Template,/@keyframes s3CommentBurst\{[^]*82%\{opacity:1/);
+assert.match(scene3Template,/\.s3-horse\{[^}]*overflow-wrap:normal;word-break:normal/);
+assert.match(scene3Template,/\.s3-horse\.long-single-word\{[^}]*overflow-wrap:anywhere;word-break:break-word/);
+assert.match(scene3Template,/@media\(orientation:portrait\)\{[^]*\.s3-identity\{top:23px;left:20px;max-width:50%\}/);
+assert.match(scene3Template,/@media\(orientation:portrait\)\{[^]*\.s3-horse\{font-size:clamp\(26px,8vw,38px\)\}/);
+assert.match(scene3Template,/class="s3-horse \{\{horseNameClass\}\}"/);
 const scene7Template=fs.readFileSync(path.resolve(__dirname,'templates/scene-7-final-share-template.html'),'utf8');
 assert.match(scene7Template,/Gamble responsibly\. Call Gambling Help on 1800 858 858 or visit gamblinghelponline\.org\.au/);
 assert.match(scene7Template,/\.scene-type-7 \.s7-safe\{position:absolute;[^}]*bottom:12px;[^}]*font-size:10px/);
@@ -114,6 +119,22 @@ function replayPlan(total,replaySequences){
   }
   scenes.push(s6,s7);
   return {planVersion:'2.0',scenes};
+}
+
+// Scene 3 runner-name layout keeps normal names on natural word boundaries and
+// only enables mid-word breaking for genuinely long single-word names.
+{
+  const normal=makeBettings(5);
+  normal.bets[0].runnerName='JETT SMASH';
+  normal.bets[0].replayUrl='https://example.com/jett-smash.mp4';
+  const normalOut=buildRecap({bettings:normal,scenePlan:replayPlan(5,[1])});
+  assert.match(normalOut.html,/class="s3-horse ">JETT SMASH<\/div>/);
+
+  const longSingle=makeBettings(5);
+  longSingle.bets[0].runnerName='SUPERCALIFRAGILISTIC';
+  longSingle.bets[0].replayUrl='https://example.com/long-runner.mp4';
+  const longSingleOut=buildRecap({bettings:longSingle,scenePlan:replayPlan(5,[1])});
+  assert.match(longSingleOut.html,/class="s3-horse long-single-word">SUPERCALIFRAGILISTIC<\/div>/);
 }
 
 // Scene 3 eligibility is footage-based, not WIN-only. A losing bet with HTTPS footage is valid.
