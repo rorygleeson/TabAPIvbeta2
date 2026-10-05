@@ -5,7 +5,8 @@ const fs = require('fs');
 const path = require('path');
 const { buildDeterministicScenePlan } = require('./scene-planner');
 const { buildLlmCopyInput } = require('./llm-copy-input');
-const { parseJsonObject, validateCopyResponse } = require('./llm-copy-response');
+const { parseJsonObject, validateCopyResponse, validateCopyResponseWithFieldFallback } = require('./llm-copy-response');
+const { buildFallbackCopy } = require('./llm-copy-fallback');
 
 const ROOT = path.join(__dirname, '..', '..');
 const fixture = JSON.parse(fs.readFileSync(path.join(ROOT, 'tests', 'fixtures', 'bettings-8.json'), 'utf8'));
@@ -119,6 +120,16 @@ const wrongPhaseAtom = goodResponse();
 wrongPhaseAtom.scenes[bet3SceneIndex].tensionLine = '<B3_FINISH> is the story';
 assert.throws(() => validateCopyResponse(input, wrongPhaseAtom), /unknown or wrong-phase fact atom B3_FINISH/);
 
+const partialFallback = goodResponse();
+partialFallback.scenes[bet3SceneIndex].tensionLine = '<B3_FINISH> is the story';
+partialFallback.scenes[bet3SceneIndex].reactionLine = 'This valid LLM reaction survives.';
+const partialFallbackResult = validateCopyResponseWithFieldFallback(input, partialFallback, buildFallbackCopy(input));
+assert.strictEqual(partialFallbackResult.repairs.length, 1);
+assert.strictEqual(partialFallbackResult.repairs[0].sceneIndex, bet3SceneIndex);
+assert.strictEqual(partialFallbackResult.repairs[0].field, 'tensionLine');
+assert.strictEqual(partialFallbackResult.copy.scenes[bet3SceneIndex].tensionLine, 'The next moment is set.');
+assert.strictEqual(partialFallbackResult.copy.scenes[bet3SceneIndex].reactionLine, 'This valid LLM reaction survives.');
+
 const futureResultLeak = goodResponse();
 futureResultLeak.scenes[bet3SceneIndex].tensionLine = '<B8_FINISH>';
 assert.throws(() => validateCopyResponse(input, futureResultLeak), /unknown or wrong-phase fact atom B8_FINISH/);
@@ -175,6 +186,15 @@ if (scene8Index >= 0) {
     new RegExp('unknown or wrong-phase fact atom B' + secondSeq + '_FINISH')
   );
   assert.ok(firstSeq !== secondSeq);
+
+  const badBlockReaction = goodResponse();
+  badBlockReaction.scenes[scene8Index].blockReaction = '<B' + firstSeq + '_RUNNER> changed the mood.';
+  badBlockReaction.scenes[scene8Index].headline = 'This valid headline survives.';
+  const repairedBlock = validateCopyResponseWithFieldFallback(input, badBlockReaction, buildFallbackCopy(input));
+  assert.strictEqual(repairedBlock.repairs.length, 1);
+  assert.strictEqual(repairedBlock.repairs[0].field, 'blockReaction');
+  assert.strictEqual(repairedBlock.copy.scenes[scene8Index].blockReaction, 'That run of results changed the shape of the day.');
+  assert.strictEqual(repairedBlock.copy.scenes[scene8Index].headline, 'This valid headline survives.');
 }
 
 const semanticToleranceCases = [
