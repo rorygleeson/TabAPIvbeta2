@@ -154,7 +154,7 @@
     },
     "scene6": {
       "durationMs": 9500,
-      "endHoldMs": 2000
+      "endHoldMs": 3000
     },
     "scene7": {
       "permanent": true
