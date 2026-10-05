@@ -105,7 +105,8 @@
         "fxStart": 0.461,
         "reaction": 0.583,
         "pnl": 0.711
-      }
+      },
+      "endHoldMs": 1000
     },
     "scene3": {
       "replayClipSeconds": 17,
@@ -141,16 +142,19 @@
       "secondaryLossFxAtMs": 13550
     },
     "scene4": {
-      "durationMs": 8000
+      "durationMs": 8000,
+      "endHoldMs": 2000
     },
     "scene5": {
       "durationMsByRaceCount": {
         "2": 10400,
         "3": 13300
-      }
+      },
+      "endHoldMs": 2000
     },
     "scene6": {
-      "durationMs": 9500
+      "durationMs": 9500,
+      "endHoldMs": 2000
     },
     "scene7": {
       "permanent": true
@@ -169,7 +173,8 @@
         4800,
         6100
       ],
-      "rule": "All compact rows are present immediately; each result/comment resolves sequentially at the configured fast stagger. Effects overlap and never extend duration."
+      "rule": "All compact rows are present immediately; each result/comment resolves sequentially at the configured fast stagger. Effects overlap and never extend duration.",
+      "endHoldMs": 2000
     }
   },
   "actionSemantics": {

@@ -230,7 +230,19 @@ function replayPlan(total,replaySequences){
 }
 
 const runtimeContract=JSON.parse(fs.readFileSync(path.resolve(__dirname,'contracts/runtime-contract.json'),'utf8'));
+assert.strictEqual(runtimeContract.timeline.scene1.durationMs,14000);
 assert.strictEqual(runtimeContract.timeline.scene2.durationMs,9000);
+assert.strictEqual(runtimeContract.timeline.scene2.endHoldMs,1000);
+assert.strictEqual(runtimeContract.timeline.scene4.durationMs,8000);
+assert.strictEqual(runtimeContract.timeline.scene4.endHoldMs,2000);
+assert.deepStrictEqual(runtimeContract.timeline.scene5.durationMsByRaceCount,{2:10400,3:13300});
+assert.strictEqual(runtimeContract.timeline.scene5.endHoldMs,2000);
+assert.strictEqual(runtimeContract.timeline.scene6.durationMs,9500);
+assert.strictEqual(runtimeContract.timeline.scene6.endHoldMs,2000);
+assert.deepStrictEqual(runtimeContract.timeline.scene8.durationMsByBetCount,{2:5000,3:6500,4:8000,5:9500});
+assert.strictEqual(runtimeContract.timeline.scene8.endHoldMs,2000);
+assert.match(runtime,/const END_HOLD_MS=\{2:1000,4:2000,5:2000,6:2000,8:2000\}/);
+assert.strictEqual((runtime.match(/tasks\.push\(\{at:d\+\(END_HOLD_MS\[type\]\|\|0\),fn:next\}\)/g)||[]).length,2);
 assert.deepStrictEqual(runtimeContract.timeline.scene2.actionsRatio,{
   race:0,
   bet:0.09,
