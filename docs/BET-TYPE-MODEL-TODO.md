@@ -9,8 +9,9 @@ Recent testing against a real TAB monthly transaction statement, especially the 
 1. **Bet type** - what the customer is betting on.
 2. **Bet structure / option** - how selections are arranged.
 3. **Settlement shape** - single runner, multiple runners in one race, or multiple race legs.
-4. **Source representation** - how TAB expresses the transaction in the statement.
-5. **Kubrick representation** - how the normaliser should represent the bet without inventing information.
+4. **Settlement modifiers** - promotions or boosts that alter the credited return without changing the underlying wager.
+5. **Source representation** - how TAB expresses the transaction in the statement.
+6. **Kubrick representation** - how the normaliser should represent the bet without inventing information.
 
 This document is a tracking document for that work. It is not yet a final wagering-domain contract.
 
@@ -171,6 +172,71 @@ A First 4 similarly requires the first four finishers in correct order, but the 
 
 The current normaliser accepts exactly four selections only. This is also too restrictive for broader TAB First 4 structures.
 
+### Win and Place with payout multiplier
+
+Observed source transaction:
+
+```text
+Transaction: 44767199077494901
+Bet Type: Win and Place
+Runner: BLONDE SUSPECT
+Stake: $25 WIN + $25 PLACE
+Multiplier: 1.20x
+PLACE advertised return: $500.00
+Base fixed-odds payout: $500.00
+Separate Pay Multiplier payout: $100.00
+Total credited: $600.00
+```
+
+This exposed a separate settlement-modifier issue.
+
+The multiplier is **not a bet type** and does not change the underlying Win and Place result. It is a promotional payout modifier applied after the underlying wager has settled.
+
+For this example:
+
+```text
+baseReturn = 500.00
+multiplierBonus = 100.00
+totalReturn = 600.00
+```
+
+The normaliser must not add the multiplier bonus into the base Win/Place component-reconciliation step. Doing so makes the underlying PLACE return appear to be $600, which no longer matches the source component return of $500 and causes the transaction to be quarantined.
+
+---
+
+## Settlement modifiers
+
+Settlement modifiers must be modelled separately from both bet type and bet structure.
+
+### Multiplier / payout boost
+
+Current known example:
+
+```text
+Multiplier: 1.20x
+Base return: $500.00
+Pay Multiplier: $100.00
+Total credited: $600.00
+```
+
+Required modelling principles:
+
+- A multiplier is **not a bet type**.
+- A multiplier is **not another wager**.
+- It does not determine whether the WIN, PLACE or exotic component won.
+- The underlying wager must first be settled using its base payout.
+- The promotional multiplier/boost should then be represented separately.
+- The normaliser should preserve the distinction between:
+  - `baseReturn`
+  - `multiplierBonus`
+  - `totalReturn`
+- The multiplier bonus must not be used to identify the winning Win/Place component.
+- Kubrick's canonical meaning of `return` must be explicitly decided:
+  - base wager return only, or
+  - total amount credited to the customer including the multiplier bonus.
+
+Until that contract decision is made, the normaliser should retain both values rather than silently collapsing them.
+
 ---
 
 ## Meeting resolution is a separate concern
@@ -196,14 +262,15 @@ Do not use exotic parser changes to compensate for meeting-resolution failures.
 
 Real transaction settlement can introduce additional dimensions that must not be conflated with bet type.
 
-Example from 7 September:
+Examples include:
 
-- Fixed Win and Place transaction
-- source component return
-- separate account/pay multiplier
-- authoritative total payout differs from the raw advertised component return
+- component settlement for Win and Place;
+- promotional payout multipliers / boosts;
+- separate account payout rows linked to the same transaction;
+- winning exotic settlement and dividend reconciliation;
+- refunds and other non-standard settlement outcomes.
 
-This is a settlement/reconciliation problem and should remain separate from the bet-type model.
+These are settlement/reconciliation concerns and should remain separate from the bet-type model.
 
 ---
 
@@ -218,6 +285,10 @@ structure
 stake
 result
 return
+baseReturn
+multiplier
+multiplierBonus
+totalReturn
 flexiPercentage
 
 race / meeting identity
@@ -236,7 +307,9 @@ runner
 stake
 odds
 result
-return
+baseReturn
+multiplierBonus
+totalReturn
 ```
 
 ### Single-race multi-runner wager
@@ -247,7 +320,9 @@ structure
 selections[]
 flexiPercentage
 result
-return
+baseReturn
+multiplierBonus
+totalReturn
 ```
 
 ### Multi-race wager
@@ -260,7 +335,9 @@ legs[
 ]
 flexiPercentage
 result
-return
+baseReturn
+multiplierBonus
+totalReturn
 ```
 
 No field should be fabricated simply to make a record satisfy Kubrick validation.
@@ -280,6 +357,8 @@ Before implementation, confirm:
 - How multi-race legs are represented in monthly transaction CSVs.
 - How winning exotic settlements appear in source transactions.
 - Whether tote dividends/results API provides enough data to verify winning exotic returns.
+- How payout multipliers / boosts are represented across Win, Place, Win and Place, Tote and exotic transactions.
+- Whether Kubrick canonical `return` means base wager return or total customer credit including promotional bonuses.
 - How Kubrick should display each category.
 - Whether Kubrick v1 bettings schema should evolve or whether some types remain intentionally unsupported.
 
@@ -289,10 +368,11 @@ Before implementation, confirm:
 
 Any implementation should preserve the current safety rules:
 
-- Never invent a runner, race, odds, return, dividend, or finishing position.
+- Never invent a runner, race, odds, return, dividend, finishing position, multiplier or bonus.
 - Keep source evidence available for reconciliation.
 - Use TAB historical API data only when it proves the required fact.
 - Quarantine unsupported or unprovable transactions instead of guessing.
+- Keep base wager settlement separate from promotional settlement modifiers.
 - Do not weaken the current horse/greyhound/harness domain protection.
 - Do not combine meeting-alias fixes, settlement fixes and exotic-model changes into one uncontrolled change.
 - Add regression fixtures before broadening each supported structure.
@@ -313,6 +393,9 @@ Any implementation should preserve the current safety rules:
 - [ ] Define Standout representation.
 - [ ] Define Roving Banker representation.
 - [ ] Define Boxed representation.
+- [ ] Define settlement-modifier model for multiplier / payout boosts.
+- [ ] Decide canonical meaning of `return`, `baseReturn`, `multiplierBonus` and `totalReturn`.
+- [ ] Add a regression fixture for the BLONDE SUSPECT 1.20x multiplier settlement.
 - [ ] Define winning exotic settlement/reconciliation rules.
 - [ ] Decide which bet types Kubrick V1 will support.
 - [ ] Decide whether `bettings.schema.json` needs a versioned extension.
@@ -331,7 +414,7 @@ Do **not** start broad exotic implementation yet.
 Immediate order of work:
 
 1. Finish the current meeting-resolution / lookup-key fix safely.
-2. Keep the Win & Place multiplier settlement issue separate.
+2. Fix the Win & Place multiplier settlement as a separate controlled change.
 3. Complete this bet-type catalogue and canonical model.
 4. Only then broaden Trifecta / First 4 and add new exotic families.
 
