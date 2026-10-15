@@ -653,3 +653,8 @@ The final V4 copy interface adds three narrow safeguards without changing planne
 - `oddsClassificationEvidence=NONE` means numeric decimal odds must not be converted into inferred favourite/outsider/longshot-style classifications.
 
 The 75-bet CI model payload increased from 64,991 bytes to 66,459 bytes (+1,468 bytes, about 2.3%), remaining below the final V4 69,000-byte regression ceiling. CI remains green at 5 / 8 / 16 / 32 / 75 bets, including Builder and deterministic fallback compatibility.
+
+
+## CloudFront signed recap delivery (staged October 2026)
+
+CloudFront delivery is prepared behind `RECAP_URL_PROVIDER`. Until explicitly switched, the Orchestrator still returns the original S3 presigned `recapUrl`. With `CLOUDFRONT`, the same READY response contains a 365-day CloudFront signed URL. The Normaliser consumes the same HTTPS `recapUrl` field without code changes. Refer to [`docs/CLOUDFRONT_SIGNED_URL_SETUP.md`](../docs/CLOUDFRONT_SIGNED_URL_SETUP.md) for manually configured AWS resources, secret permissions, origin-path mapping, validation and rollback. Signed links are bearer credentials, not user authentication.
