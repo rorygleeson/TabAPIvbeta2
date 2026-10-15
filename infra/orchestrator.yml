@@ -42,6 +42,10 @@ Resources:
                 Resource: arn:aws:s3:::tab-recap-vbeta1/recaps/*
               - Effect: Allow
                 Action:
+                  - secretsmanager:GetSecretValue
+                Resource: arn:aws:secretsmanager:ap-southeast-2:134387458447:secret:kubrick/v2/cloudfront/signing-private-key-rXOVco
+              - Effect: Allow
+                Action:
                   - dynamodb:PutItem
                   - dynamodb:GetItem
                 Resource: arn:aws:dynamodb:ap-southeast-2:134387458447:table/tab-recap-vbeta1-jobs
@@ -70,6 +74,11 @@ Resources:
           JOBS_TABLE: tab-recap-vbeta1-jobs
           PLANNING_QUEUE_URL: !Sub https://sqs.${AWS::Region}.amazonaws.com/${AWS::AccountId}/tab-recap-vbeta1-planning
           RECAP_URL_TTL_SECONDS: '604800'
+          RECAP_URL_PROVIDER: 'S3' # Set CLOUDFRONT only after verification
+          CLOUDFRONT_RECAP_DOMAIN: 'd2bs94wi893l8l.cloudfront.net'
+          CLOUDFRONT_PUBLIC_KEY_ID: 'K1A957H4UJ9LQ9'
+          CLOUDFRONT_SIGNING_SECRET_ID: 'kubrick/v2/cloudfront/signing-private-key'
+          CLOUDFRONT_URL_TTL_SECONDS: '31536000'
       Code:
         S3Bucket: !Ref ArtifactBucket
         S3Key: !Ref ArtifactKey

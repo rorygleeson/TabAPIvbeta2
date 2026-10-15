@@ -425,3 +425,8 @@ Copy fallback is an availability path, not a second model attempt.
 - fresh poison-message/DLQ timing proof if that operational acceptance evidence is still required;
 - separate integration testing for any future real client application;
 - separate Normaliser-to-Kubrick integration once the isolated sample Normaliser is productionised.
+
+
+## CloudFront signed recap delivery (staged October 2026)
+
+CloudFront delivery is prepared behind `RECAP_URL_PROVIDER`. Until explicitly switched, the Orchestrator still returns the original S3 presigned `recapUrl`. With `CLOUDFRONT`, the same READY response contains a 365-day CloudFront signed URL. The Normaliser consumes the same HTTPS `recapUrl` field without code changes. Refer to [`docs/CLOUDFRONT_SIGNED_URL_SETUP.md`](../docs/CLOUDFRONT_SIGNED_URL_SETUP.md) for manually configured AWS resources, secret permissions, origin-path mapping, validation and rollback. Signed links are bearer credentials, not user authentication.

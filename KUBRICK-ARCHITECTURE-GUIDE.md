@@ -1227,3 +1227,8 @@ Scene 8
 ```
 
 This ownership mapping is the preferred mental model when reasoning about Kubrick V2: **code owns structure and factual rendering; the LLM fills a small number of grounded text slots.**
+
+
+## CloudFront signed recap delivery (staged October 2026)
+
+CloudFront delivery is prepared behind `RECAP_URL_PROVIDER`. Until explicitly switched, the Orchestrator still returns the original S3 presigned `recapUrl`. With `CLOUDFRONT`, the same READY response contains a 365-day CloudFront signed URL. The Normaliser consumes the same HTTPS `recapUrl` field without code changes. Refer to [`docs/CLOUDFRONT_SIGNED_URL_SETUP.md`](docs/CLOUDFRONT_SIGNED_URL_SETUP.md) for manually configured AWS resources, secret permissions, origin-path mapping, validation and rollback. Signed links are bearer credentials, not user authentication.
