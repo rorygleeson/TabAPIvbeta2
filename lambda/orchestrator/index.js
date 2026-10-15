@@ -9,6 +9,7 @@ const { S3Client, PutObjectCommand, GetObjectCommand } = require('@aws-sdk/clien
 const { DynamoDBClient, PutItemCommand, GetItemCommand } = require('@aws-sdk/client-dynamodb');
 const { SQSClient, SendMessageCommand } = require('@aws-sdk/client-sqs');
 const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
+const { signRecapUrl } = require('./recap-url-signer');
 
 const canonicalValidatorModule = fs.existsSync(path.join(__dirname, 'canonical-bettings-validator.js'))
   ? './canonical-bettings-validator'
@@ -256,14 +257,14 @@ async function getJobStatus(event, requestId) {
   }
 
   if (status === 'READY' && response.Item.recapS3Key?.S) {
-    body.recapUrl = await getSignedUrl(
-      s3,
-      new GetObjectCommand({
+    body.recapUrl = await signRecapUrl({
+      key: response.Item.recapS3Key.S,
+      provider: process.env.RECAP_URL_PROVIDER || 'S3',
+      s3Signer: () => getSignedUrl(s3, new GetObjectCommand({
         Bucket: STORAGE_BUCKET,
         Key: response.Item.recapS3Key.S
-      }),
-      { expiresIn: RECAP_URL_TTL_SECONDS }
-    );
+      }), { expiresIn: RECAP_URL_TTL_SECONDS })
+    });
   }
 
   return jsonResponse(200, body);
