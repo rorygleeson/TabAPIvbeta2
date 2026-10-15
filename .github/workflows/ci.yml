@@ -181,6 +181,9 @@ jobs:
           test -f lambda/orchestrator/index.test.js
           test -f lambda/orchestrator/package.json
           test -f infra/orchestrator.yml
+          node --check lambda/orchestrator/recap-url-signer.js
+          node --check lambda/orchestrator/recap-url-signer.test.js
+          node lambda/orchestrator/recap-url-signer.test.js
           node --check lambda/orchestrator/index.js
           node --check lambda/orchestrator/index.test.js
           node lambda/orchestrator/index.test.js
