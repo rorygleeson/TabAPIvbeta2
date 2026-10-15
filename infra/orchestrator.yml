@@ -74,7 +74,7 @@ Resources:
           JOBS_TABLE: tab-recap-vbeta1-jobs
           PLANNING_QUEUE_URL: !Sub https://sqs.${AWS::Region}.amazonaws.com/${AWS::AccountId}/tab-recap-vbeta1-planning
           RECAP_URL_TTL_SECONDS: '604800'
-          RECAP_URL_PROVIDER: 'S3' # Set CLOUDFRONT only after verification
+          RECAP_URL_PROVIDER: 'CLOUDFRONT' # S3 remains available for rollback
           CLOUDFRONT_RECAP_DOMAIN: 'd2bs94wi893l8l.cloudfront.net'
           CLOUDFRONT_PUBLIC_KEY_ID: 'K1A957H4UJ9LQ9'
           CLOUDFRONT_SIGNING_SECRET_ID: 'kubrick/v2/cloudfront/signing-private-key'
