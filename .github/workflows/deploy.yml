@@ -252,17 +252,21 @@ jobs:
           npm install --omit=dev --ignore-scripts
           cd ../..
           cp lambda/orchestrator/index.js dist/orchestrator-package/index.js
+          cp lambda/orchestrator/recap-url-signer.js dist/orchestrator-package/recap-url-signer.js
           cp shared/canonical-bettings-validator.js dist/orchestrator-package/canonical-bettings-validator.js
           cp contracts/bettings.schema.json dist/orchestrator-package/contracts/bettings.schema.json
           cp lambda/orchestrator/package.json dist/orchestrator-package/package.json
           cp -R lambda/orchestrator/node_modules dist/orchestrator-package/node_modules
           test -f dist/orchestrator-package/index.js
+          test -f dist/orchestrator-package/recap-url-signer.js
           test -f dist/orchestrator-package/canonical-bettings-validator.js
           test -f dist/orchestrator-package/contracts/bettings.schema.json
           test -d dist/orchestrator-package/node_modules/@aws-sdk/client-s3
           test -d dist/orchestrator-package/node_modules/@aws-sdk/client-dynamodb
           test -d dist/orchestrator-package/node_modules/@aws-sdk/client-sqs
           test -d dist/orchestrator-package/node_modules/@aws-sdk/s3-request-presigner
+          test -d dist/orchestrator-package/node_modules/@aws-sdk/cloudfront-signer
+          test -d dist/orchestrator-package/node_modules/@aws-sdk/client-secrets-manager
           test -d dist/orchestrator-package/node_modules/ajv
           test -d dist/orchestrator-package/node_modules/ajv-formats
           cd dist/orchestrator-package
