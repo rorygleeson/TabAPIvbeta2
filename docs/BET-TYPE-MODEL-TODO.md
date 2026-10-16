@@ -2,7 +2,7 @@
 
 ## Goal
 
-Enhance the **existing Normaliser** to understand the agreed TAB horse-racing bet types from the real CSV statements and accurately produce **stake, return, WIN/LOSS and profit/loss** for Kubrick.
+Enhance the **existing Normaliser** to understand TAB horse-racing bet types actually observed in the supplied real CSV statements and accurately produce **stake, return, WIN/LOSS and profit/loss** for Kubrick.
 
 **Do not build a new wagering model.** Keep Kubrick's existing `contracts/bettings.schema.json` and `betType`, plus the established race, runner, financial and summary fields wherever they work. Start with **Normaliser-only** changes; allow small Kubrick changes only when required to represent an exotic honestly. Kubrick must not implement TAB bet rules.
 
@@ -15,7 +15,7 @@ This document tracks **planned release coverage**, not a claim that the code alr
 | Win | **Support now** | Standard cases recognised | Existing single-runner model; special settlements deferred |
 | Place | **Support now** | Standard cases recognised | Existing single-runner model |
 | Each Way / Win and Place | **Support now** | Partial | One source bet with WIN and PLACE components; reconcile correctly |
-| Quinella | **Support now** | Not supported | Pick first two in either order |
+| Quinella | **Not yet supported** | Not supported | No Quinella example in the supplied August/September CSVs; revisit when a real sample is available |
 | Exacta | **Support now** | Not supported | Pick first two in exact order |
 | Duet | **Support now** | Not supported | Two selected runners in first three |
 | Trifecta (including Boxed) | **Support now** | Partial | Handle multiple selections, ordering and verified outcomes |
@@ -75,7 +75,7 @@ These are known **horse-racing statement examples**, not proof of current suppor
 
 1. Use the **actual supplied CSVs** as fixtures; classify horse wagers by source transaction and bet type.
 2. First ensure ordinary **Win, Place and Win and Place** reconcile correctly; separate unsupported bonus/refund/promotion transactions.
-3. Add **Quinella, Exacta and Duet**, then **Trifecta (including Boxed) and First 4** in controlled increments. Test each against real data and meaningful permutations.
+3. Prioritise **only bet types evidenced in the supplied CSVs**, beginning with **Trifecta (including Boxed) and First 4** after the existing simple types. Keep Quinella and any other unobserved bet type deferred until an actual CSV example is supplied.
 4. For each supported wager, verify **stake, credited return, outcome and P&L** against the CSV, without double-counting component or payout rows.
 5. Check compatibility with the existing `bettings.json` contract. If a genuine multi-runner mismatch is encountered, propose the **smallest** Kubrick-facing change and test planner/builder behaviour.
 6. Report every unsupported or quarantined horse transaction and its reason; compare coverage across both CSV files.
