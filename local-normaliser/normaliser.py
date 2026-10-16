@@ -1237,6 +1237,25 @@ def enrichment_missing_fields(bet, enrichment):
 
 
 
+def melbourne_utc_offset(local_dt):
+    """Australia/Melbourne UTC offset without system tzdata (Windows-safe)."""
+    year = local_dt.year
+    def first_sunday(month):
+        first = datetime(year, month, 1)
+        return 1 + (6 - first.weekday()) % 7
+    april_change = datetime(year, 4, first_sunday(4), 3)
+    october_change = datetime(year, 10, first_sunday(10), 2)
+    in_dst = local_dt < april_change or local_dt >= october_change
+    return timezone(timedelta(hours=11 if in_dst else 10))
+
+
+def melbourne_racing_date(utc_dt):
+    """Resolve Australian racing date without a ZoneInfo dependency."""
+    approx_local = utc_dt.astimezone(timezone(timedelta(hours=10))).replace(tzinfo=None)
+    offset = melbourne_utc_offset(approx_local)
+    return utc_dt.astimezone(offset).date().isoformat()
+
+
 def valid_scheduled_race_time(value, event_date):
     """Return a genuine TAB race start in UTC; reject unzoned midnight placeholders."""
     if not isinstance(value, str) or not value.strip():
@@ -1248,7 +1267,7 @@ def valid_scheduled_race_time(value, event_date):
                 return None
             dt = dt.replace(tzinfo=timezone.utc)
         dt = dt.astimezone(timezone.utc)
-        if dt.astimezone(ZoneInfo("Australia/Melbourne")).date().isoformat() != event_date:
+        if melbourne_racing_date(dt) != event_date:
             return None
         return dt
     except (TypeError, ValueError, OverflowError):
@@ -1337,7 +1356,7 @@ def estimate_missing_trifecta_race_time(bet, meeting, race, api):
                  "jul", "aug", "sep", "oct", "nov", "dec").index(match.group(1).lower()) + 1
         placed = datetime(int(match.group(3)), month, int(match.group(2)),
                           int(match.group(4)), int(match.group(5)), int(match.group(6)),
-                          tzinfo=ZoneInfo("Australia/Melbourne")).astimezone(timezone.utc)
+                          tzinfo=melbourne_utc_offset(datetime(int(match.group(3)), month, int(match.group(2)), int(match.group(4)), int(match.group(5)), int(match.group(6))))).astimezone(timezone.utc)
     except ValueError:
         return None, "BET_TIME_UNPARSABLE"
 
@@ -1350,7 +1369,7 @@ def estimate_missing_trifecta_race_time(bet, meeting, race, api):
         method = "BET_TIME_PLUS_30MIN_ESTIMATE"
     if resulted is not None and estimated >= resulted:
         return None, "ESTIMATE_NOT_BEFORE_RESULT"
-    if estimated.astimezone(ZoneInfo("Australia/Melbourne")).date().isoformat() != date:
+    if melbourne_racing_date(estimated) != date:
         return None, "ESTIMATE_OUTSIDE_RACE_DATE"
     return estimated.isoformat(), method
 
