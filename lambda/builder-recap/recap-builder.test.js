@@ -359,8 +359,14 @@ console.log('Builder Scene 8 and Trifecta regression tests passed.');
  assert.match(html,/HORSE_FIT/);
  assert.match(html,/function fitHorseNames\(\)/);
  assert.match(html,/matchMedia\('\(orientation: portrait\) and \(max-width: 640px\)'\)/);
- assert.match(html,/if\(fits\(\)\)continue; \/\/ Ordinary names retain their original appearance/);
  assert.match(html,/el\.style\.fontSize='';/);
  assert.match(html,/window\.addEventListener\('resize',fitHorseNames\)/);
+ assert.match(html,/const maxLines=twoLines\?2:1/);
+ assert.match(html,/el\.style\.whiteSpace=twoLines\?'normal':'nowrap'/);
+ assert.match(html,/el\.style\.textOverflow='ellipsis'/);
+ assert.match(html,/el\.style\.webkitLineClamp='2'/);
+ assert.match(html,/if\(!mobile\)continue/);
+ assert.match(html,/const twoLines=Number\(scene\.dataset\.sceneType\)===2/);
+
 
 }
