@@ -1,6 +1,7 @@
 'use strict';
 
 const fs = require('fs');
+const { displayBetRunners } = require('./bet-presentation');
 const path = require('path');
 const Ajv2020 = require('ajv/dist/2020');
 const addFormats = require('ajv-formats');
@@ -93,7 +94,7 @@ function templateGate(){ validateScene8RuntimeContract(); for(let i=1;i<=8;i++)e
 
 function fxForBet(bet,all){ if(bet.result==='LOSS')return 'lossTreatment lossEmotion'; const fx=['greenSweep','winEmotion']; const max=Math.max(...all.filter(x=>x.result==='WIN'&&x.profitLoss>0).map(x=>x.profitLoss),-Infinity); if(bet.profitLoss===max)fx.push('bigWinEmphasis'); const prev=bet.sequence===1?0:all[bet.sequence-2].runningPnl; if(prev<0&&bet.runningPnl>0)fx.push('comebackEmphasis'); return fx.join(' '); }
 function isTrifecta(bet){return bet.betType==='TRIFECTA';}
-function betDisplayName(bet){return isTrifecta(bet)?bet.selectedRunners.slice(0,3).map(r=>r.runnerName).join(' · '):String(bet.runnerName||'').trim();}
+function betDisplayName(bet){return displayBetRunners(bet);}
 function betDisplayOddsSuffix(bet){return isTrifecta(bet)?'':` @ ${odds(bet.odds)}`;}
 function betDisplayFinish(bet){return isTrifecta(bet)?'':`FINISHED ${finishingPositionText(bet.finishingPosition)}`;}
 function biggestWinLabel(bet){return isTrifecta(bet)?'TRIFECTA':bet.runnerName;}
