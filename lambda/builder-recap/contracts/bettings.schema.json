@@ -270,6 +270,25 @@
               }
             }
           }
+        },
+        {
+          "if": {
+            "properties": {
+              "betType": {
+                "const": "FIRST4"
+              }
+            },
+            "required": [
+              "betType"
+            ]
+          },
+          "then": {
+            "properties": {
+              "selectedRunners": {
+                "minItems": 4
+              }
+            }
+          }
         }
       ]
     },
