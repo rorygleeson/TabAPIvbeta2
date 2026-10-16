@@ -1,7 +1,7 @@
 'use strict';
 
 const { loadContract } = require('./contract-loader');
-const { displayBetRunners } = require('./bet-presentation');
+const { displayBetRunners } = require(require('fs').existsSync(require('path').join(__dirname, 'bet-presentation.js')) ? './bet-presentation' : '../../shared/bet-presentation');
 const sceneContracts = loadContract('scene-contracts.json');
 
 const FIELD_PHASES = {
