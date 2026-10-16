@@ -46,3 +46,14 @@ assert.throws(
 );
 
 console.log('Shared canonical bettings semantic validator tests passed.');
+
+// First4 is a multi-runner exotic; unlike Trifecta, it requires at least four selections.
+{
+  const bettings = structuredClone(baseline);
+  const bet = bettings.bets[0];
+  bet.betType = 'FIRST4';
+  bet.selectedRunners = [1,2,3,4,5].map(n => ({runnerNumber:n,runnerName:'HORSE '+n,finishingPosition:0}));
+  assert.doesNotThrow(() => validateCanonicalBettingsSemantics(bettings));
+  bet.selectedRunners = bet.selectedRunners.slice(0,3);
+  assert.throws(() => validateCanonicalBettingsSemantics(bettings), /FIRST4 requires enough selectedRunners/);
+}
