@@ -114,80 +114,38 @@ This list also needs confirmation against authoritative TAB documentation and re
 
 ---
 
-## Agreed bet-product scope — initial Kubrick release (16 October 2026)
+## One support table — agreed scope and current implementation
 
-**Decision:** Prioritise broad support for **single-runner and single-race horse-racing products** while keeping changes to Kubrick small. The Normaliser owns bet interpretation, selection combinations, stake/settlement validation and financial calculations. Kubrick continues to consume verified facts through its existing contract where possible; a small, versioned contract/planner extension is acceptable where a single-runner representation would be misleading.
+**Decision (16 October 2026):** Focus the first release on single-runner and single-race horse-racing bets. “Initial release” is the *target*, not a claim that it works today. Current implementation refers to the Normaliser only; successful end-to-end Kubrick presentation is still to be verified. This is the **only support-status table** in this document.
 
-**Important status distinction:** **Target for initial release** means approved *implementation scope*, **not** already supported end to end. The pre-existing Normaliser support matrix below describes *current implementation*, and must not be overwritten by these target decisions.
+| TAB product / label | Release decision | Current Normaliser | Key gap / note |
+|---|---|---|---|
+| Win | **Initial release** | Standard cases recognised | Special settlement and promotion cases excluded for now |
+| Place | **Initial release** | Standard cases recognised | Confirm coverage with horse-only CSV cases |
+| Each Way / Win and Place | **Initial release** | Partial | Existing split into WIN + PLACE records; reconcile components correctly |
+| Quinella | **Initial release** | Not supported | Two runners, either finishing order |
+| Exacta | **Initial release** | Not supported | Two runners, exact order |
+| Duet | **Initial release** | Not supported | Two runners among first three |
+| Trifecta | **Initial release** | Partial | More selections, positional structures, Flexi and winning settlement |
+| Boxed Trifecta | **Initial release** | Not fully supported | A Trifecta **structure**, not a separate canonical base bet |
+| First 4 | **Initial release** | Partial | Position-specific selections, Flexi and winning settlement |
+| Running Double | **Later** | Not supported | Two consecutive race legs |
+| Daily Double | **Later** | Not supported | Two nominated race legs |
+| Treble | **Later** | Not supported | Three race legs |
+| Quaddie / Quadrella | **Later** | Not supported | Four race legs; deliberately deferred |
+| Early Quaddie | **Later** | Not supported | Four earlier nominated legs |
+| Big 6 | **Later** | Not supported | Six legs, special dividends |
+| Parlay Formula | **Later** | Not supported | Reinvestment rules |
+| All-ups | **Later** | Not supported | Reinvested multi-leg wager |
+| Mystery Bet | **Later** | Not supported | Computer-generated selections and underlying product |
+| 3UP Betting | **Later** | Not supported | Composite mystery product |
+| Fixed Odds Multi | **Later** | Partial parser | Multi-leg representation incompatible with existing single-race contract |
 
-### Target for initial release
+**Also listed but not yet supported:** payout multipliers, odds boosts, Bonus Bets, refunds/voids, dead heats, deductions, pending bets and other special settlement variations. These are **modifiers/outcomes**, not additional bet products. Preserve source evidence; do not invent a WIN/LOSS or silently include/exclude money.
 
-| Product / TAB label | Decision | Key implementation boundary |
-|---|---|---|
-| Win | **Support in initial release** | Retain established single-runner contract and ordinary settlement behaviour. |
-| Place | **Support in initial release** | Retain established single-runner contract and ordinary settlement behaviour. |
-| Each Way / Win and Place | **Support in initial release** | One source wager, WIN and PLACE components; current Kubrick presentation may continue using two records when source-backed. |
-| Quinella | **Support in initial release** | Single-race, multi-runner unordered top-two outcome; Normaliser handles selections and validation. |
-| Exacta | **Support in initial release** | Single-race, ordered top-two outcome; no wager-rule calculations in Kubrick. |
-| Duet | **Support in initial release** | Single-race, two selections within paid top-three; Normaliser determines outcome. |
-| Trifecta | **Support in initial release** | Single-race, three finishing positions; support evidenced multi-runner/positional structures with verified settlement rules. |
-| Boxed Trifecta | **Support in initial release** | Trifecta **structure**, not a separate canonical base product; Normaliser handles combinations. |
-| First 4 | **Support in initial release** | Single-race, four finishing positions; Normaliser preserves positional/combination meaning. |
-
-### Not yet supported — later release
-
-| Product / TAB label | Decision | Reason for deferral |
-|---|---|---|
-| Running Double | **Not yet supported** | Multiple races and leg-level selection/result identity. |
-| Daily Double | **Not yet supported** | Two TAB-nominated race legs. |
-| Treble | **Not yet supported** | Three linked race legs. |
-| Quaddie / Quadrella | **Not yet supported** | Four race legs and no single runner/race for the wager; explicitly deferred. |
-| Early Quaddie | **Not yet supported** | Same multi-race presentation and settlement constraints. |
-| Big 6 | **Not yet supported** | Six legs, potential cross-meeting references and product-specific dividends. |
-| Parlay Formula | **Not yet supported** | Sequence combinations and reinvested dividends. |
-| All-ups | **Not yet supported** | Reinvestment and multi-leg settlement. |
-| Mystery Bet | **Not yet supported** | Computer-generated selections and subtype-specific representation need verification. |
-| 3UP Betting | **Not yet supported** | Composite promotional/mystery product needs further evidence. |
-| Fixed Odds Multi | **Not yet supported for Kubrick presentation** | Normaliser has a partial leg parser today, but the current Kubrick single-race contract does not represent a multi properly. |
-
-### Cross-cutting features
-
-**Defer detailed implementation for now:** payout multipliers, odds boosts/Pump/Boost promotions, Bonus Bet funding, deductions, refunds/voids, dead heats, pending bets and other non-standard financial settlement cases. **Keep all listed as Not yet supported** with their source evidence. Do not silently misclassify or discard these transactions or fabricate a simple WIN/LOSS to force schema validation.
-
-**Initial release is not unconditional exotic support:** valid selection structures, Flexi mechanics, and winning/losing settlement must be verified against TAB rules and real horse-only CSV evidence. Unverified variants remain explicitly excluded, even when the base product is in scope.
-
-**Engineering policy:** Normaliser-first; reuse existing `bettings.json` financial and narrative fields and Kubrick's planner/atoms/builder wherever accurate. Modify the Kubrick contract only for necessary multi-runner representation; no attempt to add a wagering rules engine to Kubrick. Begin with one single-race exotic end to end, validate reusable representation, then broaden to the other selected exotics.
+**Architecture boundary:** The Normaliser owns TAB bet rules, combination/staking interpretation and settlement reconciliation. Kubrick keeps its existing financial fields, planner and atoms; only limited, evidence-driven contract changes are acceptable for single-race multi-runner wagers. Do not implement betting logic inside Kubrick.
 
 ---
-
-## Current normaliser support matrix
-
-| TAB type | Single race / multi-race | Selection model | Structures/options | Current support |
-|---|---|---|---|---|
-| Win | Single race | 1 runner | Standard | **Full** |
-| Place | Single race | 1 runner | Standard | **Full** |
-| Win and Place | Single race | 1 runner represented as two components | Standard | **Full with settlement edge cases** |
-| Trifecta | Single race | 3+ runners / combinations | Straight, Boxed, Flexi, Standout, Roving Banker | **Partial** |
-| First 4 | Single race | 4+ runners / combinations | Straight, Boxed, Flexi, Standout, Roving Banker | **Partial** |
-| Quaddie | Multi-race (4 legs) | Multiple runners per leg | Flexi / multi-selection structures | **None** |
-| Big 6 | Multi-race (6 legs) | Multiple runners per leg | Flexi / multi-selection structures | **None** |
-| Quinella | Single race | Multiple runners / first two in any order | To confirm | **None** |
-| Exacta | Single race | Multiple runners / first two in exact order | To confirm | **None** |
-| Duet | Single race | Multiple runners / any two to place | To confirm | **None** |
-| Each Way | Single race | 1 runner with win/place components | Standard | **Not explicitly modelled as its own canonical type** |
-| Treble | Multi-race | Winner selections across 3 legs | To confirm | **None** |
-| Running Double | Multi-race | Winner selections across 2 legs | To confirm | **None** |
-| Daily Double | Multi-race | Winner selections across 2 nominated legs | To confirm | **None** |
-| Early Quaddie | Multi-race (4 legs) | Multiple runners per leg | To confirm | **None** |
-| Parlay Formula | Multi-leg | To confirm | To confirm | **None** |
-| All-ups | Multi-leg | To confirm | To confirm | **None** |
-| Mystery Bet | TAB-generated selections | Product-specific | To confirm | **None** |
-| 3UP Betting | Product-specific | To confirm | To confirm | **None** |
-
-The terms **Full**, **Partial**, and **None** in this table describe the current normaliser implementation, not whether Kubrick's downstream wagering model ultimately supports that bet type.
-
----
-
 ## Current code behaviour
 
 The current parser explicitly recognises these source combinations:
@@ -498,83 +456,3 @@ This avoids accumulating isolated parser exceptions and gives the normaliser one
 
 ---
 
-## Horse-racing wagering model pre-study (v0.1 — 16 October 2026)
-
-**Scope and document policy:** This is the **single working document** for the Kubrick V2 horse-racing wagering study. It includes existing discovery notes and the new capability/compatibility work. Horse racing only; greyhound, harness and sports bets remain outside current scope. **Research status only — no implementation or canonical-contract decision is approved by this update.**
-
-### Study priorities and statuses
-
-- **Supported:** proven end-to-end for an *explicitly specified* combination and settlement case.
-- **Partially supported:** the current Normaliser handles some variations but not others.
-- **Not yet supported:** known product or feature deliberately postponed, while retained in this document.
-- **Under investigation:** actual TAB meaning, eligibility, structure, source fields or settlement is not yet verified.
-
-A label at product level is only a **preliminary summary**. Definitive support applies to the combination of product, selections, structure, pricing, staking, promotion and settlement, and is not inferred merely because the source type is parsed.
-
-### Initial horse-racing product list
-
-| Product / source name | Initial classification | Current interpretation / outstanding work |
-|---|---|---|
-| Win | Partially supported | Straight settled cases are recognised; handle special settlement/promotional cases separately. |
-| Place | Partially supported | Parser supports standard cases; verify against actual horse-only records. |
-| Win and Place / Each Way | Partially supported | One logical source wager may become two Kubrick bet records; retain component identity and stakes. |
-| Trifecta | Partially supported | More-than-three selections, position groups, Flexi and winning settlement need treatment. |
-| First 4 | Partially supported | Position-specific or more-than-four selections and winning settlement need treatment. |
-| Quaddie / source label Quadrella | Not yet supported | Four-leg source representations and Flexi; winning example noted in August evidence. |
-| Mystery Bet – Trifecta | Not yet supported | Computer-selected source product; investigate source marker and staking mechanics. |
-| Fixed Odds Multi | Partially supported | Leg parser exists, but horse-only leg validation and Kubrick contract representation are limited. |
-| Quinella, Exacta, Duet | Not yet supported | Product rules and compatible structures to verify. |
-| Running Double, Daily Double, Treble | Not yet supported | Multiple race legs; exact product eligibility to verify. |
-| Early Quaddie, Big 6 | Not yet supported | Multiple-leg product rules to verify. |
-| All-ups, Parlay Formula, 3UP Betting | Under investigation | Do not treat them as simple multis until TAB mechanics are established. |
-
-### Required compatibility view
-
-We will document **product × selection structure × staking/pricing × promotion × settlement**. A compatible pair of features does not establish that every larger combination is supported. Mark allowed, disallowed, conditional and unknown combinations explicitly with evidence.
-
-| Product | Basic selection representation | Variations to investigate | Flexi evidence / status |
-|---|---|---|---|
-| Win / Place | One runner, one race | Fixed odds, Tote, bet funding and settlements | Not modelled as Flexi in known straightforward cases |
-| Win and Place | One runner, WIN and PLACE components | Unequal component stakes, independently settled returns | Not confirmed |
-| Trifecta | Three finishing positions; may have multiple runners | Straight, Boxed, positional, Standout, Roving Banker | Observed, full rules unresolved |
-| First 4 | Four finishing positions; may have multiple runners | Straight, Boxed, positional, Standout, Roving Banker | Observed, full rules unresolved |
-| Quaddie | Four race legs with per-leg selections | Multi-selection, dividends and winning settlement | Observed, full rules unresolved |
-| Fixed Odds Multi | Several legs/markets | Horse-only legs, combined prices, cross-event selection semantics | Not established |
-
-**Important:** Structure names and product eligibility in this table remain candidates unless supported by a specific CSV case or authoritative TAB rule. Never flatten positional groups or multi-race legs into one runner.
-
-### Staking, pricing and promotions
-
-**Initial modelling focus:** actual stake, fixed-odds versus Tote, split WIN/PLACE stakes, leg/selection groups, and recorded Flexi percentages. The source percentage must be retained as written: August/September examples include values **greater than 100%**; do not cap them or assume their interpretation.
-
-**Not yet supported (but documented):** payout multipliers, boosted prices and offer-specific Boost/Pump mechanics, Bonus Bet and free-bet funding, complicated dividend calculations, deductions and other promotional adjustments. These may have **different** cash/bonus-credit semantics and must not all be represented as a generic “boost” flag. Offer-specific eligibility remains under investigation.
-
-### Settlement and source accounting
-
-**Initial modelling focus:** source-evidenced WIN/LOSS, stake, base credited payout and P&L for fully reconciled transactions.
-
-**Not yet supported:** refunded/void, pending/unsettled, dead heat, partial adjustment, winning exotic settlement and multiplier-credit reconciliation, except when a specific variation is subsequently proven. Do not silently map these states to a WIN or LOSS. Payout, stake and promotional adjustment rows linked by a transaction number are **not automatically distinct wagers**. Preserve the source rows and their association even when the wager is excluded from Kubrick.
-
-### Known statement evidence to investigate
-
-- **September:** transaction `48125370710253917` — Dubbo Trifecta with runners 3,4,5,10 and FLEXI 41.6666%; `36232613608437917` — position-specific First 4 selections; `44767199077494901` — $25 WIN + $25 PLACE, $500 base payout and $100 separately credited 1.20x multiplier; `58633209170384901` — refund-labelled fixed-odds Win; `23154443459835917` — Quadrella with source FLEXI 916.6666% (meaning unresolved).
-- **August:** transaction `53283602338122917` — winning Quadrella with $50 stake and $59.90 observed payout; `53954834893107901` — unequal WIN/PLACE stake example; Mystery Bet – Trifecta source labels and high Flexi percentages require further analysis.
-- The **53 September and 122 August raw transaction-row counts** previously found were across all domains. They are **not horse-only counts**. Recalculate horse-only logical wagers, source rows, components and support coverage before using frequency figures as model evidence. Mixed multi-leg bets require explicit classification.
-- Treat the September Normaliser quarantine log as separate evidence of **parsing**, **meeting/race enrichment**, **settlement reconciliation** and **Kubrick v1 contract** limitations. Quarantine count alone does not prove an unsupported bet type.
-
-### Normaliser and Kubrick contract boundary
-
-- The Normaliser owns deterministic product interpretation, selections/legs, financial reconciliation and source-backed enrichment. Meeting resolution (including `#UNKNOWN` cache-key mismatch) is a separate workstream.
-- Current `contracts/bettings.schema.json` v1.0 requires a single runner, positive odds, finishing position, WIN/LOSS and a return per displayed record. It cannot faithfully describe all exotics, promotions, refunds or pending bets.
-- Keep the working v1 contract and output behaviour unchanged during the study; any future canonical extension must be explicitly versioned and tested.
-- Kubrick must know when it is producing a **partial** racing recap. A valid payload from a subset is not proof of complete wagering coverage.
-
-### Study sequence / decisions still open
-
-1. Verify horse-only wager counts and transaction groupings across both CSVs.
-2. Work through product definitions and permitted selection/staking structures, one product at a time.
-3. Verify base outcomes and settlement representation for each supported combination.
-4. Keep promotions, refund variants and exotic settlement documented as **Not yet supported** until selected for implementation.
-5. Design the canonical JSON projection and regression fixtures **after** the wagering rules are agreed.
-
-**Working rule:** Documentation may be refined during the study. No code, schema or Normaliser changes are authorised by this chapter.
