@@ -1,0 +1,276 @@
+{
+  "schemaVersion": "1.0",
+  "user": {
+    "firstName": "Rory"
+  },
+  "day": {
+    "date": "2026-09-19",
+    "timezone": "Australia/Melbourne"
+  },
+  "bets": [
+    {
+      "sequence": 1,
+      "betTime": "Wed Sep 16 2026 15:27:43",
+      "raceTime": "2026-09-19T02:25:00+00:00",
+      "raceName": "MIDWAY HANDICAP",
+      "meeting": "RANDWICK",
+      "state": "NSW",
+      "raceNumber": 2,
+      "runnerNumber": 12,
+      "runnerName": "FIFTYFIVECHEVY",
+      "betType": "WIN",
+      "stake": 70,
+      "odds": 23,
+      "result": "LOSS",
+      "finishingPosition": 0,
+      "return": 0,
+      "profitLoss": -70,
+      "runningPnl": -70,
+      "replayUrl": "https://mediatabs.skyracing.com.au/Race_Replay/2026/09/20260919RANR02_V.mp4"
+    },
+    {
+      "sequence": 2,
+      "betTime": "Wed Sep 16 2026 15:27:43",
+      "raceTime": "2026-09-19T02:25:00+00:00",
+      "raceName": "MIDWAY HANDICAP",
+      "meeting": "RANDWICK",
+      "state": "NSW",
+      "raceNumber": 2,
+      "runnerNumber": 12,
+      "runnerName": "FIFTYFIVECHEVY",
+      "betType": "PLACE",
+      "stake": 70,
+      "odds": 6,
+      "result": "LOSS",
+      "finishingPosition": 0,
+      "return": 0,
+      "profitLoss": -70,
+      "runningPnl": -140,
+      "replayUrl": "https://mediatabs.skyracing.com.au/Race_Replay/2026/09/20260919RANR02_V.mp4"
+    },
+    {
+      "sequence": 3,
+      "betTime": "Sat Sep 19 2026 13:32:01",
+      "raceTime": "2026-09-19T03:35:00+00:00",
+      "raceName": "TOYOTA FORKLIFTS HANDICAP",
+      "meeting": "RANDWICK",
+      "state": "NSW",
+      "raceNumber": 4,
+      "runnerNumber": 15,
+      "runnerName": "ALABAMA STATE",
+      "betType": "WIN",
+      "stake": 20,
+      "odds": 19,
+      "result": "LOSS",
+      "finishingPosition": 0,
+      "return": 0,
+      "profitLoss": -20,
+      "runningPnl": -160,
+      "replayUrl": "https://mediatabs.skyracing.com.au/Race_Replay/2026/09/20260919RANR04_V.mp4"
+    },
+    {
+      "sequence": 4,
+      "betTime": "Sat Sep 19 2026 13:32:01",
+      "raceTime": "2026-09-19T03:35:00+00:00",
+      "raceName": "TOYOTA FORKLIFTS HANDICAP",
+      "meeting": "RANDWICK",
+      "state": "NSW",
+      "raceNumber": 4,
+      "runnerNumber": 15,
+      "runnerName": "ALABAMA STATE",
+      "betType": "PLACE",
+      "stake": 20,
+      "odds": 3.9,
+      "result": "LOSS",
+      "finishingPosition": 0,
+      "return": 0,
+      "profitLoss": -20,
+      "runningPnl": -180,
+      "replayUrl": "https://mediatabs.skyracing.com.au/Race_Replay/2026/09/20260919RANR04_V.mp4"
+    },
+    {
+      "sequence": 5,
+      "betTime": "Sat Sep 19 2026 13:33:29",
+      "raceTime": "2026-09-19T03:35:00+00:00",
+      "raceName": "TOYOTA FORKLIFTS HANDICAP",
+      "meeting": "RANDWICK",
+      "state": "NSW",
+      "raceNumber": 4,
+      "runnerNumber": null,
+      "runnerName": null,
+      "betType": "TRIFECTA",
+      "stake": 10,
+      "odds": null,
+      "result": "LOSS",
+      "finishingPosition": null,
+      "return": 0,
+      "profitLoss": -10,
+      "runningPnl": -190,
+      "replayUrl": "https://mediatabs.skyracing.com.au/Race_Replay/2026/09/20260919RANR04_V.mp4",
+      "selectedRunners": [
+        {
+          "runnerNumber": 1,
+          "runnerName": "SPICY LU",
+          "finishingPosition": 0
+        },
+        {
+          "runnerNumber": 7,
+          "runnerName": "UNLEESHING",
+          "finishingPosition": 2
+        },
+        {
+          "runnerNumber": 11,
+          "runnerName": "FUNDAMENTAL NATURE",
+          "finishingPosition": 0
+        },
+        {
+          "runnerNumber": 15,
+          "runnerName": "ALABAMA STATE",
+          "finishingPosition": 0
+        }
+      ]
+    },
+    {
+      "sequence": 6,
+      "betTime": "Sat Sep 19 2026 15:00:10",
+      "raceTime": "2026-09-19T05:00:00+00:00",
+      "raceName": "SPORTSBET HOW NOW STAKES",
+      "meeting": "CAULFIELD",
+      "state": "VIC",
+      "raceNumber": 6,
+      "runnerNumber": 3,
+      "runnerName": "POINT BARROW",
+      "betType": "WIN",
+      "stake": 30,
+      "odds": 7,
+      "result": "WIN",
+      "finishingPosition": 1,
+      "return": 210,
+      "profitLoss": 180,
+      "runningPnl": -10,
+      "replayUrl": "https://mediatabs.skyracing.com.au/Race_Replay/2026/09/20260919CAUR06_V.mp4"
+    },
+    {
+      "sequence": 7,
+      "betTime": "Sat Sep 19 2026 15:24:26",
+      "raceTime": "2026-09-19T05:35:00+00:00",
+      "raceName": "HENLEY HOMES UNDERWOOD STAKES",
+      "meeting": "CAULFIELD",
+      "state": "VIC",
+      "raceNumber": 7,
+      "runnerNumber": 7,
+      "runnerName": "MIDDLE EARTH",
+      "betType": "WIN",
+      "stake": 25,
+      "odds": 32.45,
+      "result": "LOSS",
+      "finishingPosition": 0,
+      "return": 0,
+      "profitLoss": -25,
+      "runningPnl": -35,
+      "replayUrl": "https://mediatabs.skyracing.com.au/Race_Replay/2026/09/20260919CAUR07_V.mp4"
+    },
+    {
+      "sequence": 8,
+      "betTime": "Sat Sep 19 2026 15:30:42",
+      "raceTime": "2026-09-19T06:50:00+00:00",
+      "raceName": "SPORTSBET SIR RUPERT CLARKE STAKES",
+      "meeting": "CAULFIELD",
+      "state": "VIC",
+      "raceNumber": 9,
+      "runnerNumber": null,
+      "runnerName": null,
+      "betType": "TRIFECTA",
+      "stake": 15,
+      "odds": null,
+      "result": "LOSS",
+      "finishingPosition": null,
+      "return": 0,
+      "profitLoss": -15,
+      "runningPnl": -50,
+      "replayUrl": "https://mediatabs.skyracing.com.au/Race_Replay/2026/09/20260919CAUR09_V.mp4",
+      "selectedRunners": [
+        {
+          "runnerNumber": 2,
+          "runnerName": "EVAPORATE",
+          "finishingPosition": 0
+        },
+        {
+          "runnerNumber": 3,
+          "runnerName": "SEPALS",
+          "finishingPosition": 2
+        },
+        {
+          "runnerNumber": 8,
+          "runnerName": "FEROCE",
+          "finishingPosition": 0
+        },
+        {
+          "runnerNumber": 11,
+          "runnerName": "SABAJ",
+          "finishingPosition": 0
+        },
+        {
+          "runnerNumber": 14,
+          "runnerName": "SUN GOD",
+          "finishingPosition": 0
+        }
+      ]
+    },
+    {
+      "sequence": 9,
+      "betTime": "Sat Sep 19 2026 15:30:42",
+      "raceTime": "2026-09-19T06:50:00+00:00",
+      "raceName": "SPORTSBET SIR RUPERT CLARKE STAKES",
+      "meeting": "CAULFIELD",
+      "state": "VIC",
+      "raceNumber": 9,
+      "runnerNumber": null,
+      "runnerName": null,
+      "betType": "TRIFECTA",
+      "stake": 7.5,
+      "odds": null,
+      "result": "LOSS",
+      "finishingPosition": null,
+      "return": 0,
+      "profitLoss": -7.5,
+      "runningPnl": -57.5,
+      "replayUrl": "https://mediatabs.skyracing.com.au/Race_Replay/2026/09/20260919CAUR09_V.mp4",
+      "selectedRunners": [
+        {
+          "runnerNumber": 2,
+          "runnerName": "EVAPORATE",
+          "finishingPosition": 0
+        },
+        {
+          "runnerNumber": 8,
+          "runnerName": "FEROCE",
+          "finishingPosition": 0
+        },
+        {
+          "runnerNumber": 11,
+          "runnerName": "SABAJ",
+          "finishingPosition": 0
+        },
+        {
+          "runnerNumber": 14,
+          "runnerName": "SUN GOD",
+          "finishingPosition": 0
+        }
+      ]
+    }
+  ],
+  "summary": {
+    "totalBets": 9,
+    "totalStaked": 267.5,
+    "totalReturned": 210,
+    "wins": 1,
+    "losses": 8,
+    "finalPnl": -57.5,
+    "meetings": 2,
+    "biggestStake": 70,
+    "biggestWinSequence": 6,
+    "biggestLossSequence": 1,
+    "highestOddsWinnerSequence": 6
+  }
+}
