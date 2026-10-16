@@ -9,7 +9,10 @@
  .scene-type-3 .s3-identity:has(.s3-horse.long-single-word){max-width:calc(100% - 40px);right:20px}
  .scene-type-3 .s3-horse.long-single-word{font-size:clamp(16px,4.15vw,21px);line-height:1.08;overflow-wrap:anywhere;word-break:normal;max-width:100%}
  /* Reserve a separate top-right bet area without covering the long-name header. */
- .scene-type-3 .s3-shell:has(.s3-horse.long-single-word) .s3-bet{top:auto;bottom:34%;right:18px;max-width:50%;min-width:0;padding:8px 10px}
+ .scene-type-3 .s3-shell:has(.s3-horse.long-single-word) .s3-bet{top:20px;bottom:auto;right:18px;max-width:39%;min-width:0;padding:8px 10px}
+ /* Long names occupy the full width only below the bet panel, not over it. */
+ .scene-type-3 .s3-identity:has(.s3-horse.long-single-word){max-width:calc(61% - 28px);right:auto}
+ .scene-type-3 .s3-horse.long-single-word{font-size:clamp(12px,3.4vw,17px)}
  .scene-type-3 .s3-shell:has(.s3-horse.long-single-word) .s3-bet strong{font-size:clamp(14px,4vw,19px)}
 }
 /* SCENE_PRODUCTION_CSS_END */</style></head><body>
