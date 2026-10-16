@@ -1325,9 +1325,9 @@ def estimate_missing_trifecta_race_time(bet, meeting, race, api):
     # parts directly to avoid Windows locale-dependent strptime failures.
     raw_bet_time = str(bet.get("betTime") or "").strip()
     match = re.fullmatch(
-        r"(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)\\s+"
-        r"(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\\s+"
-        r"(\\d{1,2})\\s+(\\d{4})\\s+(\\d{1,2}):(\\d{2}):(\\d{2})",
+        r"(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s+"
+        r"(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+"
+        r"(\d{1,2})\s+(\d{4})\s+(\d{1,2}):(\d{2}):(\d{2})",
         raw_bet_time, flags=re.I
     )
     if not match:
