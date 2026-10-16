@@ -3,6 +3,9 @@ const assert=require('node:assert/strict');
 const {displayBetRunners}=require('../shared/bet-presentation');
 const {buildLlmCopyInput}=require('../lambda/scene-planner/llm-copy-input');
 const {buildRecap}=require('../lambda/builder-recap/recap-builder');
+const {buildDeterministicScenePlan}=require('../lambda/scene-planner/scene-planner');
+const {buildFallbackCopy}=require('../lambda/scene-planner/llm-copy-fallback');
+const {mergeCopyIntoPlan}=require('../lambda/scene-planner/llm-copy-merge');
 const fs=require('node:fs');
 const path=require('node:path');
 const baseline=JSON.parse(fs.readFileSync(path.join(__dirname,'fixtures/bettings-2026-09-19-trifecta.json'),'utf8'));
@@ -22,7 +25,7 @@ assert.equal(displayBetRunners({betType:'WIN',runnerName:'ORDINARY HORSE'}),'ORD
 const data=structuredClone(baseline);
 const bet=data.bets.find(b=>b.betType==='TRIFECTA');
 bet.result='WIN';
-bet.return=200;
+bet.return=500;
 bet.profitLoss=bet.return-bet.stake;
 bet.selectedRunners=sample.selectedRunners;
 let running=0;
@@ -32,21 +35,17 @@ data.summary.losses--;
 data.summary.totalReturned=Number(data.bets.reduce((x,b)=>x+b.return,0).toFixed(2));
 data.summary.finalPnl=Number(running.toFixed(2));
 data.summary.biggestWinSequence=bet.sequence;
-const scenePlan={
- planVersion:'2.0',
- scenes:[
- {sceneType:1,openingTeaser:'A racing day gets underway.'},
- {sceneType:2,betSequence:1,tensionLine:'The opening result is close.',reactionLine:'The first bet is settled.'},
- {sceneType:5,betSequences:[2,3,4],setupKicker:'Next up',setupHeadline:'More bets',payoffHeadline:'Results in',contextLine:'Onwards'},
- {sceneType:5,betSequences:[5,6],setupKicker:'Next up',setupHeadline:'More bets',payoffHeadline:'Results in',contextLine:'Onwards'},
- {sceneType:8,betSequences:[7,8,9],headline:'Fast results',headlineCategory:'MIXED',comments:['One.','Two.','Three.'],blockReaction:'The day moves forward.'},
- {sceneType:6,dayVerdict:'The day had a notable result.',standoutHighlightType:'biggestWin',standoutCopy:'One result stood out.'},
- {sceneType:7,selectedFinalHighlights:['totalBets','wins','finalPnl'],finalSummary:'The results are in.',shareCaption:'My recap'}
- ]
-};
-// Focus first on shared runner facts, not on this hand-built plan's policy eligibility.
-const fact={artifactType:'deterministicScenePlan',artifactVersion:'1.0',scenes:[{sceneType:2,betSequence:bet.sequence}]};
-const copy=buildLlmCopyInput(data,fact);
+const deterministic=buildDeterministicScenePlan(data);
+const copy=buildLlmCopyInput(data,deterministic);
 assert.equal(copy.factCatalog['B'+bet.sequence+'_RUNNER'],'WINNING HORSE · SECOND HORSE · THIRD HORSE');
 assert.equal(copy.factCatalog['B'+bet.sequence+'_BET_RESULT'],'WIN');
+assert.equal(data.summary.highestOddsWinnerSequence,6, 'priced winning WIN still owns highest odds');
+const finalPlan=mergeCopyIntoPlan(deterministic,buildFallbackCopy(copy));
+const recap=buildRecap({bettings:data,scenePlan:finalPlan});
+assert.equal(recap.betCount,9);
+assert.equal(recap.finalPnl,data.summary.finalPnl);
+assert.match(recap.html,/WINNING HORSE · SECOND HORSE · THIRD HORSE/);
+assert.doesNotMatch(recap.html,/TRIFECTA @/);
+assert.match(recap.html,/TRIFECTA/);
+assert.equal(finalPlan.scenes.find(s=>s.sceneType===6)?.standoutHighlightType !== undefined,true);
 console.log('Winning boxed Trifecta identity and LLM presentation facts passed.');
