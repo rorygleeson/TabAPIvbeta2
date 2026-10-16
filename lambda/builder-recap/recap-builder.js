@@ -1,7 +1,7 @@
 'use strict';
 
 const fs = require('fs');
-const { displayBetRunners } = require('./bet-presentation');
+const { displayBetRunners } = require(require('fs').existsSync(require('path').join(__dirname, 'bet-presentation.js')) ? './bet-presentation' : '../../shared/bet-presentation');
 const path = require('path');
 const Ajv2020 = require('ajv/dist/2020');
 const addFormats = require('ajv-formats');
