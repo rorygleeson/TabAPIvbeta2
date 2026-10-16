@@ -1243,7 +1243,9 @@ def valid_scheduled_race_time(value, event_date):
         return None
     try:
         dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
-        if dt.hour == 0 and dt.minute == 0 and dt.second == 0:
+        # TAB's unzoned midnight is a placeholder. A genuine offset-aware
+        # UTC race timestamp must not be rejected solely by its clock hour.
+        if dt.tzinfo is None and dt.hour == 0 and dt.minute == 0 and dt.second == 0:
             return None
         if dt.tzinfo is None:
             # TAB historical timestamps without an offset are UTC in this endpoint.
@@ -1303,7 +1305,17 @@ def estimate_missing_trifecta_race_time(bet, meeting, race, api):
                 estimated = known[anchor] + timedelta(minutes=gap * (number - anchor))
                 method = "SAME_MEETING_EXTRAPOLATION"
     if estimated is None:
-        return None, "INSUFFICIENT_TRUSTED_SAME_MEETING_TIMES"
+        # Last resort: TAB's resultedTime is later than the race start.
+        # Estimate 10 minutes before it, never confuse settlement with race start.
+        # Keep the provenance explicit for subsequent review.
+        try:
+            resulted_hint = datetime.fromisoformat(str(race.get("resultedTime") or "").replace("Z", "+00:00"))
+            if resulted_hint.tzinfo is None:
+                resulted_hint = resulted_hint.replace(tzinfo=timezone.utc)
+            estimated = resulted_hint.astimezone(timezone.utc) - timedelta(minutes=10)
+            method = "TAB_RESULTED_TIME_MINUS_10_MIN_ESTIMATE"
+        except (TypeError, ValueError):
+            return None, "INSUFFICIENT_TRUSTED_SAME_MEETING_TIMES"
 
     try:
         placed = datetime.strptime(bet["betTime"], "%a %b %d %Y %H:%M:%S").replace(
@@ -1314,6 +1326,8 @@ def estimate_missing_trifecta_race_time(bet, meeting, race, api):
     # Only normal pre-race bet transactions are covered by this estimator.
     if not placed < estimated:
         return None, "ESTIMATE_NOT_AFTER_BET"
+    if estimated.astimezone(ZoneInfo("Australia/Melbourne")).date().isoformat() != date:
+        return None, "ESTIMATE_OUTSIDE_RACE_DATE"
     try:
         resulted = datetime.fromisoformat(str(race.get("resultedTime") or "").replace("Z", "+00:00"))
         if resulted.tzinfo is None:
