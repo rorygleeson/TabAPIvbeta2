@@ -471,7 +471,7 @@
             "totalReturned"
           ],
           "eligibility": {
-            "biggestWin": "at least one WIN with known positive decimal odds with positive profitLoss",
+            "biggestWin": "at least one WIN with positive profitLoss",
             "highestOddsWinner": "at least one WIN with known positive decimal odds",
             "biggestRecovery": "at least one bet with positive profitLoss",
             "longestLosingStreak": "at least one LOSS",
