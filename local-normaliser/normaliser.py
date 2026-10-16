@@ -456,9 +456,11 @@ def validate(b,kind,group):
         if not isinstance(b.get("raceNumber"),int) or b["raceNumber"]<=0 or not positive(b.get("stake")): return bad(f"{kind} is missing required race/stake data")
         need=3 if kind=="TRIFECTA" else 4
         selections=b.get("selections")
-        if not isinstance(selections,list) or len(selections)!=need: return bad(f"{kind} requires exactly {need} numeric selections; got {selections!r}")
+        if not isinstance(selections,list): return bad(f"{kind} selections must be a list; got {selections!r}")
+        if kind=="TRIFECTA" and len(selections)<3: return bad(f"TRIFECTA requires at least 3 numeric selections; got {selections!r}")
+        if kind=="FIRST_4" and len(selections)!=4: return bad(f"FIRST_4 requires exactly 4 numeric selections; got {selections!r}")
         if any(not isinstance(x,int) or x<=0 for x in selections): return bad(f"{kind} selections must be positive runner numbers; got {selections!r}")
-        if len(set(selections))!=need: return bad(f"{kind} selections must be unique; got {selections!r}")
+        if len(set(selections))!=len(selections): return bad(f"{kind} selections must be unique; got {selections!r}")
     return None
 
 
