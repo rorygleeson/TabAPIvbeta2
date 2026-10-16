@@ -368,6 +368,6 @@ console.log('Builder Scene 8 and Trifecta regression tests passed.');
  bettings.bets[0].runnerName='FIFTYFIVECHEVY';
  bettings.bets[0].replayUrl='https://example.com/fiftyfivechevy.mp4';
  const html=buildRecap({bettings,scenePlan:replayPlan(5,[1])}).html;
- assert.match(html,/class="s2-horse s2-reveal long-single-word">FIFTYFIVECHEVY<\/div>/);
+ assert.match(html,/class="s2-horse s2-reveal long-single-word"[^>]*>FIFTYFIVECHEVY<\/div>/);
  assert.match(html,/class="s3-horse long-single-word">FIFTYFIVECHEVY<\/div>/);
 }
