@@ -315,4 +315,35 @@ function setLosingTrifecta(bettings,index) {
   assert.match(out.html,/HORSE TWO · HORSE EIGHT · HORSE ELEVEN/);
 }
 
+
+{
+  // Trifecta replay: preserves playback and substitutes grounded multi-runner identity.
+  const data=setLosingTrifecta(makeBettings(5),1);
+  data.bets[1].replayUrl='https://example.com/trifecta-race-replay.mp4';
+  const result=buildRecap({bettings:data,scenePlan:replayPlan(5,[2])});
+  assert.strictEqual(result.replayCount,1);
+  assert.match(result.html,/class="s3-horse trifecta-selection">HORSE TWO · HORSE EIGHT · HORSE ELEVEN<\/div>/);
+  assert.match(result.html,/\$10 TRIFECTA<\/strong>/);
+  assert.doesNotMatch(result.html,/TRIFECTA @/);
+}
+{
+  // Trifecta grouped card with an ordinary WIN; both render in their own roles.
+  const data=setLosingTrifecta(makeBettings(5),1);
+  const [s1,s6,s7]=edgeScenes();
+  const plan={planVersion:'2.0',scenes:[
+    s1,
+    {sceneType:5,betSequences:[1,2],setupKicker:'NEXT UP',setupHeadline:'Two bets',
+      payoffHeadline:'Those results are in',contextLine:'The day keeps moving.'},
+    {sceneType:5,betSequences:[3,4],setupKicker:'NEXT UP',setupHeadline:'Two more bets',
+      payoffHeadline:'Those results are in',contextLine:'The day keeps moving.'},
+    {sceneType:2,betSequence:5,tensionLine:'Final bet ready.',reactionLine:'Result recorded.'},
+    s6,s7
+  ]};
+  const result=buildRecap({bettings:data,scenePlan:plan});
+  assert.match(result.html,/class="s5-horse trifecta-selection">HORSE TWO · HORSE EIGHT · HORSE ELEVEN<\/div>/);
+  assert.match(result.html,/TRIFECTA • \$10/);
+  assert.doesNotMatch(result.html,/TRIFECTA • \$10 @/);
+  assert.match(result.html,/class="s5-horse ">RUNNER WITH A DELIBERATELY LONG NAME 1<\/div>/);
+}
+
 console.log('Builder Scene 8 and Trifecta regression tests passed.');
