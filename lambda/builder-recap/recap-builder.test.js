@@ -358,4 +358,9 @@ console.log('Builder Scene 8 and Trifecta regression tests passed.');
  assert.match(html,/class="s3-horse long-single-word">FIFTYFIVECHEVY<\/div>/);
  assert.match(html,/HORSE_FIT/);
  assert.match(html,/function fitHorseNames\(\)/);
+ assert.match(html,/matchMedia\('\(orientation: portrait\) and \(max-width: 640px\)'\)/);
+ assert.match(html,/if\(fits\(\)\)continue; \/\/ Ordinary names retain their original appearance/);
+ assert.match(html,/el\.style\.fontSize='';/);
+ assert.match(html,/window\.addEventListener\('resize',fitHorseNames\)/);
+
 }
