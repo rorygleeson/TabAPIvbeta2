@@ -216,7 +216,10 @@
           "if": {
             "properties": {
               "betType": {
-                "const": "TRIFECTA"
+                "enum": [
+                  "TRIFECTA",
+                  "FIRST4"
+                ]
               }
             },
             "required": [
