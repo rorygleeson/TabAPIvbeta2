@@ -347,7 +347,8 @@ function setLosingTrifecta(bettings,index) {
 }
 
 console.log('Builder Scene 8 and Trifecta regression tests passed.');
-\n// Responsive long-name safeguards: the same horse must render in phone layouts
+
+// Responsive long-name safeguards: the same horse must render in phone layouts
 // without changing existing laptop landscape compaction rules.
 {
  const scenes=[2,3,5,8];
