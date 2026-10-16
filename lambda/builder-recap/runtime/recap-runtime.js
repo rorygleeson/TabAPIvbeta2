@@ -42,7 +42,7 @@ function fitHorseNames(){
       const width=el.getBoundingClientRect().width;
       if(width<=0)continue;
       const name=el.textContent.trim();
-      const twoLines=Number(scene.dataset.sceneType)===2 && /\\s/u.test(name);
+      const twoLines=Number(scene.dataset.sceneType)===2 && /\s/u.test(name);
       const maxLines=twoLines?2:1;
       el.title=name;
       el.style.wordBreak='normal';
