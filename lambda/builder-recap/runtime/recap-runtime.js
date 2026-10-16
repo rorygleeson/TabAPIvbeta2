@@ -31,6 +31,11 @@ function fitHorseNames(){
       el.style.fontSize='';
       el.style.overflowWrap='';
       el.style.lineHeight='';
+      el.style.maxHeight='';
+      el.style.overflow='';
+      el.style.display='';
+      el.style.webkitBoxOrient='';
+      el.style.webkitLineClamp='';
       if(!isMobile)continue;
       const width=el.getBoundingClientRect().width;
       if(width<=0)continue; // The active scene gets its own fitting pass.
@@ -47,9 +52,16 @@ function fitHorseNames(){
       const floor=Math.min(cfg.min,original);
       el.style.fontSize=floor+'px';
       if(!fits()){
-        // Very unusual names are allowed an extra line rather than colliding
-        // with the adjacent result. The column always confines their width.
-        el.style.lineHeight='1.05';
+        // At the readable font-size floor, clamp extreme names to two lines.
+        // Keep the underlying text intact; only its presentation is truncated.
+        const lineHeight=parseFloat(getComputedStyle(el).lineHeight);
+        const height=Number.isFinite(lineHeight)?lineHeight:floor*1.15;
+        el.style.display='-webkit-box';
+        el.style.webkitBoxOrient='vertical';
+        el.style.webkitLineClamp=String(cfg.maxLines);
+        el.style.overflow='hidden';
+        el.style.maxHeight=(height*cfg.maxLines+1)+'px';
+        el.title=el.textContent.trim();
         continue;
       }
       let lo=floor,hi=original;
