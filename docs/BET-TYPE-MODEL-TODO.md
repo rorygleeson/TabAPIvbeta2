@@ -17,7 +17,7 @@ This document tracks **planned release coverage**, not a claim that the code alr
 | Each Way / Win and Place | **Support now** | Partial | One source bet with WIN and PLACE components; reconcile correctly |
 | Quinella | **Not yet supported** | Not supported | No Quinella example in the supplied August/September CSVs; revisit when a real sample is available |
 | Exacta | **Not yet supported** | Not supported | No Exacta example in the supplied August/September CSVs; defer until a real sample is available |
-| Duet | **Support now** | Not supported | Two selected runners in first three |
+| Duet | **Not yet supported** | Not supported | No Duet example in the supplied August/September CSVs; defer until a real sample is available |
 | Trifecta (including Boxed) | **Support now** | Partial | Handle multiple selections, ordering and verified outcomes |
 | First 4 | **Support now** | Partial | Handle positional selections, combinations and verified outcomes |
 | Running Double | **Not yet supported** | Not supported | Multi-race wager |
