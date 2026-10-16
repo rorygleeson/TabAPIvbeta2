@@ -1655,7 +1655,7 @@ KUBRICK_REQUIRED_BET_FIELDS = (
 )
 
 KUBRICK_OPTIONAL_BET_FIELDS = ("raceId", "runnerId")
-KUBRICK_ALLOWED_BET_FIELDS = KUBRICK_REQUIRED_BET_FIELDS + KUBRICK_OPTIONAL_BET_FIELDS
+KUBRICK_ALLOWED_BET_FIELDS = KUBRICK_REQUIRED_BET_FIELDS + KUBRICK_OPTIONAL_BET_FIELDS + ("selectedRunners",)
 
 
 def candidate_odds(bet):
@@ -1750,6 +1750,13 @@ def build_candidate_kubrick_payload(enriched_payload, selected_date, first_name=
             record["raceId"] = e.get("raceId")
         if e.get("runnerId") not in (None, ""):
             record["runnerId"] = e.get("runnerId")
+        if bet.get("betType") == "TRIFECTA":
+            record["selectedRunners"] = [
+                {"runnerNumber": r.get("runnerNumber"),
+                 "runnerName": r.get("runnerName"),
+                 "finishingPosition": r.get("finishingPosition")}
+                for r in e.get("selectedRunners", [])
+            ]
         final_bets.append(record)
 
     stakes = [b["stake"] for b in final_bets if isinstance(b.get("stake"), (int, float))]
@@ -1840,13 +1847,14 @@ def validate_candidate_kubrick_payload(payload):
             continue
 
         missing = [field for field in KUBRICK_REQUIRED_BET_FIELDS if field not in bet]
-        extra = [field for field in bet if field not in KUBRICK_ALLOWED_BET_FIELDS]
+        extra = [field for field in bet if field not in KUBRICK_ALLOWED_BET_FIELDS or (field == "selectedRunners" and bet.get("betType") != "TRIFECTA")]
         if missing:
             errors.append(f"{prefix}: missing fields: {', '.join(missing)}")
         if extra:
             errors.append(f"{prefix}: unexpected fields: {', '.join(extra)}")
 
-        for field in ("betTime", "raceTime", "raceName", "meeting", "state", "runnerName", "betType"):
+        trifecta = bet.get("betType") == "TRIFECTA"
+        for field in ("betTime", "raceTime", "raceName", "meeting", "state", "betType") + (() if trifecta else ("runnerName",)):
             if not isinstance(bet.get(field), str) or not bet.get(field):
                 errors.append(f"{prefix}: {field} must be a non-empty string")
 
@@ -1854,13 +1862,13 @@ def validate_candidate_kubrick_payload(payload):
             if field in bet and (not isinstance(bet.get(field), str) or not bet.get(field)):
                 errors.append(f"{prefix}: {field} must be a non-empty string when present")
 
-        for field in ("sequence", "raceNumber", "runnerNumber"):
+        for field in ("sequence", "raceNumber") + (() if trifecta else ("runnerNumber",)):
             value = bet.get(field)
             if not isinstance(value, int) or isinstance(value, bool) or value < 1:
                 errors.append(f"{prefix}: {field} must be an integer >= 1")
 
         finishing_position = bet.get("finishingPosition")
-        if (
+        if not trifecta and (
             not isinstance(finishing_position, int)
             or isinstance(finishing_position, bool)
             or finishing_position < 0
@@ -1873,7 +1881,7 @@ def validate_candidate_kubrick_payload(payload):
                 errors.append(f"{prefix}: {field} must be a number >= 0")
 
         odds = bet.get("odds")
-        if not is_number(odds) or odds <= 0:
+        if not trifecta and (not is_number(odds) or odds <= 0):
             errors.append(f"{prefix}: odds must be a number > 0")
 
         for field in ("profitLoss", "runningPnl"):
@@ -1882,6 +1890,31 @@ def validate_candidate_kubrick_payload(payload):
 
         if bet.get("result") not in ("WIN", "LOSS"):
             errors.append(f"{prefix}: result must be WIN or LOSS")
+
+        if trifecta:
+            runners = bet.get("selectedRunners")
+            if not isinstance(runners, list) or len(runners) < 3:
+                errors.append(f"{prefix}: TRIFECTA requires at least 3 named selectedRunners")
+            else:
+                numbers = []
+                for runner in runners:
+                    if not isinstance(runner, dict) or set(runner) != {"runnerNumber", "runnerName", "finishingPosition"}:
+                        errors.append(f"{prefix}: selectedRunners entries require runnerNumber, runnerName and finishingPosition")
+                        continue
+                    number = runner["runnerNumber"]
+                    if not isinstance(number, int) or isinstance(number, bool) or number < 1:
+                        errors.append(f"{prefix}: selected runnerNumber must be a positive integer")
+                    else:
+                        numbers.append(number)
+                    if not isinstance(runner["runnerName"], str) or not runner["runnerName"].strip():
+                        errors.append(f"{prefix}: selected runnerName must be non-empty")
+                    position = runner["finishingPosition"]
+                    if position is not None and (not isinstance(position, int) or isinstance(position, bool) or position < 0):
+                        errors.append(f"{prefix}: selected finishingPosition must be non-negative or null")
+                if len(numbers) != len(set(numbers)):
+                    errors.append(f"{prefix}: selected runner numbers must be distinct")
+            if odds is not None and (not is_number(odds) or odds <= 0):
+                errors.append(f"{prefix}: TRIFECTA odds must be positive or null")
 
         replay = bet.get("replayUrl")
         if replay is not None:
@@ -2565,7 +2598,9 @@ def process_selected_day(
             print("Kubrick request not sent.")
             return False
 
-        print("[VALIDATION] Kubrick payload valid.")
+        print("[VALIDATION] Normaliser candidate payload valid (Trifecta uses provisional local contract).")
+        if any(b.get("betType") == "TRIFECTA" for b in candidate.get("bets", [])):
+            print("[VALIDATION] WARNING: Kubrick server contract has NOT been updated for TRIFECTA; POST may fail.")
         if quarantined:
             print(
                 f"[VALIDATION] WARNING: recap contains {len(included_bets)} of "
