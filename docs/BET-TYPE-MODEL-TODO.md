@@ -65,6 +65,34 @@ The following list is the current working catalogue to confirm against authorita
 - Mystery Bet
 - 3UP Betting
 
+### Plain-English descriptions and examples
+
+The examples below are **illustrative selections**, not wagers taken from the uploaded CSVs. Definitions are based on [TAB's racing bet types guide](https://help.tab.com.au/betting-on-racing/racing-bet-types). Detailed compatibility and settlement rules remain subjects of this study.
+
+| TAB type / label | What it means | Simple example |
+|---|---|---|
+| **Win** | Pick the runner that finishes first. | Runner 5 must win Race 3. |
+| **Place** | Pick a runner to finish in a dividend-paying place; the number of places depends on the field and rules. | Runner 5 finishes second and pays a place dividend. |
+| **Each Way** | A combined WIN and PLACE wager on the same runner; its components can settle differently. | $10 WIN + $10 PLACE on runner 5; a second-place finish pays only the PLACE part. |
+| **Quinella** | Pick the first two finishers in either order. | Runners 2 and 7 finish first and second in either order. |
+| **Exacta** | Pick the first two finishers in their exact order. | Runner 2 first, runner 7 second. |
+| **Duet** | Pick two runners that both finish among the first three, in any order. | Runners 2 and 7 finish first and third. |
+| **Trifecta** | Pick the first three finishers in exact order. | 2 first, 7 second, 4 third. |
+| **Boxed Trifecta** | Trifecta selection structure covering every valid finishing order of selected runners; not necessarily a separate underlying product. | Box 2, 7 and 4 to cover all six orders. |
+| **Treble** | Pick the winners of three TAB-nominated races. | Winners of races 3, 4 and 5, where those are the nominated legs. |
+| **First 4** | Pick the first four finishers in exact order. | 2 first, 7 second, 4 third, 9 fourth. |
+| **Parlay Formula** | Link bets across races, reinvesting dividends into later bets, with a chosen formula number determining the race combinations needed. | Formula 3 across four selected races creates combinations of three races. |
+| **All-ups** | A parlay where every selected leg must win; returns flow into subsequent legs. | Back winners in three races; all three selections must succeed. |
+| **Running Double** | Pick the winners of two consecutive races at one meeting. | Winners of races 4 and 5. |
+| **Daily Double** | Pick winners of two races specifically nominated by TAB. | Winners of nominated races 3 and 7. |
+| **Quaddie** | Pick the winners of four nominated races at one meeting; also called *Quadrella*. | Winners of races 5, 6, 7 and 8, if nominated. |
+| **Early Quaddie** | A Quaddie covering an earlier set of four nominated races. | Winners of races 1–4, if nominated. |
+| **Big 6** | Pick winners of six TAB-nominated races, possibly across meetings; some lesser dividend conditions can apply. | Correctly identify all six winners for the major dividend. |
+| **Mystery Bet** | TAB's computer chooses the selections for an underlying bet product; it is not a universal standalone settlement rule. | TAB generates the runners for a Mystery Trifecta. |
+| **3UP Betting** | Retail mystery package combining one $1 Win, one $1 Exacta and one $1 Trifecta on computer-picked numbers. | Numbers 2, 6, 7 produce Win 2; Exacta 2–6; Trifecta 2–6–7. |
+
+**Modelling distinction:** These are TAB's published labels, not 19 necessarily independent canonical product families. In particular, Boxed is a structure, Mystery describes selection generation, Each Way groups WIN and PLACE components, and All-ups are a special Parlay Formula case. Preserve TAB's source labels while modelling those relationships separately.
+
 **Note:** statement values such as `SGL` are not to be treated as racing bet types. They are source-format / transaction labels and should be modelled separately from the racing wager itself.
 
 ---
