@@ -18,9 +18,17 @@ const validate = ajv.compile(schema);
 const clone = x => structuredClone(x);
 const errors = () => JSON.stringify(validate.errors || []);
 function check(payload, shouldPass, label) {
-  const ok = validate(payload);
-  assert.equal(ok, shouldPass, label + ': ' + errors());
-  if (ok) assert.doesNotThrow(() => validateCanonicalBettingsSemantics(payload), label);
+  const schemaOk = validate(payload);
+  let semanticOk = false;
+  if (schemaOk) {
+    try {
+      validateCanonicalBettingsSemantics(payload);
+      semanticOk = true;
+    } catch (error) {
+      if (shouldPass) throw error;
+    }
+  }
+  assert.equal(schemaOk && semanticOk, shouldPass, label + ': ' + errors());
 }
 
 // A previously accepted ordinary-bet fixture must remain accepted.
