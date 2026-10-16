@@ -2747,9 +2747,7 @@ def process_selected_day(
             print("Kubrick request not sent.")
             return False
 
-        print("[VALIDATION] Normaliser candidate payload valid (Trifecta uses provisional local contract).")
-        if any(b.get("betType") == "TRIFECTA" for b in candidate.get("bets", [])):
-            print("[VALIDATION] WARNING: Kubrick server contract has NOT been updated for TRIFECTA; POST may fail.")
+        print("[VALIDATION] Kubrick candidate payload valid.")
         if quarantined:
             print(
                 f"[VALIDATION] WARNING: recap contains {len(included_bets)} of "
