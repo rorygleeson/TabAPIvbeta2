@@ -43,4 +43,23 @@ assert.deepEqual(covered,[1,2,3,4,5]);
 const repeated = structuredClone(bettings);
 repeated.bets[1] = { ...structuredClone(bet), sequence:2, betTime:fixture.bets[1].betTime, profitLoss:fixture.bets[1].profitLoss, runningPnl:fixture.bets[1].runningPnl, stake:fixture.bets[1].stake, replayUrl:fixture.bets[1].replayUrl };
 assert.doesNotThrow(()=>buildDeterministicScenePlan(repeated));
-console.log('Trifecta planner and LLM grounding regression passed.');
+
+
+// First4 follows Trifecta: no odds/finish facts and no synthetic same-runner grouping.
+const first4 = structuredClone(bettings);
+first4.bets[0].betType = 'FIRST4';
+const first4Plan = buildDeterministicScenePlan(first4);
+const first4Copy = buildLlmCopyInput(first4, first4Plan);
+const first4Atoms = first4Copy.factCatalog;
+assert.equal(first4Atoms.B1_BET_TYPE, 'FIRST4');
+assert.equal(first4Atoms.B1_RUNNER, 'RUNNER TWO · RUNNER EIGHT · RUNNER ELEVEN · RUNNER FOURTEEN');
+assert.equal('B1_DECIMAL_ODDS' in first4Atoms, false, 'no invented First4 odds');
+assert.equal('B1_FINISH' in first4Atoms, false, 'no invented First4 finish');
+assert.equal(first4Atoms.B1_STAKE, baseCopy.factCatalog.B1_STAKE);
+assert.equal(first4Atoms.B2_DECIMAL_ODDS, baseCopy.factCatalog.B2_DECIMAL_ODDS, 'single runner odds preserved');
+assert.equal(first4Copy.protectedTerms.includes(first4Atoms.B1_RUNNER), true);
+const repeatedFirst4 = structuredClone(first4);
+repeatedFirst4.bets[1] = { ...structuredClone(first4.bets[0]), sequence:2, betTime:fixture.bets[1].betTime, profitLoss:fixture.bets[1].profitLoss, runningPnl:fixture.bets[1].runningPnl, stake:fixture.bets[1].stake, replayUrl:fixture.bets[1].replayUrl };
+assert.doesNotThrow(() => buildDeterministicScenePlan(repeatedFirst4));
+
+console.log('Trifecta and First4 planner grounding regression passed.');

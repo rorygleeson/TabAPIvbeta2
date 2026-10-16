@@ -458,7 +458,7 @@ def validate(b,kind,group):
         selections=b.get("selections")
         if not isinstance(selections,list): return bad(f"{kind} selections must be a list; got {selections!r}")
         if kind=="TRIFECTA" and len(selections)<3: return bad(f"TRIFECTA requires at least 3 numeric selections; got {selections!r}")
-        if kind=="FIRST_4" and len(selections)!=4: return bad(f"FIRST_4 requires exactly 4 numeric selections; got {selections!r}")
+        if kind=="FIRST_4" and len(selections)<4: return bad(f"FIRST_4 requires at least 4 numeric selections; got {selections!r}")
         if any(not isinstance(x,int) or x<=0 for x in selections): return bad(f"{kind} selections must be positive runner numbers; got {selections!r}")
         if len(set(selections))!=len(selections): return bad(f"{kind} selections must be unique; got {selections!r}")
     return None
@@ -1883,7 +1883,7 @@ def build_candidate_kubrick_payload(enriched_payload, selected_date, first_name=
             "raceNumber": e.get("raceNumber") or bet.get("raceNumber"),
             "runnerNumber": e.get("runnerNumber") or bet.get("runnerNumber"),
             "runnerName": e.get("runnerName") or bet.get("runnerName"),
-            "betType": bet.get("betType"),
+            "betType": "FIRST4" if bet.get("betType") == "FIRST_4" else bet.get("betType"),
             "stake": stake,
             "odds": candidate_odds(bet),
             "result": bet.get("betResult"),
@@ -1897,7 +1897,7 @@ def build_candidate_kubrick_payload(enriched_payload, selected_date, first_name=
             record["raceId"] = e.get("raceId")
         if e.get("runnerId") not in (None, ""):
             record["runnerId"] = e.get("runnerId")
-        if bet.get("betType") == "TRIFECTA":
+        if bet.get("betType") in ("TRIFECTA", "FIRST_4"):
             record["selectedRunners"] = [
                 {"runnerNumber": r.get("runnerNumber"),
                  "runnerName": r.get("runnerName"),
@@ -1994,13 +1994,13 @@ def validate_candidate_kubrick_payload(payload):
             continue
 
         missing = [field for field in KUBRICK_REQUIRED_BET_FIELDS if field not in bet]
-        extra = [field for field in bet if field not in KUBRICK_ALLOWED_BET_FIELDS or (field == "selectedRunners" and bet.get("betType") != "TRIFECTA")]
+        extra = [field for field in bet if field not in KUBRICK_ALLOWED_BET_FIELDS or (field == "selectedRunners" and bet.get("betType") not in ("TRIFECTA", "FIRST4"))]
         if missing:
             errors.append(f"{prefix}: missing fields: {', '.join(missing)}")
         if extra:
             errors.append(f"{prefix}: unexpected fields: {', '.join(extra)}")
 
-        trifecta = bet.get("betType") == "TRIFECTA"
+        trifecta = bet.get("betType") in ("TRIFECTA", "FIRST4")
         # Race-time provenance is assessed during TAB enrichment; do not
         # reclassify a valid TAB timestamp during candidate contract validation.
         for field in ("betTime", "raceTime", "raceName", "meeting", "state", "betType") + (() if trifecta else ("runnerName",)):
@@ -2042,8 +2042,8 @@ def validate_candidate_kubrick_payload(payload):
 
         if trifecta:
             runners = bet.get("selectedRunners")
-            if not isinstance(runners, list) or len(runners) < 3:
-                errors.append(f"{prefix}: TRIFECTA requires at least 3 named selectedRunners")
+            if not isinstance(runners, list) or len(runners) < (4 if bet.get("betType") == "FIRST4" else 3):
+                errors.append(f"{prefix}: {bet.get('betType')} requires at least {4 if bet.get('betType') == 'FIRST4' else 3} named selectedRunners")
             else:
                 numbers = []
                 for runner in runners:
@@ -2063,7 +2063,7 @@ def validate_candidate_kubrick_payload(payload):
                 if len(numbers) != len(set(numbers)):
                     errors.append(f"{prefix}: selected runner numbers must be distinct")
             if odds is not None and (not is_number(odds) or odds <= 0):
-                errors.append(f"{prefix}: TRIFECTA odds must be positive or null")
+                errors.append(f"{prefix}: Exotic odds must be positive or null")
 
         replay = bet.get("replayUrl")
         if replay is not None:
@@ -2747,9 +2747,7 @@ def process_selected_day(
             print("Kubrick request not sent.")
             return False
 
-        print("[VALIDATION] Normaliser candidate payload valid (Trifecta uses provisional local contract).")
-        if any(b.get("betType") == "TRIFECTA" for b in candidate.get("bets", [])):
-            print("[VALIDATION] WARNING: Kubrick server contract has NOT been updated for TRIFECTA; POST may fail.")
+        print("[VALIDATION] Kubrick candidate payload valid.")
         if quarantined:
             print(
                 f"[VALIDATION] WARNING: recap contains {len(included_bets)} of "

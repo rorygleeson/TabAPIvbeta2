@@ -370,3 +370,14 @@ console.log('Builder Scene 8 and Trifecta regression tests passed.');
 
 
 }
+
+// First4 uses the same multi-runner presentation as Trifecta, showing four selections.
+{
+  const bettings=setLosingTrifecta(makeBettings(5),4);
+  bettings.bets[4].betType='FIRST4';
+  bettings.bets[4].selectedRunners.push({runnerNumber:15,runnerName:'HORSE FIFTEEN',finishingPosition:0});
+  const out=buildRecap({bettings,scenePlan:fastPlan(5,4)});
+  assert.match(out.html,/\$10 FIRST4/);
+  assert.match(out.html,/HORSE TWO · HORSE EIGHT · HORSE ELEVEN · HORSE FOURTEEN/);
+  assert.doesNotMatch(out.html,/FIRST4 @/);
+}

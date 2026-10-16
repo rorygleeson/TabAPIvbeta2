@@ -93,12 +93,12 @@ function validateScene8RuntimeContract(){ const t=runtimeContract.timeline.scene
 function templateGate(){ validateScene8RuntimeContract(); for(let i=1;i<=8;i++)extractTemplate(i); ['{{SCENE_CSS}}','{{SCENE_MARKUP}}','{{RUNTIME_MANIFEST}}','{{RUNTIME_JS}}'].forEach(x=>{if(!shellTemplate.includes(x))fail('TEMPLATE_GATE',`Shell missing ${x}.`);}); }
 
 function fxForBet(bet,all){ if(bet.result==='LOSS')return 'lossTreatment lossEmotion'; const fx=['greenSweep','winEmotion']; const max=Math.max(...all.filter(x=>x.result==='WIN'&&x.profitLoss>0).map(x=>x.profitLoss),-Infinity); if(bet.profitLoss===max)fx.push('bigWinEmphasis'); const prev=bet.sequence===1?0:all[bet.sequence-2].runningPnl; if(prev<0&&bet.runningPnl>0)fx.push('comebackEmphasis'); return fx.join(' '); }
-function isTrifecta(bet){return bet.betType==='TRIFECTA';}
+function isTrifecta(bet){return bet.betType==='TRIFECTA'||bet.betType==='FIRST4';}
 function betDisplayName(bet){return displayBetRunners(bet);}
 function betDisplayOddsSuffix(bet){return isTrifecta(bet)?'':` @ ${odds(bet.odds)}`;}
 function betDisplayFinish(bet){return isTrifecta(bet)?'':`FINISHED ${finishingPositionText(bet.finishingPosition)}`;}
-function biggestWinLabel(bet){return isTrifecta(bet)?'TRIFECTA':bet.runnerName;}
-function biggestWinSummaryLabel(bet){return isTrifecta(bet)?'TRIFECTA':`${bet.runnerName} @ ${odds(bet.odds)}`;}
+function biggestWinLabel(bet){return isTrifecta(bet)?bet.betType:bet.runnerName;}
+function biggestWinSummaryLabel(bet){return isTrifecta(bet)?bet.betType:`${bet.runnerName} @ ${odds(bet.odds)}`;}
 function eligibleHighestOddsWins(bets){return bets.filter(x=>x.result==='WIN'&&typeof x.odds==='number'&&Number.isFinite(x.odds)&&x.odds>0);}
 function betFields(bet,b){ const prev=bet.sequence===1?0:b.bets[bet.sequence-2].runningPnl,name=betDisplayName(bet),horseNameClass=isTrifecta(bet)?'trifecta-selection':(!/\s/u.test(name)&&name.length>12?'long-single-word':''); return {meetingRace:`${bet.meeting} • R${bet.raceNumber}`,raceTimeDisplay:raceTimeDisplay(bet.raceTime,b.day.timezone),userName:b.user.firstName,horseName:name,horseNameClass,stakeDisplay:currency(bet.stake),betType:bet.betType,oddsDisplay:isTrifecta(bet)?'':odds(bet.odds),oddsSuffix:betDisplayOddsSuffix(bet),finishLabel:betDisplayFinish(bet),finishingPositionText:isTrifecta(bet)?'':finishingPositionText(bet.finishingPosition),betResult:bet.result,runningPnl:bet.runningPnl,previousRunningPnl:prev,runningPnlDisplay:pnl(bet.runningPnl),resultKind:bet.result,pnlSignClass:signClass(bet.runningPnl),fxPackage:fxForBet(bet,b.bets)}; }
 function resolveScene(s,b,instance,completedBefore){ const common={sceneInstanceId:instance}; if(s.sceneType===1){ const meetings=[...new Set(b.bets.map(x=>x.meeting))]; return {...common,dateDisplay:dateDisplay(b.day.date),userName:b.user.firstName,totalBets:b.summary.totalBets,totalStakedDisplay:currency(b.summary.totalStaked),meetingCount:meetings.length,meetingJourney:meetings.join(' → '),openingTeaser:s.openingTeaser,closingHook:sceneContracts.controlledValues.scene1ClosingHook,sceneDurationMs:runtimeContract.timeline.scene1.durationMs}; }

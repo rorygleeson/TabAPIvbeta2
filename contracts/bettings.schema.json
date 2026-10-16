@@ -216,7 +216,10 @@
           "if": {
             "properties": {
               "betType": {
-                "const": "TRIFECTA"
+                "enum": [
+                  "TRIFECTA",
+                  "FIRST4"
+                ]
               }
             },
             "required": [
@@ -264,6 +267,25 @@
               "finishingPosition": {
                 "type": "integer",
                 "minimum": 0
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "betType": {
+                "const": "FIRST4"
+              }
+            },
+            "required": [
+              "betType"
+            ]
+          },
+          "then": {
+            "properties": {
+              "selectedRunners": {
+                "minItems": 4
               }
             }
           }
