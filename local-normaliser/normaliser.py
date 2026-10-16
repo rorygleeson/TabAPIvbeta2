@@ -458,7 +458,7 @@ def validate(b,kind,group):
         selections=b.get("selections")
         if not isinstance(selections,list): return bad(f"{kind} selections must be a list; got {selections!r}")
         if kind=="TRIFECTA" and len(selections)<3: return bad(f"TRIFECTA requires at least 3 numeric selections; got {selections!r}")
-        if kind=="FIRST_4" and len(selections)!=4: return bad(f"FIRST_4 requires exactly 4 numeric selections; got {selections!r}")
+        if kind=="FIRST_4" and len(selections)<4: return bad(f"FIRST_4 requires at least 4 numeric selections; got {selections!r}")
         if any(not isinstance(x,int) or x<=0 for x in selections): return bad(f"{kind} selections must be positive runner numbers; got {selections!r}")
         if len(set(selections))!=len(selections): return bad(f"{kind} selections must be unique; got {selections!r}")
     return None
