@@ -78,7 +78,7 @@ The examples below are **illustrative selections**, not wagers taken from the up
 | **Exacta** | Pick the first two finishers in their exact order. | Runner 2 first, runner 7 second. |
 | **Duet** | Pick two runners that both finish among the first three, in any order. | Runners 2 and 7 finish first and third. |
 | **Trifecta** | Pick the first three finishers in exact order. | 2 first, 7 second, 4 third. |
-| **Boxed Trifecta** | Trifecta selection structure covering every valid finishing order of selected runners; not necessarily a separate underlying product. | Box 2, 7 and 4 to cover all six orders. |
+| **Boxed Trifecta** | Trifecta selection structure covering every valid finishing order of selected runners; not necessarily a separate underlying product. | Select runners 2, 7 and 4. The six covered finishing orders (1st–2nd–3rd) are: **2–7–4, 2–4–7, 7–2–4, 7–4–2, 4–2–7, 4–7–2**. |
 | **Treble** | Pick the winners of three TAB-nominated races. | Winners of races 3, 4 and 5, where those are the nominated legs. |
 | **First 4** | Pick the first four finishers in exact order. | 2 first, 7 second, 4 third, 9 fourth. |
 | **Parlay Formula** | Link bets across races, reinvesting dividends into later bets, with a chosen formula number determining the race combinations needed. | Formula 3 across four selected races creates combinations of three races. |
