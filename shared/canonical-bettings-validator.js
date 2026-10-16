@@ -67,16 +67,16 @@ function validateCanonicalBettingsSemantics(bettings, onFailure = createDefaultF
     }
   });
 
-  // Multi-runner selections are validated only for Trifecta wagers.
+  // Multi-runner selection validation for Trifecta and First4.
   bets.forEach(bet => {
-    if (bet.betType !== 'TRIFECTA') return;
-    if (!Array.isArray(bet.selectedRunners) || bet.selectedRunners.length < 3) {
-      fail(`Bet ${bet.sequence}: TRIFECTA requires at least three selectedRunners.`);
+    if (!['TRIFECTA', 'FIRST4'].includes(bet.betType)) return;
+    if (!Array.isArray(bet.selectedRunners) || bet.selectedRunners.length < (bet.betType === 'FIRST4' ? 4 : 3)) {
+      fail(`Bet ${bet.sequence}: ${bet.betType} requires enough selectedRunners.`);
       return;
     }
     const numbers = bet.selectedRunners.map(runner => runner.runnerNumber);
     if (new Set(numbers).size !== numbers.length) {
-      fail(`Bet ${bet.sequence}: TRIFECTA selectedRunners must have distinct runner numbers.`);
+      fail(`Bet ${bet.sequence}: ${bet.betType} selectedRunners must have distinct runner numbers.`);
     }
   });
 
