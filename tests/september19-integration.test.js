@@ -27,9 +27,14 @@ const scenePlan=mergeCopyIntoPlan(deterministic,fallback);
 const out=buildRecap({bettings:admitted.bettings,scenePlan});
 const coverage=scenePlan.scenes.flatMap(s=>s.sceneType===2?[s.betSequence]:[5,8].includes(s.sceneType)?s.betSequences:[]);
 assert.deepEqual(coverage,[1,2,3,4,5,6,7,8,9]);
-for(const tri of bets.bets.filter(b=>b.betType==='TRIFECTA')){
- const label=tri.selectedRunners.slice(0,3).map(r=>r.runnerName).join(' · ');
- assert.ok(out.html.includes(label),'Missing selected runner label: '+label);
+const expectedTrifectaLabels = new Map([
+ [5, 'SPICY LU · UNLEESHING · FUNDAMENTAL NATURE'],
+ [8, 'EVAPORATE · SEPALS · FEROCE'],
+ [9, 'EVAPORATE · FEROCE · SABAJ']
+]);
+for (const [sequence, label] of expectedTrifectaLabels) {
+ assert.equal(copyInput.factCatalog['B'+sequence+'_RUNNER'], label, 'LLM runner fact for bet '+sequence);
+ assert.ok(out.html.includes(label), 'Missing visible runner label for bet '+sequence+': '+label);
 }
 assert.doesNotMatch(out.html,/TRIFECTA\s*@\s*(?:0|<)/i);
 assert.equal(out.betCount,9);
