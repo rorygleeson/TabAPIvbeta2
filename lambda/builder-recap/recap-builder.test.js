@@ -347,3 +347,26 @@ function setLosingTrifecta(bettings,index) {
 }
 
 console.log('Builder Scene 8 and Trifecta regression tests passed.');
+\n// Responsive long-name safeguards: the same horse must render in phone layouts
+// without changing existing laptop landscape compaction rules.
+{
+ const scenes=[2,3,5,8];
+ for(const n of scenes){
+   const css=fs.readFileSync(path.resolve(__dirname,'templates/scene-'+n+'-'+({2:'single-race-card',3:'race-replay',5:'multi-race-scene',8:'fast-results'})[n]+'-template.html'),'utf8');
+   assert.match(css,/orientation:portrait/);
+   assert.match(css,/long-single-word/);
+   assert.match(css,/max-width:640px/);
+ }
+ const single=fs.readFileSync(path.resolve(__dirname,'templates/scene-2-single-race-card-template.html'),'utf8');
+ assert.match(single,/class="s2-horse s2-reveal \{\{horseNameClass\}\}"/);
+ const grouped=fs.readFileSync(path.resolve(__dirname,'templates/scene-5-multi-race-scene-template.html'),'utf8');
+ assert.match(grouped,/grid-template-areas:"horse horse" "details result"/);
+ const replay=fs.readFileSync(path.resolve(__dirname,'templates/scene-3-race-replay-template.html'),'utf8');
+ assert.match(replay,/s3-shell:has\(\.s3-horse\.long-single-word\)/);
+ const bettings=makeBettings(5);
+ bettings.bets[0].runnerName='FIFTYFIVECHEVY';
+ bettings.bets[0].replayUrl='https://example.com/fiftyfivechevy.mp4';
+ const html=buildRecap({bettings,scenePlan:replayPlan(5,[1])}).html;
+ assert.match(html,/class="s2-horse s2-reveal long-single-word">FIFTYFIVECHEVY<\/div>/);
+ assert.match(html,/class="s3-horse long-single-word">FIFTYFIVECHEVY<\/div>/);
+}
