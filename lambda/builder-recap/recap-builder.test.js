@@ -361,7 +361,7 @@ console.log('Builder Scene 8 and Trifecta regression tests passed.');
  const single=fs.readFileSync(path.resolve(__dirname,'templates/scene-2-single-race-card-template.html'),'utf8');
  assert.match(single,/class="s2-horse s2-reveal \{\{horseNameClass\}\}"/);
  const grouped=fs.readFileSync(path.resolve(__dirname,'templates/scene-5-multi-race-scene-template.html'),'utf8');
- assert.match(grouped,/grid-template-areas:"horse horse" "details result"/);
+ assert.match(grouped,/grid-template-columns:minmax\(0,1\.15fr\) minmax\(0,1\.8fr\) minmax\(76px,auto\)/);
  const replay=fs.readFileSync(path.resolve(__dirname,'templates/scene-3-race-replay-template.html'),'utf8');
  assert.match(replay,/s3-shell:has\(\.s3-horse\.long-single-word\)/);
  const bettings=makeBettings(5);
