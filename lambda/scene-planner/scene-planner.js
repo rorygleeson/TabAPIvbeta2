@@ -259,6 +259,11 @@ function sameRaceAndRunner(a, b) {
       Number(a.raceNumber) === Number(b.raceNumber);
 
   if (!sameRace) return false;
+  // Exotic wagers have no single runner identity; do not turn null into runner 0.
+  if (a.betType === 'TRIFECTA' || b.betType === 'TRIFECTA') return false;
+  if ((!a.runnerId || !b.runnerId) &&
+      (!Number.isInteger(a.runnerNumber) || !Number.isInteger(b.runnerNumber) ||
+       !normalizedIdentityPart(a.runnerName) || !normalizedIdentityPart(b.runnerName))) return false;
 
   return a.runnerId && b.runnerId
     ? a.runnerId === b.runnerId
