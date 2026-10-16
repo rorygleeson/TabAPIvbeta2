@@ -37,6 +37,13 @@
 @media(orientation:portrait){.scene-type-8{padding:12px 4vw 86px}.scene-type-8 .s8-wrap{width:92vw}.scene-type-8 .s8-head{margin-bottom:7px}.scene-type-8 .s8-headline{font-size:clamp(20px,5.8vw,30px)}.scene-type-8 .s8-list{gap:5px}.scene-type-8 .s8-bet{min-height:50px;padding:5px 8px;border-radius:9px;grid-template-columns:minmax(0,1.52fr) minmax(88px,.72fr);gap:7px}.scene-type-8[data-bet-count="5"] .s8-bet{min-height:46px}.scene-type-8 .s8-main{gap:7px}.scene-type-8 .s8-meta{font-size:9px}.scene-type-8 .s8-horse{font-size:14px}.scene-type-8 .s8-finish{font-size:9px}.scene-type-8 .s8-outcome{font-size:14px}.scene-type-8 .s8-comment{font-size:10px}.scene-type-8 .s8-footer{padding-top:14px}.scene-type-8 .s8-block-reaction{font-size:clamp(23px,6.6vw,34px);max-width:94%}.scene-type-8 .s8-block-summary{margin-top:6px;font-size:10px}}
 @media(orientation:landscape) and (max-height:900px){.scene-type-8{padding:8px 7vw 100px}.scene-type-8 .s8-wrap{width:min(840px,84vw)}.scene-type-8 .s8-head{margin-bottom:5px}.scene-type-8 .s8-headline{font-size:24px}.scene-type-8 .s8-list{gap:4px}.scene-type-8 .s8-bet{min-height:32px;padding:2px 6px}.scene-type-8[data-bet-count="5"] .s8-bet{min-height:30px}.scene-type-8 .s8-horse{font-size:15px}.scene-type-8 .s8-meta{font-size:9px}.scene-type-8 .s8-finish{font-size:9px}.scene-type-8 .s8-outcome{font-size:14px}.scene-type-8 .s8-comment{font-size:9px}.scene-type-8 .s8-footer{padding-top:10px}.scene-type-8 .s8-block-reaction{font-size:clamp(22px,2.4vw,34px)}.scene-type-8 .s8-block-summary{margin-top:5px;font-size:10px}}
 .scene-type-8 .s8-horse.trifecta-selection{font-size:clamp(11px,1.55vw,14px);line-height:1.12;overflow-wrap:anywhere}
+/* Fast-result cards must allow the name column to shrink without covering results. */
+.scene-type-8 .s8-main,.scene-type-8 .s8-main>div{min-width:0}
+.scene-type-8 .s8-horse{min-width:0;max-width:100%;overflow-wrap:anywhere;word-break:normal}
+@media (orientation:portrait) and (max-width:640px){
+ .scene-type-8 .s8-horse.long-single-word{font-size:clamp(11px,3.25vw,14px);line-height:1.12}
+ .scene-type-8 .s8-meta{overflow-wrap:anywhere}
+}
 /* SCENE_PRODUCTION_CSS_END */
 </style></head><body>
 <!-- SCENE_PRODUCTION_MARKUP_START -->
