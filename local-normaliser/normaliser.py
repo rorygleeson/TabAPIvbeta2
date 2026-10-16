@@ -1238,17 +1238,14 @@ def enrichment_missing_fields(bet, enrichment):
 
 
 def valid_scheduled_race_time(value, event_date):
-    """Reject missing and midnight placeholder TAB starts; return UTC datetime."""
-    if not isinstance(value, str) or not value:
+    """Return a genuine TAB race start in UTC; reject unzoned midnight placeholders."""
+    if not isinstance(value, str) or not value.strip():
         return None
     try:
         dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
-        # TAB's unzoned midnight is a placeholder. A genuine offset-aware
-        # UTC race timestamp must not be rejected solely by its clock hour.
-        if dt.tzinfo is None and dt.hour == 0 and dt.minute == 0 and dt.second == 0:
-            return None
         if dt.tzinfo is None:
-            # TAB historical timestamps without an offset are UTC in this endpoint.
+            if dt.hour == 0 and dt.minute == 0 and dt.second == 0:
+                return None
             dt = dt.replace(tzinfo=timezone.utc)
         dt = dt.astimezone(timezone.utc)
         if dt.astimezone(ZoneInfo("Australia/Melbourne")).date().isoformat() != event_date:
@@ -1259,7 +1256,7 @@ def valid_scheduled_race_time(value, event_date):
 
 
 def estimate_missing_trifecta_race_time(bet, meeting, race, api):
-    """Estimate only from actual TAB starts at this exact race meeting."""
+    """Use same-meeting TAB starts; fall back to a marked, bounded estimate."""
     date = str(bet.get("eventDate") or "")
     number = enrich_to_int(bet.get("raceNumber"))
     venue = meeting.get("venueMnemonic")
@@ -1268,14 +1265,14 @@ def estimate_missing_trifecta_race_time(bet, meeting, race, api):
         return None, "NO_MEETING_IDENTITY"
 
     known = {}
-    for neighbour in range(max(1, number - 8), number + 9):
+    # Look at nearby races only. The API caches repeat requests within this run.
+    for neighbour in range(max(1, number - 4), number + 5):
         try:
             item = race if neighbour == number else api.race(date, str(venue), str(race_type), neighbour)
-            if not isinstance(item, dict) or enrich_to_int(item.get("raceNumber")) != neighbour:
-                continue
-            dt = valid_scheduled_race_time(item.get("raceStartTime"), date)
-            if dt is not None:
-                known[neighbour] = dt
+            if isinstance(item, dict) and enrich_to_int(item.get("raceNumber")) == neighbour:
+                dt = valid_scheduled_race_time(item.get("raceStartTime"), date)
+                if dt is not None:
+                    known[neighbour] = dt
         except Exception:
             continue
 
@@ -1284,38 +1281,45 @@ def estimate_missing_trifecta_race_time(bet, meeting, race, api):
     estimated = None
     method = None
     if before is not None and after is not None:
-        gap = (known[after] - known[before]).total_seconds() / 60 / (after - before)
+        gap = (known[after] - known[before]).total_seconds() / (60 * (after - before))
         if 15 <= gap <= 60:
             estimated = known[before] + timedelta(minutes=gap * (number - before))
             method = "SAME_MEETING_INTERPOLATION"
-    else:
-        # Learn interval from other trusted starts at this meeting; don't blindly
-        # assume 30 minutes if there is no evidence of the meeting's spacing.
+
+    if estimated is None and (before is not None or after is not None):
         intervals = []
         ordered = sorted(known)
-        for a, b in zip(ordered, ordered[1:]):
-            interval = (known[b] - known[a]).total_seconds() / 60 / (b - a)
-            if 15 <= interval <= 60:
-                intervals.append(interval)
-        if intervals and (before is not None or after is not None):
-            intervals.sort()
-            gap = intervals[len(intervals) // 2]
-            anchor = before if before is not None else after
-            if abs(number - anchor) <= 4:
-                estimated = known[anchor] + timedelta(minutes=gap * (number - anchor))
-                method = "SAME_MEETING_EXTRAPOLATION"
+        for first, second in zip(ordered, ordered[1:]):
+            per_race = (known[second] - known[first]).total_seconds() / (60 * (second - first))
+            if 15 <= per_race <= 60:
+                intervals.append(per_race)
+        intervals.sort()
+        # A single genuine same-meeting start is still useful: use an explicitly
+        # estimated 35-minute cadence instead of silently dropping the bet.
+        cadence = intervals[len(intervals) // 2] if intervals else 35
+        anchor = before if before is not None else after
+        if abs(number - anchor) <= 4:
+            estimated = known[anchor] + timedelta(minutes=cadence * (number - anchor))
+            method = "SAME_MEETING_EXTRAPOLATION" if intervals else "SAME_MEETING_35MIN_ESTIMATE"
+
+    # TAB's resultedTime is a bound, not the actual race start. Use it to
+    # constrain an estimate; when no schedule anchor exists, estimate 10m prior.
+    resulted = None
+    try:
+        raw = race.get("resultedTime")
+        if raw:
+            resulted = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+            if resulted.tzinfo is None:
+                resulted = resulted.replace(tzinfo=timezone.utc)
+            resulted = resulted.astimezone(timezone.utc)
+    except (TypeError, ValueError):
+        pass
+    if resulted is not None and (estimated is None or estimated >= resulted):
+        estimated = resulted - timedelta(minutes=10)
+        method = "TAB_RESULTED_TIME_MINUS_10MIN_ESTIMATE"
+
     if estimated is None:
-        # Last resort: TAB's resultedTime is later than the race start.
-        # Estimate 10 minutes before it, never confuse settlement with race start.
-        # Keep the provenance explicit for subsequent review.
-        try:
-            resulted_hint = datetime.fromisoformat(str(race.get("resultedTime") or "").replace("Z", "+00:00"))
-            if resulted_hint.tzinfo is None:
-                resulted_hint = resulted_hint.replace(tzinfo=timezone.utc)
-            estimated = resulted_hint.astimezone(timezone.utc) - timedelta(minutes=10)
-            method = "TAB_RESULTED_TIME_MINUS_10_MIN_ESTIMATE"
-        except (TypeError, ValueError):
-            return None, "INSUFFICIENT_TRUSTED_SAME_MEETING_TIMES"
+        return None, "NO_TAB_TIME_REFERENCE"
 
     try:
         placed = datetime.strptime(bet["betTime"], "%a %b %d %Y %H:%M:%S").replace(
@@ -1323,20 +1327,18 @@ def estimate_missing_trifecta_race_time(bet, meeting, race, api):
         ).astimezone(timezone.utc)
     except (KeyError, TypeError, ValueError):
         return None, "BET_TIME_UNPARSABLE"
-    # Only normal pre-race bet transactions are covered by this estimator.
-    if not placed < estimated:
-        return None, "ESTIMATE_NOT_AFTER_BET"
+
+    if estimated <= placed:
+        # Preserve temporal order when the estimate is otherwise too early.
+        candidate = placed + timedelta(minutes=30)
+        if resulted is not None and candidate >= resulted:
+            return None, "NO_PLAUSIBLE_TIME_BET_TO_RESULT"
+        estimated = candidate
+        method = "BET_TIME_PLUS_30MIN_ESTIMATE"
+    if resulted is not None and estimated >= resulted:
+        return None, "ESTIMATE_NOT_BEFORE_RESULT"
     if estimated.astimezone(ZoneInfo("Australia/Melbourne")).date().isoformat() != date:
         return None, "ESTIMATE_OUTSIDE_RACE_DATE"
-    try:
-        resulted = datetime.fromisoformat(str(race.get("resultedTime") or "").replace("Z", "+00:00"))
-        if resulted.tzinfo is None:
-            resulted = resulted.replace(tzinfo=timezone.utc)
-        if estimated >= resulted.astimezone(timezone.utc):
-            return None, "ESTIMATE_NOT_BEFORE_RESULT"
-    except (ValueError, TypeError):
-        pass
-
     return estimated.isoformat(), method
 
 
@@ -1968,8 +1970,16 @@ def validate_candidate_kubrick_payload(payload):
             errors.append(f"{prefix}: unexpected fields: {', '.join(extra)}")
 
         trifecta = bet.get("betType") == "TRIFECTA"
-        if trifecta and valid_scheduled_race_time(bet.get("raceTime"), str(payload.get("day", {}).get("date", ""))) is None:
-            errors.append(f"{prefix}: TRIFECTA requires a valid or defensibly estimated raceTime")
+        if trifecta:
+            race_time = bet.get("raceTime")
+            # The enriched record may carry an authoritative TAB ISO timestamp or
+            # a labelled estimate. Validate its format, not a second time policy.
+            try:
+                parsed_time = datetime.fromisoformat(str(race_time).replace("Z", "+00:00"))
+                if parsed_time.tzinfo is None and parsed_time.hour == 0 and parsed_time.minute == 0 and parsed_time.second == 0:
+                    raise ValueError("midnight placeholder")
+            except (ValueError, TypeError):
+                errors.append(f"{prefix}: TRIFECTA raceTime missing or placeholder")
         for field in ("betTime", "raceTime", "raceName", "meeting", "state", "betType") + (() if trifecta else ("runnerName",)):
             if not isinstance(bet.get(field), str) or not bet.get(field):
                 errors.append(f"{prefix}: {field} must be a non-empty string")
