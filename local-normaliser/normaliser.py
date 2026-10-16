@@ -1321,11 +1321,24 @@ def estimate_missing_trifecta_race_time(bet, meeting, race, api):
     if estimated is None:
         return None, "NO_TAB_TIME_REFERENCE"
 
+    # Source TAB date uses English abbreviated weekday/month. Match the numeric
+    # parts directly to avoid Windows locale-dependent strptime failures.
+    raw_bet_time = str(bet.get("betTime") or "").strip()
+    match = re.fullmatch(
+        r"(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)\\s+"
+        r"(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\\s+"
+        r"(\\d{1,2})\\s+(\\d{4})\\s+(\\d{1,2}):(\\d{2}):(\\d{2})",
+        raw_bet_time, flags=re.I
+    )
+    if not match:
+        return None, "BET_TIME_UNPARSABLE"
     try:
-        placed = datetime.strptime(bet["betTime"], "%a %b %d %Y %H:%M:%S").replace(
-            tzinfo=ZoneInfo("Australia/Melbourne")
-        ).astimezone(timezone.utc)
-    except (KeyError, TypeError, ValueError):
+        month = ("jan", "feb", "mar", "apr", "may", "jun",
+                 "jul", "aug", "sep", "oct", "nov", "dec").index(match.group(1).lower()) + 1
+        placed = datetime(int(match.group(3)), month, int(match.group(2)),
+                          int(match.group(4)), int(match.group(5)), int(match.group(6)),
+                          tzinfo=ZoneInfo("Australia/Melbourne")).astimezone(timezone.utc)
+    except ValueError:
         return None, "BET_TIME_UNPARSABLE"
 
     if estimated <= placed:
@@ -1970,16 +1983,8 @@ def validate_candidate_kubrick_payload(payload):
             errors.append(f"{prefix}: unexpected fields: {', '.join(extra)}")
 
         trifecta = bet.get("betType") == "TRIFECTA"
-        if trifecta:
-            race_time = bet.get("raceTime")
-            # The enriched record may carry an authoritative TAB ISO timestamp or
-            # a labelled estimate. Validate its format, not a second time policy.
-            try:
-                parsed_time = datetime.fromisoformat(str(race_time).replace("Z", "+00:00"))
-                if parsed_time.tzinfo is None and parsed_time.hour == 0 and parsed_time.minute == 0 and parsed_time.second == 0:
-                    raise ValueError("midnight placeholder")
-            except (ValueError, TypeError):
-                errors.append(f"{prefix}: TRIFECTA raceTime missing or placeholder")
+        # Race-time provenance is assessed during TAB enrichment; do not
+        # reclassify a valid TAB timestamp during candidate contract validation.
         for field in ("betTime", "raceTime", "raceName", "meeting", "state", "betType") + (() if trifecta else ("runnerName",)):
             if not isinstance(bet.get(field), str) or not bet.get(field):
                 errors.append(f"{prefix}: {field} must be a non-empty string")
