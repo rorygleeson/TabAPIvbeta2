@@ -14,6 +14,45 @@ audio.crossOrigin='anonymous';
 audio.src=CONTRACT.soundtrack;
 audio.volume=CONTRACT.normalVolume;
 
+// Shared runner-name fitting for scene cards, replay headers and fast results.
+// It runs locally in the rendered recap; no network or LLM call is involved.
+const HORSE_FIT={
+  2:{selector:'.s2-horse:not(.trifecta-selection)',min:14,lines:2},
+  3:{selector:'.s3-horse:not(.trifecta-selection)',min:12,lines:2},
+  5:{selector:'.s5-horse:not(.trifecta-selection)',min:10,lines:2},
+  8:{selector:'.s8-horse:not(.trifecta-selection)',min:10,lines:2}
+};
+function fitHorseNames(){
+  for(const scene of scenes){
+    const cfg=HORSE_FIT[Number(scene.dataset.sceneType)];
+    if(!cfg)continue;
+    for(const el of qa(cfg.selector,scene)){
+      el.style.fontSize='';
+      const original=parseFloat(getComputedStyle(el).fontSize);
+      if(!Number.isFinite(original)||!el.clientWidth)continue;
+      // Give a card at most two lines of name; adjust text to real column width.
+      const availableWidth=el.clientWidth;
+      const fits=()=>{
+        const style=getComputedStyle(el);
+        const lineHeight=parseFloat(style.lineHeight)||parseFloat(style.fontSize)*1.15;
+        return el.scrollWidth<=availableWidth+1&&el.scrollHeight<=lineHeight*cfg.lines+2;
+      };
+      if(fits())continue;
+      let lo=Math.min(cfg.min,original),hi=original;
+      el.style.overflowWrap='anywhere';
+      for(let i=0;i<9;i++){
+        const mid=(lo+hi)/2;
+        el.style.fontSize=mid+'px';
+        if(fits())lo=mid;else hi=mid;
+      }
+      el.style.fontSize=lo+'px';
+    }
+  }
+}
+window.addEventListener('resize',fitHorseNames);
+if(document.fonts?.ready)document.fonts.ready.then(fitHorseNames);
+requestAnimationFrame(fitHorseNames);
+
 function initSoundtrackAudio(){
   if(soundtrackGain||!audio)return;
   const AudioContextClass=window.AudioContext||window.webkitAudioContext;
