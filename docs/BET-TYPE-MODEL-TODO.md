@@ -16,7 +16,7 @@ This document tracks **planned release coverage**, not a claim that the code alr
 | Place | **Support now** | Standard cases recognised | Existing single-runner model |
 | Each Way / Win and Place | **Support now** | Partial | One source bet with WIN and PLACE components; reconcile correctly |
 | Quinella | **Not yet supported** | Not supported | No Quinella example in the supplied August/September CSVs; revisit when a real sample is available |
-| Exacta | **Support now** | Not supported | Pick first two in exact order |
+| Exacta | **Not yet supported** | Not supported | No Exacta example in the supplied August/September CSVs; defer until a real sample is available |
 | Duet | **Support now** | Not supported | Two selected runners in first three |
 | Trifecta (including Boxed) | **Support now** | Partial | Handle multiple selections, ordering and verified outcomes |
 | First 4 | **Support now** | Partial | Handle positional selections, combinations and verified outcomes |
