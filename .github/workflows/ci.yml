@@ -53,6 +53,7 @@ jobs:
           node --check shared/canonical-bettings-validator.js
           node --check shared/canonical-bettings-validator.test.js
           node shared/canonical-bettings-validator.test.js
+          node tests/trifecta-contract.test.js
           grep -F "validateCanonicalBettingsSemantics" lambda/builder-recap/recap-builder.js
           grep -F "validateCanonicalBettingsSemantics" lambda/orchestrator/index.js
           test -f contracts/bettings.schema.json
