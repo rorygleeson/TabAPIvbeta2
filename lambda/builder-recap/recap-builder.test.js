@@ -378,10 +378,10 @@ console.log('Builder Scene 8 and Trifecta regression tests passed.');
   {sceneType:2,betSequence:5,tensionLine:'Next',reactionLine:'Done'},
   summary,share]};
  const groupedHtml=buildRecap({bettings,scenePlan:multiPlan}).html;
- assert.match(groupedHtml,/class="s5-horse long-single-word">FIFTYFIVECHEVY<\\/div>/);
+ assert.match(groupedHtml,/class="s5-horse long-single-word">FIFTYFIVECHEVY<\/div>/);
  // Scene 8: long runner names must be carried through the fast-results cards.
  const fastHtml=buildRecap({bettings,scenePlan:fastPlan(5,5)}).html;
- assert.match(fastHtml,/class="s8-horse long-single-word">FIFTYFIVECHEVY<\\/div>/);
+ assert.match(fastHtml,/class="s8-horse long-single-word">FIFTYFIVECHEVY<\/div>/);
  assert.doesNotMatch(replay,/bottom:34%/);
 
 }
