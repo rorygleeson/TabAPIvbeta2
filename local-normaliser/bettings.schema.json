@@ -4,78 +4,341 @@
   "title": "TAB Racing Day Bettings Input",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schemaVersion", "user", "day", "bets", "summary"],
+  "required": [
+    "schemaVersion",
+    "user",
+    "day",
+    "bets",
+    "summary"
+  ],
   "properties": {
-    "schemaVersion": { "const": "1.0" },
+    "schemaVersion": {
+      "const": "1.0"
+    },
     "user": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["firstName"],
-      "properties": { "firstName": { "type": "string", "minLength": 1 } }
+      "required": [
+        "firstName"
+      ],
+      "properties": {
+        "firstName": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
     },
     "day": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["date", "timezone"],
+      "required": [
+        "date",
+        "timezone"
+      ],
       "properties": {
-        "date": { "type": "string", "format": "date" },
-        "timezone": { "type": "string", "minLength": 1 }
+        "date": {
+          "type": "string",
+          "format": "date"
+        },
+        "timezone": {
+          "type": "string",
+          "minLength": 1
+        }
       }
     },
-    "bets": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/bet" } },
-    "summary": { "$ref": "#/$defs/summary" }
+    "bets": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/bet"
+      }
+    },
+    "summary": {
+      "$ref": "#/$defs/summary"
+    }
   },
   "$defs": {
     "bet": {
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "sequence", "betTime", "raceTime", "raceName", "meeting", "state", "raceNumber",
-        "runnerNumber", "runnerName", "betType", "stake", "odds", "result", "finishingPosition",
-        "return", "profitLoss", "runningPnl", "replayUrl"
+        "sequence",
+        "betTime",
+        "raceTime",
+        "raceName",
+        "meeting",
+        "state",
+        "raceNumber",
+        "runnerNumber",
+        "runnerName",
+        "betType",
+        "stake",
+        "odds",
+        "result",
+        "finishingPosition",
+        "return",
+        "profitLoss",
+        "runningPnl",
+        "replayUrl"
       ],
       "properties": {
-        "sequence": { "type": "integer", "minimum": 1 },
-        "betTime": { "type": "string", "minLength": 1 },
-        "raceTime": { "type": "string", "minLength": 1 },
-        "raceId": { "type": "string", "minLength": 1 },
-        "raceName": { "type": "string", "minLength": 1 },
-        "meeting": { "type": "string", "minLength": 1 },
-        "state": { "type": "string", "minLength": 1 },
-        "raceNumber": { "type": "integer", "minimum": 1 },
-        "runnerId": { "type": "string", "minLength": 1 },
-        "runnerNumber": { "type": "integer", "minimum": 1 },
-        "runnerName": { "type": "string", "minLength": 1 },
-        "betType": { "type": "string", "minLength": 1 },
-        "stake": { "type": "number", "minimum": 0 },
-        "odds": { "type": "number", "exclusiveMinimum": 0 },
-        "result": { "enum": ["WIN", "LOSS"] },
-        "finishingPosition": { "type": "integer", "minimum": 0 },
-        "return": { "type": "number", "minimum": 0 },
-        "profitLoss": { "type": "number" },
-        "runningPnl": { "type": "number" },
-        "replayUrl": { "type": ["string", "null"] }
-      }
+        "sequence": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "betTime": {
+          "type": "string",
+          "minLength": 1
+        },
+        "raceTime": {
+          "type": "string",
+          "minLength": 1
+        },
+        "raceId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "raceName": {
+          "type": "string",
+          "minLength": 1
+        },
+        "meeting": {
+          "type": "string",
+          "minLength": 1
+        },
+        "state": {
+          "type": "string",
+          "minLength": 1
+        },
+        "raceNumber": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "runnerId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "runnerNumber": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "runnerName": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        },
+        "betType": {
+          "type": "string",
+          "minLength": 1
+        },
+        "stake": {
+          "type": "number",
+          "minimum": 0
+        },
+        "odds": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "exclusiveMinimum": 0
+        },
+        "result": {
+          "enum": [
+            "WIN",
+            "LOSS"
+          ]
+        },
+        "finishingPosition": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "return": {
+          "type": "number",
+          "minimum": 0
+        },
+        "profitLoss": {
+          "type": "number"
+        },
+        "runningPnl": {
+          "type": "number"
+        },
+        "replayUrl": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "selectedRunners": {
+          "type": "array",
+          "minItems": 3,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "runnerNumber",
+              "runnerName",
+              "finishingPosition"
+            ],
+            "properties": {
+              "runnerId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "runnerNumber": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "runnerName": {
+                "type": "string",
+                "minLength": 1
+              },
+              "finishingPosition": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "minimum": 0
+              }
+            }
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "betType": {
+                "const": "TRIFECTA"
+              }
+            },
+            "required": [
+              "betType"
+            ]
+          },
+          "then": {
+            "required": [
+              "selectedRunners"
+            ],
+            "properties": {
+              "runnerNumber": {
+                "type": "null"
+              },
+              "runnerName": {
+                "type": "null"
+              },
+              "odds": {
+                "type": "null"
+              },
+              "finishingPosition": {
+                "type": "null"
+              }
+            }
+          },
+          "else": {
+            "not": {
+              "required": [
+                "selectedRunners"
+              ]
+            },
+            "properties": {
+              "runnerNumber": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "runnerName": {
+                "type": "string",
+                "minLength": 1
+              },
+              "odds": {
+                "type": "number",
+                "exclusiveMinimum": 0
+              },
+              "finishingPosition": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          }
+        }
+      ]
     },
     "summary": {
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "totalBets", "totalStaked", "totalReturned", "wins", "losses", "finalPnl", "meetings",
-        "biggestStake", "biggestWinSequence", "biggestLossSequence", "highestOddsWinnerSequence"
+        "totalBets",
+        "totalStaked",
+        "totalReturned",
+        "wins",
+        "losses",
+        "finalPnl",
+        "meetings",
+        "biggestStake",
+        "biggestWinSequence",
+        "biggestLossSequence",
+        "highestOddsWinnerSequence"
       ],
       "properties": {
-        "totalBets": { "type": "integer", "minimum": 1 },
-        "totalStaked": { "type": "number", "minimum": 0 },
-        "totalReturned": { "type": "number", "minimum": 0 },
-        "wins": { "type": "integer", "minimum": 0 },
-        "losses": { "type": "integer", "minimum": 0 },
-        "finalPnl": { "type": "number" },
-        "meetings": { "type": "integer", "minimum": 1 },
-        "biggestStake": { "type": "number", "minimum": 0 },
-        "biggestWinSequence": { "type": ["integer", "null"], "minimum": 1 },
-        "biggestLossSequence": { "type": ["integer", "null"], "minimum": 1 },
-        "highestOddsWinnerSequence": { "type": ["integer", "null"], "minimum": 1 }
+        "totalBets": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "totalStaked": {
+          "type": "number",
+          "minimum": 0
+        },
+        "totalReturned": {
+          "type": "number",
+          "minimum": 0
+        },
+        "wins": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "losses": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "finalPnl": {
+          "type": "number"
+        },
+        "meetings": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "biggestStake": {
+          "type": "number",
+          "minimum": 0
+        },
+        "biggestWinSequence": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "biggestLossSequence": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "highestOddsWinnerSequence": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        }
       }
     }
   },
@@ -87,7 +350,8 @@
     "summary.totalBets=bets.length; totalStaked=sum(stake); totalReturned=sum(return); wins/losses equal result counts and sum to totalBets; finalPnl equals final runningPnl and totalReturned-totalStaked; meetings equals unique meeting count; biggestStake equals max stake.",
     "biggestWinSequence: if there is no WIN with positive profitLoss it MUST be null; otherwise it MUST be the earliest sequence among WIN bets having maximum positive profitLoss.",
     "biggestLossSequence: if there is no LOSS with negative profitLoss it MUST be null; otherwise it MUST be the earliest sequence among LOSS bets having minimum profitLoss (largest monetary loss).",
-    "highestOddsWinnerSequence: if there is no WIN it MUST be null; otherwise it MUST be the earliest sequence among WIN bets having maximum odds.",
-    "Replay availability is represented only by replayUrl. A replayUrl must be a valid non-empty HTTPS URL to be available; null means unavailable. Replay selection is owned by Kubrick, not by canonical input."
+    "highestOddsWinnerSequence: if there is no WIN with known positive decimal odds it MUST be null; otherwise it MUST be the earliest sequence among WIN bets with known positive decimal odds having maximum odds.",
+    "Replay availability is represented only by replayUrl. A replayUrl must be a valid non-empty HTTPS URL to be available; null means unavailable. Replay selection is owned by Kubrick, not by canonical input.",
+    "TRIFECTA only: selectedRunners must contain >=3 distinct positive runner numbers with names; single-runner identity, odds and finishingPosition must be null. Other bet types retain their original single-runner requirements."
   ]
 }
