@@ -270,7 +270,7 @@ function scene2Context(bettings, sequence) {
       POST_RESULT: mergeAtoms(pre, postBetAtoms(bet))
     },
     semanticContextByPhase: {
-      POST_RESULT: { raceWinner: Number(bet.finishingPosition) === 1 }
+      POST_RESULT: { raceWinner: isSingleRunnerBet(bet) && Number(bet.finishingPosition) === 1 }
     },
     protectedTerms: protectedTerms(bettings, [bet])
   };
@@ -283,7 +283,7 @@ function scene3Context(bettings, sequence) {
       POST_RESULT: mergeAtoms(preBetAtoms(bet), postBetAtoms(bet))
     },
     semanticContextByPhase: {
-      POST_RESULT: { raceWinner: Number(bet.finishingPosition) === 1 }
+      POST_RESULT: { raceWinner: isSingleRunnerBet(bet) && Number(bet.finishingPosition) === 1 }
     },
     protectedTerms: protectedTerms(bettings, [bet])
   };
@@ -390,7 +390,7 @@ function preDayAtoms(bettings) {
 
 function postDayAtoms(bettings) {
   const summary = bettings.summary || {};
-  const raceWinners = bettings.bets.filter(bet => Number(bet.finishingPosition) === 1).length;
+  const raceWinners = bettings.bets.filter(bet => isSingleRunnerBet(bet) && Number(bet.finishingPosition) === 1).length;
   return mergeAtoms(preDayAtoms(bettings), {
     DAY_WINNING_BETS: String(Number(summary.wins || 0)),
     DAY_LOSING_BETS: String(Number(summary.losses || 0)),
@@ -399,23 +399,34 @@ function postDayAtoms(bettings) {
   }, typedPnlAtoms('DAY', summary.finalPnl || 0));
 }
 
+// Only presentation facts: settlement and combination coverage remain source-authoritative.
+// The first three backed runners are displayed in source order; never infer a podium.
+function betSelectionNames(bet) {
+  if (bet.betType !== 'TRIFECTA') return bet.runnerName;
+  return bet.selectedRunners.slice(0, 3).map(runner => runner.runnerName).join(' · ');
+}
+
+function isSingleRunnerBet(bet) {
+  return bet.betType !== 'TRIFECTA';
+}
+
 function preBetAtoms(bet) {
   const prefix = 'B' + bet.sequence + '_';
   return {
-    [prefix + 'RUNNER']: bet.runnerName,
+    [prefix + 'RUNNER']: betSelectionNames(bet),
     [prefix + 'MEETING']: bet.meeting,
     [prefix + 'RACE']: bet.meeting + ' Race ' + bet.raceNumber,
     [prefix + 'RACE_NAME']: bet.raceName,
     [prefix + 'BET_TYPE']: bet.betType,
     [prefix + 'STAKE']: money(bet.stake),
-    [prefix + 'DECIMAL_ODDS']: formatNumber(bet.odds)
+    ...(isSingleRunnerBet(bet) ? { [prefix + 'DECIMAL_ODDS']: formatNumber(bet.odds) } : {})
   };
 }
 
 function postBetAtoms(bet) {
   const prefix = 'B' + bet.sequence + '_';
   return mergeAtoms({
-    [prefix + 'FINISH']: finishingPositionText(bet.finishingPosition),
+    ...(isSingleRunnerBet(bet) ? { [prefix + 'FINISH']: finishingPositionText(bet.finishingPosition) } : {}),
     [prefix + 'BET_RESULT']: bet.result,
     [prefix + 'RETURN_PHRASE']: 'a ' + money(bet.return) + ' return'
   },
@@ -441,7 +452,7 @@ function groupPreAtoms(bettings, bets) {
 function groupPostAtoms(bets) {
   const pl = sum(bets.map(bet => bet.profitLoss));
   const winningBets = bets.filter(bet => bet.result === 'WIN').length;
-  const raceWinners = bets.filter(bet => Number(bet.finishingPosition) === 1).length;
+  const raceWinners = bets.filter(bet => isSingleRunnerBet(bet) && Number(bet.finishingPosition) === 1).length;
   return mergeAtoms({
     BLOCK_WINNING_BETS: String(winningBets),
     BLOCK_LOSING_BETS: String(bets.length - winningBets),
@@ -454,7 +465,7 @@ function groupPostAtoms(bets) {
 function checkpointAtoms(bettings, completed) {
   const atoms = {};
   if (!completed.length) return atoms;
-  const raceWinners = completed.filter(bet => Number(bet.finishingPosition) === 1).length;
+  const raceWinners = completed.filter(bet => isSingleRunnerBet(bet) && Number(bet.finishingPosition) === 1).length;
   const winningBets = completed.filter(bet => bet.result === 'WIN').length;
   Object.assign(atoms, {
     CHECKPOINT_BETS_COMPLETED: String(completed.length),
@@ -552,7 +563,7 @@ function betsForFinalHighlights(bettings) {
 function protectedTerms(bettings, bets) {
   return unique([
     bettings.user?.firstName,
-    ...bets.flatMap(bet => [bet.runnerName, bet.meeting, bet.raceName])
+    ...bets.flatMap(bet => [betSelectionNames(bet), bet.meeting, bet.raceName])
   ].filter(value => typeof value === 'string' && value.trim().length >= 2));
 }
 

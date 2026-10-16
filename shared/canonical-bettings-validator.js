@@ -67,6 +67,19 @@ function validateCanonicalBettingsSemantics(bettings, onFailure = createDefaultF
     }
   });
 
+  // Multi-runner selections are validated only for Trifecta wagers.
+  bets.forEach(bet => {
+    if (bet.betType !== 'TRIFECTA') return;
+    if (!Array.isArray(bet.selectedRunners) || bet.selectedRunners.length < 3) {
+      fail(`Bet ${bet.sequence}: TRIFECTA requires at least three selectedRunners.`);
+      return;
+    }
+    const numbers = bet.selectedRunners.map(runner => runner.runnerNumber);
+    if (new Set(numbers).size !== numbers.length) {
+      fail(`Bet ${bet.sequence}: TRIFECTA selectedRunners must have distinct runner numbers.`);
+    }
+  });
+
   const wins = bets.filter(bet => bet.result === 'WIN');
   const losses = bets.filter(bet => bet.result === 'LOSS');
 
@@ -117,7 +130,7 @@ function validateCanonicalBettingsSemantics(bettings, onFailure = createDefaultF
 
   checkSequenceSummary(
     summary.highestOddsWinnerSequence,
-    earliestMax(wins, 'odds'),
+    earliestMax(wins.filter(bet => typeof bet.odds === 'number' && Number.isFinite(bet.odds) && bet.odds > 0), 'odds'),
     'highestOddsWinnerSequence',
     fail
   );
