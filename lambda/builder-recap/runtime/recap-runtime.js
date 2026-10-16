@@ -71,6 +71,23 @@ function fitHorseNames(){
       }else{
         // At the minimum readable size, truncate rather than introduce extra lines.
         if(twoLines){
+          // An individual word that exceeds the column cannot break naturally.
+          // Prefer single-line ellipsis over clipping a word in a two-line block.
+          const probe=document.createElement('span');
+          const cs=getComputedStyle(el);
+          probe.style.cssText='position:absolute;visibility:hidden;white-space:nowrap;width:max-content;pointer-events:none;';
+          probe.style.font=cs.font;
+          probe.style.letterSpacing=cs.letterSpacing;
+          probe.textContent=name.split(/\s+/u).reduce((a,b)=>a.length>=b.length?a:b,'');
+          el.appendChild(probe);
+          const tooWide=probe.getBoundingClientRect().width>el.clientWidth;
+          probe.remove();
+          if(tooWide){
+            el.style.whiteSpace='nowrap';
+            el.style.textOverflow='ellipsis';
+            el.style.overflow='hidden';
+            continue;
+          }
           el.style.display='-webkit-box';
           el.style.webkitBoxOrient='vertical';
           el.style.webkitLineClamp='2';
