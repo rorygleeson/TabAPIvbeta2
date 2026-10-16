@@ -407,7 +407,7 @@ function betSelectionNames(bet) {
 }
 
 function isSingleRunnerBet(bet) {
-  return bet.betType !== 'TRIFECTA';
+  return bet.betType !== 'TRIFECTA' && bet.betType !== 'FIRST4';
 }
 
 function preBetAtoms(bet) {
