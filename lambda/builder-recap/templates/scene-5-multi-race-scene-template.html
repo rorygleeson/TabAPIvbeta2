@@ -278,6 +278,10 @@
 }
 
 .scene-type-5 .s5-horse.trifecta-selection{font-size:clamp(12px,2vw,18px);line-height:1.13;overflow-wrap:anywhere}
+@media(orientation:portrait) and (max-width:640px){
+ .scene-type-5 .s5-race,.scene-type-5[data-race-count="3"] .s5-race{grid-template-columns:minmax(0,1.15fr) minmax(0,1.8fr) minmax(76px,auto);gap:6px}
+ .scene-type-5 .s5-horse,.scene-type-5 .s5-details{min-width:0;overflow-wrap:anywhere}
+}
 /* SCENE_PRODUCTION_CSS_END */
 </style></head><body>
 

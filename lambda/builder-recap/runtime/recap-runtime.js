@@ -14,6 +14,97 @@ audio.crossOrigin='anonymous';
 audio.src=CONTRACT.soundtrack;
 audio.volume=CONTRACT.normalVolume;
 
+// Mobile horse-name policy: one line per scene, except multi-word Scene 2.
+// Measure actual rendered width and truncate with an ellipsis at the font floor.
+const HORSE_FIT={
+  2:{selector:'.s2-horse:not(.trifecta-selection)',min:13},
+  3:{selector:'.s3-horse:not(.trifecta-selection)',min:12},
+  5:{selector:'.s5-horse:not(.trifecta-selection)',min:10},
+  8:{selector:'.s8-horse:not(.trifecta-selection)',min:10}
+};
+function fitHorseNames(){
+  const mobile=matchMedia('(orientation: portrait) and (max-width: 640px)').matches;
+  for(const scene of scenes){
+    const cfg=HORSE_FIT[Number(scene.dataset.sceneType)];
+    if(!cfg)continue;
+    for(const el of qa(cfg.selector,scene)){
+      el.style.fontSize='';
+      el.style.whiteSpace='';
+      el.style.overflowWrap='';
+      el.style.wordBreak='';
+      el.style.maxHeight='';
+      el.style.overflow='';
+      el.style.textOverflow='';
+      el.style.display='';
+      el.style.webkitBoxOrient='';
+      el.style.webkitLineClamp='';
+      if(!mobile)continue; // Laptop styling is left untouched.
+      const width=el.getBoundingClientRect().width;
+      if(width<=0)continue;
+      const name=el.textContent.trim();
+      const twoLines=Number(scene.dataset.sceneType)===2 && /\s/u.test(name);
+      const maxLines=twoLines?2:1;
+      el.title=name;
+      el.style.wordBreak='normal';
+      el.style.overflowWrap='normal'; // Never break a horse name mid-word.
+      el.style.whiteSpace=twoLines?'normal':'nowrap';
+      const original=parseFloat(getComputedStyle(el).fontSize);
+      if(!Number.isFinite(original))continue;
+      const fits=()=>{
+        const css=getComputedStyle(el);
+        const measured=parseFloat(css.lineHeight);
+        const lineHeight=Number.isFinite(measured)?measured:parseFloat(css.fontSize)*1.15;
+        return el.scrollWidth<=el.clientWidth+1 &&
+          el.scrollHeight<=lineHeight*maxLines+2;
+      };
+      if(fits())continue;
+      const floor=Math.min(cfg.min,original);
+      el.style.fontSize=floor+'px';
+      if(fits()){
+        let lo=floor,hi=original;
+        for(let i=0;i<9;i++){
+          const mid=(lo+hi)/2;
+          el.style.fontSize=mid+'px';
+          if(fits())lo=mid;else hi=mid;
+        }
+        el.style.fontSize=lo+'px';
+      }else{
+        // At the minimum readable size, truncate rather than introduce extra lines.
+        if(twoLines){
+          // An individual word that exceeds the column cannot break naturally.
+          // Prefer single-line ellipsis over clipping a word in a two-line block.
+          const probe=document.createElement('span');
+          const cs=getComputedStyle(el);
+          probe.style.cssText='position:absolute;visibility:hidden;white-space:nowrap;width:max-content;pointer-events:none;';
+          probe.style.font=cs.font;
+          probe.style.letterSpacing=cs.letterSpacing;
+          probe.textContent=name.split(/\s+/u).reduce((a,b)=>a.length>=b.length?a:b,'');
+          el.appendChild(probe);
+          const tooWide=probe.getBoundingClientRect().width>el.clientWidth;
+          probe.remove();
+          if(tooWide){
+            el.style.whiteSpace='nowrap';
+            el.style.textOverflow='ellipsis';
+            el.style.overflow='hidden';
+            continue;
+          }
+          el.style.display='-webkit-box';
+          el.style.webkitBoxOrient='vertical';
+          el.style.webkitLineClamp='2';
+          el.style.whiteSpace='normal';
+        }else{
+          el.style.whiteSpace='nowrap';
+          el.style.textOverflow='ellipsis';
+        }
+        el.style.overflow='hidden';
+      }
+    }
+  }
+}
+window.addEventListener('resize',fitHorseNames);
+if(document.fonts?.ready)document.fonts.ready.then(fitHorseNames);
+requestAnimationFrame(fitHorseNames);
+
 function initSoundtrackAudio(){
   if(soundtrackGain||!audio)return;
   const AudioContextClass=window.AudioContext||window.webkitAudioContext;
@@ -98,7 +189,7 @@ function replay(root){const generation=++replayGeneration;const data=manifest.sc
 function resumeReplayIfReady(){if(!replayVideo||replayState?.phase!=='ready-paused')return false;const state={data:replayState.data,root:replayState.root,comment:replayState.comment,finish:replayState.finish};startReplayPlayback(state);return true}
 function finaleFx(root){const hero=q('.s7-hero',root);if(!hero)return;if(hero.classList.contains('positive'))root.classList.add('fx-positiveFinale');else if(hero.classList.contains('negative'))root.classList.add('fx-negativeFinale');else root.classList.add('fx-breakEvenFinale')}
 function scheduleCssScene(root,type){root.classList.add('play');let d=0,tasks=[];if(type==='4')d=8000;else if(type==='5'){const three=root.dataset.raceCount==='3';d=three?13300:10400;const races=qa('.s5-race',root);[2600,5500,8400].slice(0,races.length).forEach((at,i)=>tasks.push({at,fn:()=>{runFx(races[i]);const v=races[i].dataset.runningPnl;if(v!==undefined)setGlobalPnl(v,races[i].dataset.raceTime,true)}}));tasks.push({at:three?11700:8800,fn:()=>needle(root)})}else if(type==='8'){const bets=qa('.s8-bet',root),count=bets.length,marks=String(root.dataset.resultRevealMs||'').split(',').filter(Boolean).map(Number);d=Number(root.dataset.sceneDurationMs);if(!Number.isFinite(d)||d<=0||marks.length!==count||marks.some((x,i)=>!Number.isFinite(x)||x<0||(i&&x<=marks[i-1]))||marks.at(-1)>=d){console.error('Invalid Scene 8 contract timing');return makeTimeline([{at:0,fn:next}])}let winFxIndex=0,lossFxIndex=0;marks.forEach((at,i)=>{const bet=bets[i],fxIndex=bet.classList.contains('win')?winFxIndex++:lossFxIndex++;tasks.push({at,fn:()=>{bet.classList.add('is-resolved');scene8ResultFx(bet,fxIndex);const v=bet.dataset.runningPnl;if(v!==undefined)setGlobalPnl(v,bet.dataset.raceTime,true)}})});tasks.push({at:Math.min(d-900,marks.at(-1)+550),fn:()=>q('[data-role="s8-footer"]',root)?.classList.add('is-visible')})}else if(type==='6')d=9500;else if(type==='7')tasks.push({at:0,fn:()=>finaleFx(root)});if(type!=='7')tasks.push({at:d+(END_HOLD_MS[type]||0),fn:next});makeTimeline(tasks)}
-function beginScene(i,cls='is-active'){index=i;const root=scenes[i];if(!root)return;root.classList.remove('is-exiting','is-entering','is-active');root.classList.add(cls);resetGlobalFx();pt.textContent=`${i+1} / ${scenes.length}`;bar.style.width=`${((i+1)/scenes.length)*100}%`;const type=root.dataset.sceneType;if(type==='1'||type==='3'||type==='6'||type==='7'){hideGlobalPnl()}else{setGlobalPnl(currentGlobalPnl,currentGlobalPnlTime,currentGlobalPnlTime!=='')}if(type==='1'||type==='2')scheduleScene12(root,type);else if(type==='3')replay(root);else scheduleCssScene(root,type)}
+function beginScene(i,cls='is-active'){index=i;const root=scenes[i];if(!root)return;root.classList.remove('is-exiting','is-entering','is-active');root.classList.add(cls);requestAnimationFrame(fitHorseNames);resetGlobalFx();pt.textContent=`${i+1} / ${scenes.length}`;bar.style.width=`${((i+1)/scenes.length)*100}%`;const type=root.dataset.sceneType;if(type==='1'||type==='3'||type==='6'||type==='7'){hideGlobalPnl()}else{setGlobalPnl(currentGlobalPnl,currentGlobalPnlTime,currentGlobalPnlTime!=='')}if(type==='1'||type==='2')scheduleScene12(root,type);else if(type==='3')replay(root);else scheduleCssScene(root,type)}
 function startScene(i){clearTimers();timeline=null;replayState=null;replayVideo=null;scenes.forEach(s=>s.classList.remove('is-active','is-entering','is-exiting','play'));beginScene(i)}
 function next(){if(index>=scenes.length-1)return;const old=scenes[index],target=index+1,incoming=scenes[target];old.classList.remove('is-active');old.classList.add('is-exiting');incoming.classList.add('is-entering');makeTimeline([{at:CONTRACT.transitionMs,fn:()=>{old.classList.remove('is-exiting','play');incoming.classList.remove('is-entering');startScene(target)}}])}
 

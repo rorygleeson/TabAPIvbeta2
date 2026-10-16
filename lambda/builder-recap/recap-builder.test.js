@@ -347,3 +347,26 @@ function setLosingTrifecta(bettings,index) {
 }
 
 console.log('Builder Scene 8 and Trifecta regression tests passed.');
+
+// Long-name support is shared at runtime; original laptop CSS remains intact.
+{
+ const bettings=makeBettings(5);
+ bettings.bets[0].runnerName='FIFTYFIVECHEVY';
+ bettings.bets[0].replayUrl='https://example.com/fiftyfivechevy.mp4';
+ const html=buildRecap({bettings,scenePlan:replayPlan(5,[1])}).html;
+ assert.match(html,/class="s2-horse s2-reveal long-single-word"[^>]*>FIFTYFIVECHEVY<\/div>/);
+ assert.match(html,/class="s3-horse long-single-word">FIFTYFIVECHEVY<\/div>/);
+ assert.match(html,/HORSE_FIT/);
+ assert.match(html,/function fitHorseNames\(\)/);
+ assert.match(html,/matchMedia\('\(orientation: portrait\) and \(max-width: 640px\)'\)/);
+ assert.match(html,/el\.style\.fontSize='';/);
+ assert.match(html,/window\.addEventListener\('resize',fitHorseNames\)/);
+ assert.match(html,/const maxLines=twoLines\?2:1/);
+ assert.match(html,/el\.style\.whiteSpace=twoLines\?'normal':'nowrap'/);
+ assert.match(html,/el\.style\.textOverflow='ellipsis'/);
+ assert.match(html,/el\.style\.webkitLineClamp='2'/);
+ assert.match(html,/if\(!mobile\)continue/);
+ assert.match(html,/const twoLines=Number\(scene\.dataset\.sceneType\)===2/);
+
+
+}
