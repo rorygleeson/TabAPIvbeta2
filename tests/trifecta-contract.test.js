@@ -6,12 +6,15 @@
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const Ajv = require('../lambda/builder-recap/node_modules/ajv');
+const Ajv = require('../lambda/builder-recap/node_modules/ajv/dist/2020');
+const addFormats = require('../lambda/builder-recap/node_modules/ajv-formats');
 const { validateCanonicalBettingsSemantics } = require('../shared/canonical-bettings-validator');
 
 const schema = JSON.parse(fs.readFileSync(path.join(__dirname, '../contracts/bettings.schema.json'), 'utf8'));
 const baseline = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures/bettings-baseline.json'), 'utf8'));
-const validate = new Ajv({ allErrors: true, strict: false }).compile(schema);
+const ajv = new Ajv({ allErrors: true, strict: false });
+addFormats(ajv);
+const validate = ajv.compile(schema);
 const clone = x => structuredClone(x);
 const errors = () => JSON.stringify(validate.errors || []);
 function check(payload, shouldPass, label) {
