@@ -14,63 +14,73 @@ audio.crossOrigin='anonymous';
 audio.src=CONTRACT.soundtrack;
 audio.volume=CONTRACT.normalVolume;
 
-// Fit runner names only when the available card space requires it.
-// Mobile-only: keep original desktop and laptop typography untouched.
+// Mobile horse-name policy: one line per scene, except multi-word Scene 2.
+// Measure actual rendered width and truncate with an ellipsis at the font floor.
 const HORSE_FIT={
-  2:{selector:'.s2-horse:not(.trifecta-selection)',min:13,maxLines:2},
-  3:{selector:'.s3-horse:not(.trifecta-selection)',min:12,maxLines:2},
-  5:{selector:'.s5-horse:not(.trifecta-selection)',min:10,maxLines:2},
-  8:{selector:'.s8-horse:not(.trifecta-selection)',min:10,maxLines:2}
+  2:{selector:'.s2-horse:not(.trifecta-selection)',min:13},
+  3:{selector:'.s3-horse:not(.trifecta-selection)',min:12},
+  5:{selector:'.s5-horse:not(.trifecta-selection)',min:10},
+  8:{selector:'.s8-horse:not(.trifecta-selection)',min:10}
 };
 function fitHorseNames(){
-  const isMobile=matchMedia('(orientation: portrait) and (max-width: 640px)').matches;
+  const mobile=matchMedia('(orientation: portrait) and (max-width: 640px)').matches;
   for(const scene of scenes){
     const cfg=HORSE_FIT[Number(scene.dataset.sceneType)];
     if(!cfg)continue;
     for(const el of qa(cfg.selector,scene)){
       el.style.fontSize='';
+      el.style.whiteSpace='';
       el.style.overflowWrap='';
-      el.style.lineHeight='';
+      el.style.wordBreak='';
       el.style.maxHeight='';
       el.style.overflow='';
+      el.style.textOverflow='';
       el.style.display='';
       el.style.webkitBoxOrient='';
       el.style.webkitLineClamp='';
-      if(!isMobile)continue;
+      if(!mobile)continue; // Laptop styling is left untouched.
       const width=el.getBoundingClientRect().width;
-      if(width<=0)continue; // The active scene gets its own fitting pass.
+      if(width<=0)continue;
+      const name=el.textContent.trim();
+      const twoLines=Number(scene.dataset.sceneType)===2 && /\\s/u.test(name);
+      const maxLines=twoLines?2:1;
+      el.title=name;
+      el.style.wordBreak='normal';
+      el.style.overflowWrap='normal'; // Never break a horse name mid-word.
+      el.style.whiteSpace=twoLines?'normal':'nowrap';
       const original=parseFloat(getComputedStyle(el).fontSize);
       if(!Number.isFinite(original))continue;
       const fits=()=>{
-        const css=getComputedStyle(el),line=parseFloat(css.lineHeight);
-        const lineHeight=Number.isFinite(line)?line:parseFloat(css.fontSize)*1.15;
+        const css=getComputedStyle(el);
+        const measured=parseFloat(css.lineHeight);
+        const lineHeight=Number.isFinite(measured)?measured:parseFloat(css.fontSize)*1.15;
         return el.scrollWidth<=el.clientWidth+1 &&
-          el.scrollHeight<=lineHeight*cfg.maxLines+2;
+          el.scrollHeight<=lineHeight*maxLines+2;
       };
-      if(fits())continue; // Ordinary names retain their original appearance.
-      el.style.overflowWrap='anywhere';
+      if(fits())continue;
       const floor=Math.min(cfg.min,original);
       el.style.fontSize=floor+'px';
-      if(!fits()){
-        // At the readable font-size floor, clamp extreme names to two lines.
-        // Keep the underlying text intact; only its presentation is truncated.
-        const lineHeight=parseFloat(getComputedStyle(el).lineHeight);
-        const height=Number.isFinite(lineHeight)?lineHeight:floor*1.15;
-        el.style.display='-webkit-box';
-        el.style.webkitBoxOrient='vertical';
-        el.style.webkitLineClamp=String(cfg.maxLines);
+      if(fits()){
+        let lo=floor,hi=original;
+        for(let i=0;i<9;i++){
+          const mid=(lo+hi)/2;
+          el.style.fontSize=mid+'px';
+          if(fits())lo=mid;else hi=mid;
+        }
+        el.style.fontSize=lo+'px';
+      }else{
+        // At the minimum readable size, truncate rather than introduce extra lines.
+        if(twoLines){
+          el.style.display='-webkit-box';
+          el.style.webkitBoxOrient='vertical';
+          el.style.webkitLineClamp='2';
+          el.style.whiteSpace='normal';
+        }else{
+          el.style.whiteSpace='nowrap';
+          el.style.textOverflow='ellipsis';
+        }
         el.style.overflow='hidden';
-        el.style.maxHeight=(height*cfg.maxLines+1)+'px';
-        el.title=el.textContent.trim();
-        continue;
       }
-      let lo=floor,hi=original;
-      for(let i=0;i<9;i++){
-        const mid=(lo+hi)/2;
-        el.style.fontSize=mid+'px';
-        if(fits())lo=mid;else hi=mid;
-      }
-      el.style.fontSize=lo+'px';
     }
   }
 }
