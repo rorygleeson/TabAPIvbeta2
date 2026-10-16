@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import argparse, csv, hashlib, json, os, re, shutil, sys, time
 from collections import Counter, defaultdict
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
@@ -456,9 +456,11 @@ def validate(b,kind,group):
         if not isinstance(b.get("raceNumber"),int) or b["raceNumber"]<=0 or not positive(b.get("stake")): return bad(f"{kind} is missing required race/stake data")
         need=3 if kind=="TRIFECTA" else 4
         selections=b.get("selections")
-        if not isinstance(selections,list) or len(selections)!=need: return bad(f"{kind} requires exactly {need} numeric selections; got {selections!r}")
+        if not isinstance(selections,list): return bad(f"{kind} selections must be a list; got {selections!r}")
+        if kind=="TRIFECTA" and len(selections)<3: return bad(f"TRIFECTA requires at least 3 numeric selections; got {selections!r}")
+        if kind=="FIRST_4" and len(selections)!=4: return bad(f"FIRST_4 requires exactly 4 numeric selections; got {selections!r}")
         if any(not isinstance(x,int) or x<=0 for x in selections): return bad(f"{kind} selections must be positive runner numbers; got {selections!r}")
-        if len(set(selections))!=need: return bad(f"{kind} selections must be unique; got {selections!r}")
+        if len(set(selections))!=len(selections): return bad(f"{kind} selections must be unique; got {selections!r}")
     return None
 
 
@@ -1233,6 +1235,144 @@ def enrichment_missing_fields(bet, enrichment):
     return missing
 
 
+
+def melbourne_utc_offset(local_dt):
+    """Australia/Melbourne UTC offset without system tzdata (Windows-safe)."""
+    year = local_dt.year
+    def first_sunday(month):
+        first = datetime(year, month, 1)
+        return 1 + (6 - first.weekday()) % 7
+    april_change = datetime(year, 4, first_sunday(4), 3)
+    october_change = datetime(year, 10, first_sunday(10), 2)
+    in_dst = local_dt < april_change or local_dt >= october_change
+    return timezone(timedelta(hours=11 if in_dst else 10))
+
+
+def melbourne_racing_date(utc_dt):
+    """Resolve Australian racing date without a ZoneInfo dependency."""
+    approx_local = utc_dt.astimezone(timezone(timedelta(hours=10))).replace(tzinfo=None)
+    offset = melbourne_utc_offset(approx_local)
+    return utc_dt.astimezone(offset).date().isoformat()
+
+
+def valid_scheduled_race_time(value, event_date):
+    """Return a genuine TAB race start in UTC; reject unzoned midnight placeholders."""
+    if not isinstance(value, str) or not value.strip():
+        return None
+    try:
+        dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            if dt.hour == 0 and dt.minute == 0 and dt.second == 0:
+                return None
+            dt = dt.replace(tzinfo=timezone.utc)
+        dt = dt.astimezone(timezone.utc)
+        if melbourne_racing_date(dt) != event_date:
+            return None
+        return dt
+    except (TypeError, ValueError, OverflowError):
+        return None
+
+
+def estimate_missing_trifecta_race_time(bet, meeting, race, api):
+    """Use same-meeting TAB starts; fall back to a marked, bounded estimate."""
+    date = str(bet.get("eventDate") or "")
+    number = enrich_to_int(bet.get("raceNumber"))
+    venue = meeting.get("venueMnemonic")
+    race_type = meeting.get("raceType")
+    if number is None or not venue or enrich_norm_text(race_type) != "R":
+        return None, "NO_MEETING_IDENTITY"
+
+    known = {}
+    # Look at nearby races only. The API caches repeat requests within this run.
+    for neighbour in range(max(1, number - 4), number + 5):
+        try:
+            item = race if neighbour == number else api.race(date, str(venue), str(race_type), neighbour)
+            if isinstance(item, dict) and enrich_to_int(item.get("raceNumber")) == neighbour:
+                dt = valid_scheduled_race_time(item.get("raceStartTime"), date)
+                if dt is not None:
+                    known[neighbour] = dt
+        except Exception:
+            continue
+
+    before = max((n for n in known if n < number), default=None)
+    after = min((n for n in known if n > number), default=None)
+    estimated = None
+    method = None
+    if before is not None and after is not None:
+        gap = (known[after] - known[before]).total_seconds() / (60 * (after - before))
+        if 15 <= gap <= 60:
+            estimated = known[before] + timedelta(minutes=gap * (number - before))
+            method = "SAME_MEETING_INTERPOLATION"
+
+    if estimated is None and (before is not None or after is not None):
+        intervals = []
+        ordered = sorted(known)
+        for first, second in zip(ordered, ordered[1:]):
+            per_race = (known[second] - known[first]).total_seconds() / (60 * (second - first))
+            if 15 <= per_race <= 60:
+                intervals.append(per_race)
+        intervals.sort()
+        # A single genuine same-meeting start is still useful: use an explicitly
+        # estimated 35-minute cadence instead of silently dropping the bet.
+        cadence = intervals[len(intervals) // 2] if intervals else 35
+        anchor = before if before is not None else after
+        if abs(number - anchor) <= 4:
+            estimated = known[anchor] + timedelta(minutes=cadence * (number - anchor))
+            method = "SAME_MEETING_EXTRAPOLATION" if intervals else "SAME_MEETING_35MIN_ESTIMATE"
+
+    # TAB's resultedTime is a bound, not the actual race start. Use it to
+    # constrain an estimate; when no schedule anchor exists, estimate 10m prior.
+    resulted = None
+    try:
+        raw = race.get("resultedTime")
+        if raw:
+            resulted = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+            if resulted.tzinfo is None:
+                resulted = resulted.replace(tzinfo=timezone.utc)
+            resulted = resulted.astimezone(timezone.utc)
+    except (TypeError, ValueError):
+        pass
+    if resulted is not None and (estimated is None or estimated >= resulted):
+        estimated = resulted - timedelta(minutes=10)
+        method = "TAB_RESULTED_TIME_MINUS_10MIN_ESTIMATE"
+
+    if estimated is None:
+        return None, "NO_TAB_TIME_REFERENCE"
+
+    # Source TAB date uses English abbreviated weekday/month. Match the numeric
+    # parts directly to avoid Windows locale-dependent strptime failures.
+    raw_bet_time = str(bet.get("betTime") or "").strip()
+    match = re.fullmatch(
+        r"(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s+"
+        r"(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+"
+        r"(\d{1,2})\s+(\d{4})\s+(\d{1,2}):(\d{2}):(\d{2})",
+        raw_bet_time, flags=re.I
+    )
+    if not match:
+        return None, "BET_TIME_UNPARSABLE"
+    try:
+        month = ("jan", "feb", "mar", "apr", "may", "jun",
+                 "jul", "aug", "sep", "oct", "nov", "dec").index(match.group(1).lower()) + 1
+        placed = datetime(int(match.group(3)), month, int(match.group(2)),
+                          int(match.group(4)), int(match.group(5)), int(match.group(6)),
+                          tzinfo=melbourne_utc_offset(datetime(int(match.group(3)), month, int(match.group(2)), int(match.group(4)), int(match.group(5)), int(match.group(6))))).astimezone(timezone.utc)
+    except ValueError:
+        return None, "BET_TIME_UNPARSABLE"
+
+    if estimated <= placed:
+        # Preserve temporal order when the estimate is otherwise too early.
+        candidate = placed + timedelta(minutes=30)
+        if resulted is not None and candidate >= resulted:
+            return None, "NO_PLAUSIBLE_TIME_BET_TO_RESULT"
+        estimated = candidate
+        method = "BET_TIME_PLUS_30MIN_ESTIMATE"
+    if resulted is not None and estimated >= resulted:
+        return None, "ESTIMATE_NOT_BEFORE_RESULT"
+    if melbourne_racing_date(estimated) != date:
+        return None, "ESTIMATE_OUTSIDE_RACE_DATE"
+    return estimated.isoformat(), method
+
+
 def race_enrichment(meeting, race, api, event_date, race_number):
     venue = meeting.get("venueMnemonic")
     race_type = meeting.get("raceType")
@@ -1397,6 +1537,15 @@ def enrich_one_bet(bet, api, store):
         event_date = str(bet.get("eventDate"))
         race_number = enrich_to_int(bet.get("raceNumber"))
         enrichment = race_enrichment(meeting, race, api, event_date, race_number)
+        if bet.get("betType") == "TRIFECTA":
+            if valid_scheduled_race_time(enrichment.get("raceTime"), event_date) is None:
+                inferred, method = estimate_missing_trifecta_race_time(bet, meeting, race, api)
+                enrichment["raceTime"] = inferred
+                enrichment["raceTimeSource"] = "ESTIMATED" if inferred else "UNAVAILABLE"
+                enrichment["raceTimeMethod"] = method
+                print(f"      [TRIFECTA RACE TIME] {bet.get('meeting')} R{race_number}: {inferred or 'unavailable'} ({method})")
+            else:
+                enrichment["raceTimeSource"] = "TAB"
         enrichment.update({
             "status": "ENRICHED",
             "required": required,
@@ -1653,7 +1802,7 @@ KUBRICK_REQUIRED_BET_FIELDS = (
 )
 
 KUBRICK_OPTIONAL_BET_FIELDS = ("raceId", "runnerId")
-KUBRICK_ALLOWED_BET_FIELDS = KUBRICK_REQUIRED_BET_FIELDS + KUBRICK_OPTIONAL_BET_FIELDS
+KUBRICK_ALLOWED_BET_FIELDS = KUBRICK_REQUIRED_BET_FIELDS + KUBRICK_OPTIONAL_BET_FIELDS + ("selectedRunners",)
 
 
 def candidate_odds(bet):
@@ -1748,6 +1897,13 @@ def build_candidate_kubrick_payload(enriched_payload, selected_date, first_name=
             record["raceId"] = e.get("raceId")
         if e.get("runnerId") not in (None, ""):
             record["runnerId"] = e.get("runnerId")
+        if bet.get("betType") == "TRIFECTA":
+            record["selectedRunners"] = [
+                {"runnerNumber": r.get("runnerNumber"),
+                 "runnerName": r.get("runnerName"),
+                 "finishingPosition": r.get("finishingPosition")}
+                for r in e.get("selectedRunners", [])
+            ]
         final_bets.append(record)
 
     stakes = [b["stake"] for b in final_bets if isinstance(b.get("stake"), (int, float))]
@@ -1838,13 +1994,16 @@ def validate_candidate_kubrick_payload(payload):
             continue
 
         missing = [field for field in KUBRICK_REQUIRED_BET_FIELDS if field not in bet]
-        extra = [field for field in bet if field not in KUBRICK_ALLOWED_BET_FIELDS]
+        extra = [field for field in bet if field not in KUBRICK_ALLOWED_BET_FIELDS or (field == "selectedRunners" and bet.get("betType") != "TRIFECTA")]
         if missing:
             errors.append(f"{prefix}: missing fields: {', '.join(missing)}")
         if extra:
             errors.append(f"{prefix}: unexpected fields: {', '.join(extra)}")
 
-        for field in ("betTime", "raceTime", "raceName", "meeting", "state", "runnerName", "betType"):
+        trifecta = bet.get("betType") == "TRIFECTA"
+        # Race-time provenance is assessed during TAB enrichment; do not
+        # reclassify a valid TAB timestamp during candidate contract validation.
+        for field in ("betTime", "raceTime", "raceName", "meeting", "state", "betType") + (() if trifecta else ("runnerName",)):
             if not isinstance(bet.get(field), str) or not bet.get(field):
                 errors.append(f"{prefix}: {field} must be a non-empty string")
 
@@ -1852,13 +2011,13 @@ def validate_candidate_kubrick_payload(payload):
             if field in bet and (not isinstance(bet.get(field), str) or not bet.get(field)):
                 errors.append(f"{prefix}: {field} must be a non-empty string when present")
 
-        for field in ("sequence", "raceNumber", "runnerNumber"):
+        for field in ("sequence", "raceNumber") + (() if trifecta else ("runnerNumber",)):
             value = bet.get(field)
             if not isinstance(value, int) or isinstance(value, bool) or value < 1:
                 errors.append(f"{prefix}: {field} must be an integer >= 1")
 
         finishing_position = bet.get("finishingPosition")
-        if (
+        if not trifecta and (
             not isinstance(finishing_position, int)
             or isinstance(finishing_position, bool)
             or finishing_position < 0
@@ -1871,7 +2030,7 @@ def validate_candidate_kubrick_payload(payload):
                 errors.append(f"{prefix}: {field} must be a number >= 0")
 
         odds = bet.get("odds")
-        if not is_number(odds) or odds <= 0:
+        if not trifecta and (not is_number(odds) or odds <= 0):
             errors.append(f"{prefix}: odds must be a number > 0")
 
         for field in ("profitLoss", "runningPnl"):
@@ -1880,6 +2039,31 @@ def validate_candidate_kubrick_payload(payload):
 
         if bet.get("result") not in ("WIN", "LOSS"):
             errors.append(f"{prefix}: result must be WIN or LOSS")
+
+        if trifecta:
+            runners = bet.get("selectedRunners")
+            if not isinstance(runners, list) or len(runners) < 3:
+                errors.append(f"{prefix}: TRIFECTA requires at least 3 named selectedRunners")
+            else:
+                numbers = []
+                for runner in runners:
+                    if not isinstance(runner, dict) or set(runner) != {"runnerNumber", "runnerName", "finishingPosition"}:
+                        errors.append(f"{prefix}: selectedRunners entries require runnerNumber, runnerName and finishingPosition")
+                        continue
+                    number = runner["runnerNumber"]
+                    if not isinstance(number, int) or isinstance(number, bool) or number < 1:
+                        errors.append(f"{prefix}: selected runnerNumber must be a positive integer")
+                    else:
+                        numbers.append(number)
+                    if not isinstance(runner["runnerName"], str) or not runner["runnerName"].strip():
+                        errors.append(f"{prefix}: selected runnerName must be non-empty")
+                    position = runner["finishingPosition"]
+                    if position is not None and (not isinstance(position, int) or isinstance(position, bool) or position < 0):
+                        errors.append(f"{prefix}: selected finishingPosition must be non-negative or null")
+                if len(numbers) != len(set(numbers)):
+                    errors.append(f"{prefix}: selected runner numbers must be distinct")
+            if odds is not None and (not is_number(odds) or odds <= 0):
+                errors.append(f"{prefix}: TRIFECTA odds must be positive or null")
 
         replay = bet.get("replayUrl")
         if replay is not None:
@@ -2563,7 +2747,9 @@ def process_selected_day(
             print("Kubrick request not sent.")
             return False
 
-        print("[VALIDATION] Kubrick payload valid.")
+        print("[VALIDATION] Normaliser candidate payload valid (Trifecta uses provisional local contract).")
+        if any(b.get("betType") == "TRIFECTA" for b in candidate.get("bets", [])):
+            print("[VALIDATION] WARNING: Kubrick server contract has NOT been updated for TRIFECTA; POST may fail.")
         if quarantined:
             print(
                 f"[VALIDATION] WARNING: recap contains {len(included_bets)} of "

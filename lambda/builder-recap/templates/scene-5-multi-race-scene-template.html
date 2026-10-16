@@ -277,6 +277,7 @@
   }
 }
 
+.scene-type-5 .s5-horse.trifecta-selection{font-size:clamp(12px,2vw,18px);line-height:1.13;overflow-wrap:anywhere}
 /* SCENE_PRODUCTION_CSS_END */
 </style></head><body>
 
@@ -287,10 +288,10 @@
 <div class="s5-headline">{{setupHeadline}}</div>
 <div class="s5-races">{{#races}}
 <div class="s5-race {{outcomeClass}}" data-race="{{raceIndex}}" data-fx-package="{{fxPackage}}" data-running-pnl="{{runningPnl}}" data-race-time="{{raceTimeDisplay}}">
-<div class="s5-horse">{{horseName}}</div>
-<div class="s5-details">{{meetingName}} R{{raceNumber}} • {{betType}} • {{stakeDisplay}} @ {{oddsDisplay}}{{returnText}}</div>
+<div class="s5-horse {{horseNameClass}}">{{horseName}}</div>
+<div class="s5-details">{{meetingName}} R{{raceNumber}} • {{betType}} • {{stakeDisplay}}{{oddsSuffix}}{{returnText}}</div>
 <div class="s5-result">
-<div class="s5-finish">FINISHED {{finishingPositionText}}</div>
+<div class="s5-finish">{{finishLabel}}</div>
 <div class="s5-verdict">BET {{betResult}}</div>
 <div class="s5-outcome">{{betProfitLossDisplay}}</div>
 </div>

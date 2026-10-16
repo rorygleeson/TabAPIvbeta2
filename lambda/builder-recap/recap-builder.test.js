@@ -280,4 +280,39 @@ assert.match(runtime,/at:12400,fn:\(\)=>\{if\(data\.replayResult==='WIN'\)replay
 assert.match(runtime,/function replayPayoffFx\(root,betType='WIN'\)/);
 assert.match(runtime,/PLACE BET WON!/);
 assert.match(runtime,/at:13550,fn:\(\)=>\{if\(data\.replayResult==='LOSS'\)replayLossPayoffFx\(root\)\}/);
-console.log('Builder Scene 8 audit regression tests passed.');
+
+function setLosingTrifecta(bettings,index) {
+  const bet=bettings.bets[index];
+  assert.equal(bet.result,'LOSS');
+  delete bet.runnerId;
+  bet.runnerName=null;
+  bet.runnerNumber=null;
+  bet.finishingPosition=null;
+  bet.odds=null;
+  bet.betType='TRIFECTA';
+  bet.selectedRunners=[
+    {runnerNumber:2,runnerName:'HORSE TWO',finishingPosition:0},
+    {runnerNumber:8,runnerName:'HORSE EIGHT',finishingPosition:2},
+    {runnerNumber:11,runnerName:'HORSE ELEVEN',finishingPosition:0},
+    {runnerNumber:14,runnerName:'HORSE FOURTEEN',finishingPosition:0}
+  ];
+  return bettings;
+}
+{
+  // Scene 8: exact three backed names and no fake price or single-runner finish.
+  const bettings=setLosingTrifecta(makeBettings(5),1);
+  const out=buildRecap({bettings,scenePlan:fastPlan(5,5)});
+  assert.match(out.html,/HORSE TWO · HORSE EIGHT · HORSE ELEVEN/);
+  assert.doesNotMatch(out.html,/TRIFECTA @/);
+  assert.match(out.html,/TRIFECTA • \$10/);
+}
+{
+  // Scene 2: the final single-card bet is a Trifecta, while regular bets remain.
+  const bettings=setLosingTrifecta(makeBettings(5),4);
+  const out=buildRecap({bettings,scenePlan:fastPlan(5,4)});
+  assert.match(out.html,/\$10 TRIFECTA/);
+  assert.doesNotMatch(out.html,/TRIFECTA @/);
+  assert.match(out.html,/HORSE TWO · HORSE EIGHT · HORSE ELEVEN/);
+}
+
+console.log('Builder Scene 8 and Trifecta regression tests passed.');

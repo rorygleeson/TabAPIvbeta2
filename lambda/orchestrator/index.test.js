@@ -44,6 +44,33 @@ assert.strictEqual(parsed.bettings.bets.length, baseline.bets.length);
 assert.strictEqual(parsed.betCount, baseline.bets.length);
 assert.ok(parsed.payloadBytes > 0);
 
+// Trifecta is admitted using the shared contract and semantic validator.
+const trifectaPayload = structuredClone(baseline);
+const trifectaBet = trifectaPayload.bets.find(bet => bet.result === 'LOSS');
+assert.ok(trifectaBet, 'baseline must contain a losing bet');
+delete trifectaBet.runnerId;
+trifectaBet.betType = 'TRIFECTA';
+trifectaBet.runnerNumber = null;
+trifectaBet.runnerName = null;
+trifectaBet.odds = null;
+trifectaBet.finishingPosition = null;
+trifectaBet.selectedRunners = [
+  { runnerNumber: 2, runnerName: 'RUNNER TWO', finishingPosition: 0 },
+  { runnerNumber: 8, runnerName: 'RUNNER EIGHT', finishingPosition: 2 },
+  { runnerNumber: 11, runnerName: 'RUNNER ELEVEN', finishingPosition: null }
+];
+const admittedTrifecta = orchestrator.__test.parseCanonicalBettings(
+  postEvent(JSON.stringify(trifectaPayload))
+);
+assert.strictEqual(admittedTrifecta.bettings.bets.find(bet => bet.betType === 'TRIFECTA').selectedRunners.length, 3);
+
+const invalidTrifectaPayload = structuredClone(trifectaPayload);
+invalidTrifectaPayload.bets.find(bet => bet.betType === 'TRIFECTA').selectedRunners[1].runnerNumber = 2;
+assert.throws(
+  () => orchestrator.__test.parseCanonicalBettings(postEvent(JSON.stringify(invalidTrifectaPayload))),
+  error => error.errorCode === 'KUBRICK_INVALID_PAYLOAD' && error.statusCode === 400
+);
+
 const baselineWithoutOptionalIds = structuredClone(baseline);
 baselineWithoutOptionalIds.bets.forEach(bet => {
   delete bet.raceId;
