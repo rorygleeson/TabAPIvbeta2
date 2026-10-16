@@ -278,6 +278,20 @@
 }
 
 .scene-type-5 .s5-horse.trifecta-selection{font-size:clamp(12px,2vw,18px);line-height:1.13;overflow-wrap:anywhere}
+/* On phone portrait, grouped-bet cards use rows instead of three competing columns. */
+@media (orientation:portrait) and (max-width:640px){
+ .scene-type-5 .s5-race,
+ .scene-type-5[data-race-count="3"] .s5-race{
+  grid-template-columns:minmax(0,1fr) auto;
+  grid-template-areas:"horse horse" "details result";
+  column-gap:8px;row-gap:4px;align-items:start;
+ }
+ .scene-type-5 .s5-horse{grid-area:horse;min-width:0;max-width:100%;overflow-wrap:anywhere;word-break:normal;font-size:clamp(15px,4vw,21px);line-height:1.12}
+ .scene-type-5 .s5-details{grid-area:details;min-width:0;overflow-wrap:anywhere;line-height:1.25}
+ .scene-type-5 .s5-result{grid-area:result;min-width:76px;align-self:center}
+ .scene-type-5 .s5-horse.long-single-word{font-size:clamp(14px,3.8vw,19px)}
+ .scene-type-5 .s5-horse.trifecta-selection{font-size:clamp(12px,3.2vw,16px)}
+}
 /* SCENE_PRODUCTION_CSS_END */
 </style></head><body>
 
