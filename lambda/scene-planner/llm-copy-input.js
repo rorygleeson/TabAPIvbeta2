@@ -1,6 +1,7 @@
 'use strict';
 
 const { loadContract } = require('./contract-loader');
+const { displayBetRunners } = require('./bet-presentation');
 const sceneContracts = loadContract('scene-contracts.json');
 
 const FIELD_PHASES = {
@@ -402,8 +403,7 @@ function postDayAtoms(bettings) {
 // Only presentation facts: settlement and combination coverage remain source-authoritative.
 // The first three backed runners are displayed in source order; never infer a podium.
 function betSelectionNames(bet) {
-  if (bet.betType !== 'TRIFECTA') return bet.runnerName;
-  return bet.selectedRunners.slice(0, 3).map(runner => runner.runnerName).join(' · ');
+  return displayBetRunners(bet);
 }
 
 function isSingleRunnerBet(bet) {
