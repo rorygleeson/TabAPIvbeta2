@@ -2043,7 +2043,7 @@ def validate_candidate_kubrick_payload(payload):
         if trifecta:
             runners = bet.get("selectedRunners")
             if not isinstance(runners, list) or len(runners) < (4 if bet.get("betType") == "FIRST4" else 3):
-                errors.append(f"{prefix}: {bet.get("betType")} requires enough named selectedRunners")
+                errors.append(f"{prefix}: {bet.get('betType')} requires at least {4 if bet.get('betType') == 'FIRST4' else 3} named selectedRunners")
             else:
                 numbers = []
                 for runner in runners:
