@@ -14,32 +14,45 @@ audio.crossOrigin='anonymous';
 audio.src=CONTRACT.soundtrack;
 audio.volume=CONTRACT.normalVolume;
 
-// Shared runner-name fitting for scene cards, replay headers and fast results.
-// It runs locally in the rendered recap; no network or LLM call is involved.
+// Fit runner names only when the available card space requires it.
+// Mobile-only: keep original desktop and laptop typography untouched.
 const HORSE_FIT={
-  2:{selector:'.s2-horse:not(.trifecta-selection)',min:14,lines:2},
-  3:{selector:'.s3-horse:not(.trifecta-selection)',min:12,lines:2},
-  5:{selector:'.s5-horse:not(.trifecta-selection)',min:10,lines:2},
-  8:{selector:'.s8-horse:not(.trifecta-selection)',min:10,lines:2}
+  2:{selector:'.s2-horse:not(.trifecta-selection)',min:13,maxLines:2},
+  3:{selector:'.s3-horse:not(.trifecta-selection)',min:12,maxLines:2},
+  5:{selector:'.s5-horse:not(.trifecta-selection)',min:10,maxLines:2},
+  8:{selector:'.s8-horse:not(.trifecta-selection)',min:10,maxLines:2}
 };
 function fitHorseNames(){
+  const isMobile=matchMedia('(orientation: portrait) and (max-width: 640px)').matches;
   for(const scene of scenes){
     const cfg=HORSE_FIT[Number(scene.dataset.sceneType)];
     if(!cfg)continue;
     for(const el of qa(cfg.selector,scene)){
       el.style.fontSize='';
+      el.style.overflowWrap='';
+      el.style.lineHeight='';
+      if(!isMobile)continue;
+      const width=el.getBoundingClientRect().width;
+      if(width<=0)continue; // The active scene gets its own fitting pass.
       const original=parseFloat(getComputedStyle(el).fontSize);
-      if(!Number.isFinite(original)||!el.clientWidth)continue;
-      // Give a card at most two lines of name; adjust text to real column width.
-      const availableWidth=el.clientWidth;
+      if(!Number.isFinite(original))continue;
       const fits=()=>{
-        const style=getComputedStyle(el);
-        const lineHeight=parseFloat(style.lineHeight)||parseFloat(style.fontSize)*1.15;
-        return el.scrollWidth<=availableWidth+1&&el.scrollHeight<=lineHeight*cfg.lines+2;
+        const css=getComputedStyle(el),line=parseFloat(css.lineHeight);
+        const lineHeight=Number.isFinite(line)?line:parseFloat(css.fontSize)*1.15;
+        return el.scrollWidth<=el.clientWidth+1 &&
+          el.scrollHeight<=lineHeight*cfg.maxLines+2;
       };
-      if(fits())continue;
-      let lo=Math.min(cfg.min,original),hi=original;
+      if(fits())continue; // Ordinary names retain their original appearance.
       el.style.overflowWrap='anywhere';
+      const floor=Math.min(cfg.min,original);
+      el.style.fontSize=floor+'px';
+      if(!fits()){
+        // Very unusual names are allowed an extra line rather than colliding
+        // with the adjacent result. The column always confines their width.
+        el.style.lineHeight='1.05';
+        continue;
+      }
+      let lo=floor,hi=original;
       for(let i=0;i<9;i++){
         const mid=(lo+hi)/2;
         el.style.fontSize=mid+'px';
