@@ -164,7 +164,7 @@
     "finishingPositionText": "If canonical finishingPosition=0, render UNPLACED. Otherwise render the recorded positive finishing position as an uppercase ordinal: 1ST, 2ND, 3RD, 4TH; 11/12/13 use TH. Never render 0TH.",
     "pnlDisplay": "positive +$, negative −$, zero $0.",
     "bestWinSummarySoFar": "Maximum positive profitLoss WIN among completed bets, earliest tie; display '<pnlDisplay> • <horseName>'; if none 'NO WINNERS YET'.",
-    "biggestWinSummary": "Maximum positive profitLoss WIN, earliest tie; '<horseName> @ <oddsDisplay>'; if none 'NO WINNERS TODAY'.",
+    "biggestWinSummary": "Maximum positive profitLoss WIN, earliest tie; normal bet '<horseName> @ <oddsDisplay>'; Trifecta 'TRIFECTA' (no decimal odds); if none 'NO WINNERS TODAY'.",
     "winsLossesDisplay": "Pluralize deterministically: '1 winner' else '<n> winners'; '1 loss' else '<n> losses'.",
     "finalHeroText": "finalPnl>0 => 'FINISHED +$X'; finalPnl<0 => 'FINISHED −$X'; zero => 'FINISHED EVEN'.",
     "resolvedFinalHighlights": {
@@ -446,7 +446,7 @@
         "totalReturnedDisplay": "DERIVED",
         "finalPnlDisplay": "DERIVED",
         "winsLossesDisplay": "DERIVED",
-        "biggestWinSummary": "DERIVED",
+        "biggestWinSummary": "Maximum positive profitLoss WIN, earliest tie; normal bet '<horseName> @ <oddsDisplay>'; Trifecta 'TRIFECTA' (no decimal odds); if none 'NO WINNERS TODAY'.",
         "finalPnlSignClass": {
           "source": "DERIVED",
           "enum": [
@@ -471,8 +471,8 @@
             "totalReturned"
           ],
           "eligibility": {
-            "biggestWin": "at least one WIN with positive profitLoss",
-            "highestOddsWinner": "at least one WIN",
+            "biggestWin": "at least one WIN with known positive decimal odds with positive profitLoss",
+            "highestOddsWinner": "at least one WIN with known positive decimal odds",
             "biggestRecovery": "at least one bet with positive profitLoss",
             "longestLosingStreak": "at least one LOSS",
             "strongestFinish": "at least one bet; always resolvable",
@@ -517,7 +517,7 @@
             "biggestWin",
             "highestOddsWinner"
           ],
-          "rule": "biggestWin requires positive WIN; highestOddsWinner requires any WIN."
+          "rule": "biggestWin requires positive WIN; highestOddsWinner requires a WIN with known positive decimal odds."
         },
         "resolvedFinalHighlights": "DERIVED",
         "finalSummary": {
