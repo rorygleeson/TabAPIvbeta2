@@ -71,7 +71,7 @@ The examples below are **illustrative**, not copied from punters' CSVs. Runner n
 
 | TAB type / label | What it means | Explicit worked example |
 |---|---|---|
-| **Win** | One selected runner must finish **1st**. | $10 WIN on runner **5** in Race 3: **5–2–7** (1st–2nd–3rd) wins; **2–5–7** loses even though 5 places second. |
+| **Win** | One selected runner must finish **1st**. | $10 on runner **5** to win Race 3. |
 | **Place** | The selected runner must finish within the **paid places**, which depend on TAB's race/field rules. | $10 PLACE on **5**. If this market pays 1st–3rd, **2–5–7** (5 second) and **2–7–5** (5 third) win; **2–7–4–5** (5 fourth) loses. Do not assume every race pays three places. |
 | **Each Way** | One customer wager has separate **WIN** and **PLACE** stakes on the same runner. | $10 WIN + $10 PLACE on **5** (total $20). If 5 comes **1st**, both components win; **2nd/3rd** (assuming three places paid), WIN loses and PLACE wins; **4th**, both lose. Component payouts/odds can differ. |
 | **Quinella** | Choose the first **two runners in either order**. | Select **2 and 7**. Winning orders: **2–7** or **7–2**. **2–4–7** loses (7 third). |
