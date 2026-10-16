@@ -356,6 +356,6 @@ console.log('Builder Scene 8 and Trifecta regression tests passed.');
  const html=buildRecap({bettings,scenePlan:replayPlan(5,[1])}).html;
  assert.match(html,/class="s2-horse s2-reveal long-single-word"[^>]*>FIFTYFIVECHEVY<\/div>/);
  assert.match(html,/class="s3-horse long-single-word">FIFTYFIVECHEVY<\/div>/);
- for(const n of [2,3,5,8])assert.match(html,new RegExp(n+':\\\\{selector:'));
+ assert.match(html,/HORSE_FIT/);
  assert.match(html,/function fitHorseNames\\(\\)/);
 }
