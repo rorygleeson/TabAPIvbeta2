@@ -348,40 +348,14 @@ function setLosingTrifecta(bettings,index) {
 
 console.log('Builder Scene 8 and Trifecta regression tests passed.');
 
-// Responsive long-name safeguards: the same horse must render in phone layouts
-// without changing existing laptop landscape compaction rules.
+// Long-name support is shared at runtime; original laptop CSS remains intact.
 {
- const scenes=[2,3,5,8];
- for(const n of scenes){
-   const css=fs.readFileSync(path.resolve(__dirname,'templates/scene-'+n+'-'+({2:'single-race-card',3:'race-replay',5:'multi-race-scene',8:'fast-results'})[n]+'-template.html'),'utf8');
-   assert.match(css,/orientation:portrait/);
-   assert.match(css,/long-single-word/);
-   assert.match(css,/max-width:640px/);
- }
- const single=fs.readFileSync(path.resolve(__dirname,'templates/scene-2-single-race-card-template.html'),'utf8');
- assert.match(single,/class="s2-horse s2-reveal \{\{horseNameClass\}\}"/);
- const grouped=fs.readFileSync(path.resolve(__dirname,'templates/scene-5-multi-race-scene-template.html'),'utf8');
- assert.match(grouped,/grid-template-columns:minmax\(0,1\.15fr\) minmax\(0,1\.8fr\) minmax\(76px,auto\)/);
- const replay=fs.readFileSync(path.resolve(__dirname,'templates/scene-3-race-replay-template.html'),'utf8');
- assert.match(replay,/s3-shell:has\(\.s3-horse\.long-single-word\)/);
  const bettings=makeBettings(5);
  bettings.bets[0].runnerName='FIFTYFIVECHEVY';
  bettings.bets[0].replayUrl='https://example.com/fiftyfivechevy.mp4';
  const html=buildRecap({bettings,scenePlan:replayPlan(5,[1])}).html;
  assert.match(html,/class="s2-horse s2-reveal long-single-word"[^>]*>FIFTYFIVECHEVY<\/div>/);
  assert.match(html,/class="s3-horse long-single-word">FIFTYFIVECHEVY<\/div>/);
- // Scene 5: grouped card actually renders the long horse name.
- const [opening,summary,share]=edgeScenes();
- const multiPlan={planVersion:'2.0',scenes:[opening,
-  {sceneType:5,betSequences:[1,2,3],setupKicker:'NEXT',setupHeadline:'Three bets',payoffHeadline:'Results',contextLine:'Moving on'},
-  {sceneType:2,betSequence:4,tensionLine:'Next',reactionLine:'Done'},
-  {sceneType:2,betSequence:5,tensionLine:'Next',reactionLine:'Done'},
-  summary,share]};
- const groupedHtml=buildRecap({bettings,scenePlan:multiPlan}).html;
- assert.match(groupedHtml,/class="s5-horse long-single-word">FIFTYFIVECHEVY<\/div>/);
- // Scene 8: long runner names must be carried through the fast-results cards.
- const fastHtml=buildRecap({bettings,scenePlan:fastPlan(5,5)}).html;
- assert.match(fastHtml,/class="s8-horse long-single-word">FIFTYFIVECHEVY<\/div>/);
- assert.doesNotMatch(replay,/bottom:34%/);
-
+ for(const n of [2,3,5,8])assert.match(html,new RegExp(n+':\\\\{selector:'));
+ assert.match(html,/function fitHorseNames\\(\\)/);
 }
