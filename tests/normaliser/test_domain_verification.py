@@ -156,6 +156,31 @@ def test_newcastle_degraded_cache_and_quarantine():
         assert all(item[0]["enrichment"]["finishingPosition"] is None for item in results)
         print("OK: Newcastle mock made one date + six race calls, reused partial across bets.")
 
+
+def test_quarantine_does_not_block_other_transactions():
+    import tempfile
+    with tempfile.TemporaryDirectory() as folder:
+        base = {
+            "eventDate": "2026-09-18", "betTime": "Fri Sep 18 2026 14:00:00",
+            "meeting": "NEWCASTLE", "raceNumber": 8, "runnerName": "MOTOSCAFO",
+            "runnerNumber": 5, "betType": "WIN", "pricingType": "FIXED",
+            "stake": 40, "odds": 4, "betResult": "LOSS",
+            "sequence": 1, "domainClassification": "HORSE_CANDIDATE",
+            "enrichment": {"status": "PARTIAL", "raceTime": "2026-09-18T07:20:00+00:00",
+                           "raceName": "NEWCASTLE R8", "meeting": "NEWCASTLE",
+                           "state": "NSW", "raceNumber": 8, "runnerName": "MOTOSCAFO",
+                           "runnerNumber": 5, "finishingPosition": None, "replayUrl": None},
+        }
+        invalid = dict(base, canonicalId="invalid", transactionNumber="101")
+        valid = dict(base, canonicalId="valid", transactionNumber="102", sequence=2,
+                     enrichment=dict(base["enrichment"], status="ENRICHED", finishingPosition=0))
+        included, quarantined = normaliser.authoritative_transaction_partition(
+            {"bets": [invalid, valid]}, "2026-09-18", "Customer", "Australia/Melbourne",
+            ROOT / "local-normaliser", normaliser.Path(folder))
+        assert [b["canonicalId"] for b in included] == ["valid"], included
+        assert [q["transactionNumber"] for q in quarantined] == ["101"], quarantined
+        print("OK: missing finishing position quarantined; valid separate bet retained.")
+
 def main() -> None:
     api = DummyApi()
     store = DummyStore()
@@ -188,6 +213,7 @@ def main() -> None:
     assert method == "UNRESOLVED", method
 
     test_newcastle_degraded_cache_and_quarantine()
+    test_quarantine_does_not_block_other_transactions()
     print("OK: ambiguous racing domain is proven across R/G/H; NANDO BLAST is excluded as greyhound.")
 
 
