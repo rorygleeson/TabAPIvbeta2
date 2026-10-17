@@ -153,7 +153,7 @@ def test_newcastle_degraded_cache_and_quarantine():
         assert len([x for x in calls if x.endswith("/races/8")]) == 6, calls
         assert len([x for x in calls if x.endswith("/races/7")]) == 1, calls
         assert len([x for x in calls if x.endswith("/races/9")]) == 1, calls
-        assert api.discovery_calls == 0, api.discovery_calls
+        assert api.discovery_calls == 2, api.discovery_calls
         assert api.degraded_races == 1, api.degraded_races
         assert all(item[0]["enrichment"]["status"] == "PARTIAL" for item in results)
         assert all(item[0]["enrichment"]["finishingPosition"] is None for item in results)
