@@ -248,6 +248,51 @@ def test_audit_hardening():
     print("OK: best partial snapshot, conflicting runner identity and safe replay URL.")
 
 
+
+def test_newcastle_sr_reuses_verified_unknown_alias():
+    """Real Sep 18 shapes: fixed Win has UNKNOWN alias; exotics have SR."""
+    meeting_nsw = {"meetingName":"NEWCASTLE","location":"NSW","venueMnemonic":"S",
+                   "raceType":"R","races":[{"raceNumber":8}]}
+    meeting_other = {"meetingName":"NEWCASTLE","location":"OTHER","venueMnemonic":"Z",
+                     "raceType":"R","races":[{"raceNumber":8}]}
+    race={"raceNumber":8,"raceName":"LEES RACING","raceStartTime":"2026-09-18T07:20:00+00:00",
+          "runners":[{"runnerNumber":8,"runnerName":"MOTOSCAFO","finishingPosition":0},
+                     {"runnerNumber":5,"runnerName":"FIVE","finishingPosition":1},
+                     {"runnerNumber":7,"runnerName":"SEVEN","finishingPosition":2},
+                     {"runnerNumber":10,"runnerName":"TEN","finishingPosition":3}]}
+    class API:
+        jurisdiction="VIC"
+        def __init__(self): self.race_calls=0
+        def date(self,date): return {"meetings":[meeting_nsw,meeting_other]}
+        def race(self,date,venue,kind,number):
+            assert venue=="S" and kind=="R" and number==8
+            self.race_calls+=1
+            return race
+        def probe_race(self,*args):
+            raise AssertionError("Resolved SR exotics must not trigger worldwide discovery")
+    class Store:
+        ambiguous=0
+        def lookup(self,name,kind):
+            if kind is None: return ([{"canonicalMeeting":"NEWCASTLE","location":"NSW","venueMnemonic":"S","raceType":"R"}],"LOCAL_LOOKUP_HIT")
+            return [],"LOCAL_LOOKUP_MISS"
+        def put_proven(self,*args): return False
+    api,store=API(),Store()
+    for kind in ("TRIFECTA","FIRST_4"):
+        bet={"eventDate":"2026-09-18","meeting":"NEWCASTLE","meetingType":"SR",
+             "meetingRacingType":"GALLOPS","raceNumber":8,"betType":kind,
+             "selections":[5,7,8,10]}
+        m,r,method,reason=normaliser.resolve_meeting_and_race(bet,api,store)
+        assert m["venueMnemonic"]=="S" and r is race,(m,r)
+        assert method=="LOCAL_LOOKUP" and reason=="LOCAL_LOOKUP_CROSS_TYPE_GALLOPS",(method,reason)
+    assert api.race_calls==2
+    # No cross-type alias when CSV does not explicitly confirm Gallops.
+    wrong={"eventDate":"2026-09-18","meeting":"NEWCASTLE","meetingType":"SR",
+           "meetingRacingType":"GREYHOUNDS","raceNumber":8,"betType":"TRIFECTA",
+           "selections":[5,7,8,10]}
+    m,r,method,_=normaliser.resolve_meeting_and_race(wrong,api,store)
+    assert m is None and r is None and method=="UNRESOLVED",(m,r,method)
+    print("OK: Newcastle SR exotics reuse unique verified UNKNOWN alias; cross-domain reuse blocked.")
+
 def main() -> None:
     api = DummyApi()
     store = DummyStore()
@@ -283,6 +328,7 @@ def main() -> None:
     test_quarantine_does_not_block_other_transactions()
     test_method_three_recovers_supported_facts()
     test_audit_hardening()
+    test_newcastle_sr_reuses_verified_unknown_alias()
     print("OK: ambiguous racing domain is proven across R/G/H; NANDO BLAST is excluded as greyhound.")
 
 
