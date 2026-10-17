@@ -611,6 +611,7 @@ class TabHistoricalApi:
         self.cache_hits = 0
         self.failure_cache_hits = 0
         self.discovery_calls = 0
+        self.discovery_cache = {}
         self.degraded_races = 0
 
     @staticmethod
@@ -680,7 +681,7 @@ class TabHistoricalApi:
                 else:
                     self.race_calls += 1
                 if attempt == 0:
-                    print(f"      [API] {'PROBE' if attempts_override == 1 else 'GET'} {url.rsplit('/', 4)[-4:] if kind == 'race' else url}")
+                    print(f"      [API] {'PROBE' if attempts_override == 1 else 'GET'} {'/'.join(url.rsplit('/', 4)[-4:]) if kind == 'race' else url}")
                 request = urllib.request.Request(url, headers=headers, method="GET")
                 with urllib.request.urlopen(request, timeout=self.timeout) as response:
                     data = json.loads(response.read().decode("utf-8"))
@@ -716,11 +717,13 @@ class TabHistoricalApi:
         url = (f"{self.base_url}/{urllib.parse.quote(self.jurisdiction)}/racing/"
                f"{urllib.parse.quote(str(event_date))}/{urllib.parse.quote(str(venue_mnemonic))}/"
                f"{urllib.parse.quote(str(race_type))}/races/{race_number}")
-        cached = self.response_cache.get(url) or self.partial_response_cache.get(url)
+        cached = self.response_cache.get(url) or self.partial_response_cache.get(url) or self.discovery_cache.get(url)
         if cached is not None:
             return cached
         self.discovery_calls += 1
-        return self._get(url, "race", attempts_override=1)
+        result = self._get(url, "race", attempts_override=1)
+        self.discovery_cache[url] = result
+        return result
 
     def _cached_get(self, url, kind):
         if url in self.response_cache:
