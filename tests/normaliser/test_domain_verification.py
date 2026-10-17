@@ -181,6 +181,41 @@ def test_quarantine_does_not_block_other_transactions():
         assert [q["transactionNumber"] for q in quarantined] == ["101"], quarantined
         print("OK: missing finishing position quarantined; valid separate bet retained.")
 
+
+def test_method_three_recovers_supported_facts():
+    class API:
+        jurisdiction = "VIC"
+        def date(self, value):
+            return {"meetings": [{"meetingName": "NEWCASTLE", "location": "NSW",
+                     "venueMnemonic": "S", "raceType": "R", "races": [{"raceNumber": 8}]}]}
+        def race(self, date, venue, kind, number):
+            return {"raceNumber": 8, "raceName": "NEWCASTLE R8",
+                    "raceStartTime": "2026-09-18T00:00:00", "fixedOddsOnly": True,
+                    "resultedTime": "2026-09-18T07:40:00+00:00",
+                    "results": [{"runnerNumber": 5, "finishingPosition": 0}],
+                    "runners": [{"runnerNumber": 5, "runnerName": "MOTOSCAFO",
+                                 "finishingPosition": None}]}
+        def probe_race(self, date, venue, kind, number):
+            return {"raceNumber": number, "raceStartTime": "2026-09-18T07:00:00+00:00",
+                    "runners": [{"runnerNumber": 1, "runnerName": "OTHER", "finishingPosition": 1}]}
+    class Store:
+        ambiguous = 0
+        def lookup(self, *args): return [], "MISS"
+        def put_proven(self, *args): return False
+    bet = {"canonicalId": "recovery", "eventDate": "2026-09-18",
+           "betTime": "Fri Sep 18 2026 15:00:00", "meeting": "NEWCASTLE",
+           "raceNumber": 8, "runnerNumber": 5, "runnerName": "MOTOSCAFO",
+           "betType": "WIN", "pricingType": "FIXED", "stake": 40, "odds": 5,
+           "betResult": "LOSS", "domainClassification": "HORSE_CANDIDATE"}
+    enriched, error = normaliser.enrich_one_bet(bet, API(), Store())
+    assert error is None, error
+    facts = enriched["enrichment"]
+    assert facts["status"] == "ENRICHED", facts
+    assert facts["finishingPosition"] == 0, facts
+    assert facts["raceTimeSource"] == "ESTIMATED", facts
+    assert normaliser.valid_scheduled_race_time(facts["raceTime"], "2026-09-18"), facts
+    print("OK: method 3 recovers Win race time and official result position.")
+
 def main() -> None:
     api = DummyApi()
     store = DummyStore()
@@ -214,6 +249,7 @@ def main() -> None:
 
     test_newcastle_degraded_cache_and_quarantine()
     test_quarantine_does_not_block_other_transactions()
+    test_method_three_recovers_supported_facts()
     print("OK: ambiguous racing domain is proven across R/G/H; NANDO BLAST is excluded as greyhound.")
 
 
