@@ -149,12 +149,15 @@ def test_newcastle_degraded_cache_and_quarantine():
              "betResult": "LOSS", "domainClassification": "HORSE_CANDIDATE"},
         ]
         results = [normaliser.enrich_one_bet(b, api, store) for b in bets]
-        assert len(calls) == 7, (len(calls), calls)
+        assert len(calls) == 9, (len(calls), calls)
+        assert len([x for x in calls if x.endswith("/races/8")]) == 6, calls
+        assert len([x for x in calls if x.endswith("/races/7")]) == 1, calls
+        assert len([x for x in calls if x.endswith("/races/9")]) == 1, calls
         assert api.discovery_calls == 0, api.discovery_calls
         assert api.degraded_races == 1, api.degraded_races
         assert all(item[0]["enrichment"]["status"] == "PARTIAL" for item in results)
         assert all(item[0]["enrichment"]["finishingPosition"] is None for item in results)
-        print("OK: Newcastle mock made one date + six race calls, reused partial across bets.")
+        print("OK: Newcastle mock made one date + six target calls + two bounded recovery probes, reused across bets.")
 
 
 def test_quarantine_does_not_block_other_transactions():
