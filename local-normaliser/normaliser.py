@@ -634,7 +634,7 @@ class TabHistoricalApi:
         )
         raw_start = data.get("raceStartTime")
         placeholder = isinstance(raw_start, str) and bool(re.fullmatch(
-            r"\\d{4}-\\d{2}-\\d{2}T00:00:00(?:\\.0+)?", raw_start
+            r"\d{4}-\d{2}-\d{2}T00:00:00(?:\.0+)?", raw_start
         ))
         positions_missing = any(
             isinstance(runner, dict) and runner.get("finishingPosition") is None
@@ -651,6 +651,7 @@ class TabHistoricalApi:
         # Existing --retries continues to govern connection/HTTP failures.
         # Degraded but HTTP-200 race responses receive five further attempts.
         attempts = max(self.retries + 1, 6) if kind == "race" else self.retries + 1
+        errors = 0
         for attempt in range(attempts):
             try:
                 if kind == "date":
@@ -671,7 +672,8 @@ class TabHistoricalApi:
                 return data
             except Exception as ex:
                 last_error = ex
-                if self._non_retryable_http_error(ex):
+                errors += 1
+                if self._non_retryable_http_error(ex) or errors > self.retries:
                     break
                 if attempt < attempts - 1:
                     time.sleep(min(attempt + 1, 3))
