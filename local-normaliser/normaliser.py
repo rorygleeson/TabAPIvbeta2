@@ -650,6 +650,17 @@ class TabHistoricalApi:
             return "fixed-odds-only response with placeholder scheduled start time"
         if fixed_only and positions_missing and not data.get("resultedTime"):
             return "fixed-odds-only response lacks finishing positions and result timestamp"
+        if not raw_start and not data.get("resultedTime"):
+            return "race has no start or result timestamp"
+        # All positions missing on a resulted race is a strong sign of a
+        # skeleton response. Do not confuse position 0 with a missing value.
+        if data.get("resultedTime") and len(runners) >= 2 and all(
+            isinstance(runner, dict) and runner.get("finishingPosition") is None
+            for runner in runners
+        ):
+            return "resulted race has no runner finishing positions"
+        if data.get("resultedTime") and not data.get("results") and positions_missing:
+            return "resulted race lacks official results and runner positions"
         return None
 
     def _get(self, url, kind):
