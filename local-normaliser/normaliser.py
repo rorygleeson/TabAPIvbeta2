@@ -1515,7 +1515,8 @@ def recovery_finishing_position(race, runner):
     for item in enrich_as_list(race.get("results")):
         if not isinstance(item, dict):
             continue
-        pos = enrich_to_int(item.get("finishingPosition") or item.get("position"))
+        raw_position = item.get("finishingPosition")
+        pos = enrich_to_int(raw_position if raw_position is not None else item.get("position"))
         if pos is None or pos < 0:
             continue
         item_number = enrich_to_int(item.get("runnerNumber"))
