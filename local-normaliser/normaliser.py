@@ -618,16 +618,22 @@ class TabHistoricalApi:
         return isinstance(ex, urllib.error.HTTPError) and 400 <= ex.code < 500 and ex.code not in (408, 429)
 
     @staticmethod
-    def _race_response_warning(data):
-        """Identify clearly degraded historical race representations.
+    def _race_response_warning(data, expected_race_number=None):
+        """Detect strong evidence of a degraded historical race response.
 
-        Do not reject a legitimate fixed-odds-only race, a dead heat, an
-        unplaced runner (position 0), or an unavailable replay on its own.
+        Missing optional video/tote data and zero (unplaced) finishing positions
+        are not, by themselves, reasons to reject a genuine fixed-odds event.
         """
         if not isinstance(data, dict):
             return "race response is not a JSON object"
-        if data.get("raceNumber") is None or not isinstance(data.get("runners"), list):
-            return "race identity or runner list missing"
+        actual_number = enrich_to_int(data.get("raceNumber"))
+        if actual_number is None:
+            return "race number missing"
+        if expected_race_number is not None and actual_number != expected_race_number:
+            return f"race number mismatch: requested {expected_race_number}, received {actual_number}"
+        runners = data.get("runners")
+        if not isinstance(runners, list) or not runners:
+            return "race runner list missing or empty"
         fixed_only = data.get("fixedOddsOnly") is True or (
             isinstance(data.get("meeting"), dict)
             and data["meeting"].get("fixedOddsOnly") is True
@@ -638,10 +644,12 @@ class TabHistoricalApi:
         ))
         positions_missing = any(
             isinstance(runner, dict) and runner.get("finishingPosition") is None
-            for runner in data["runners"]
+            for runner in runners
         )
-        if fixed_only and placeholder and positions_missing:
-            return "fixed-odds-only placeholder race with missing finishing positions"
+        if fixed_only and placeholder:
+            return "fixed-odds-only response with placeholder scheduled start time"
+        if fixed_only and positions_missing and not data.get("resultedTime"):
+            return "fixed-odds-only response lacks finishing positions and result timestamp"
         return None
 
     def _get(self, url, kind):
@@ -662,7 +670,7 @@ class TabHistoricalApi:
                 request = urllib.request.Request(url, headers=headers, method="GET")
                 with urllib.request.urlopen(request, timeout=self.timeout) as response:
                     data = json.loads(response.read().decode("utf-8"))
-                warning = self._race_response_warning(data) if kind == "race" else None
+                warning = self._race_response_warning(data, expected_race_number=int(url.rsplit("/", 1)[-1])) if kind == "race" else None
                 if warning:
                     partial = data
                     print(f"      [API] DEGRADED response {attempt + 1}/{attempts}: {warning}")
@@ -704,7 +712,9 @@ class TabHistoricalApi:
                 self.error_cache[url] = message
             raise RuntimeError(message) from ex
 
-        if kind == "race" and self._race_response_warning(data):
+        if kind == "race" and self._race_response_warning(data, expected_race_number=int(url.rsplit("/", 1)[-1])):
+            # A degraded record is reusable evidence only for the current run.
+            # Six attempts have already been exhausted for this URL.
             self.partial_response_cache[url] = data
         else:
             self.response_cache[url] = data
