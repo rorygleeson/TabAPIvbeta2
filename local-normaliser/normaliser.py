@@ -1268,6 +1268,10 @@ def selected_runner_details(race, runner_numbers):
             continue
         runner = matches[0]
         raw_position = enrich_to_int(runner.get("finishingPosition"))
+        if raw_position is None:
+            raw_position = recovery_finishing_position(race, runner)
+            if raw_position is not None:
+                print(f"      [RECOVERY] Official results provide finishing position {raw_position}")
         found.append({
             "runnerId": get_runner_id(runner),
             "runnerNumber": number,
@@ -1407,7 +1411,7 @@ def estimate_missing_trifecta_race_time(bet, meeting, race, api):
         if neighbour < 1:
             continue
         try:
-            item = race if neighbour == number else api.race(date, str(venue), str(race_type), neighbour)
+            item = (api.probe_race if hasattr(api, "probe_race") else api.race)(date, str(venue), str(race_type), neighbour)
             if isinstance(item, dict) and enrich_to_int(item.get("raceNumber")) == neighbour:
                 dt = valid_scheduled_race_time(item.get("raceStartTime"), date)
                 if dt is not None:
@@ -1492,6 +1496,26 @@ def estimate_missing_trifecta_race_time(bet, meeting, race, api):
     if melbourne_racing_date(estimated) != date:
         return None, "ESTIMATE_OUTSIDE_RACE_DATE"
     return estimated.isoformat(), method
+
+
+def recovery_finishing_position(race, runner):
+    """Recover an official placed position only from an explicit results entry."""
+    if runner is None:
+        return None
+    number = enrich_to_int(runner.get("runnerNumber"))
+    name = enrich_norm_text(runner.get("runnerName"))
+    matches = []
+    for item in enrich_as_list(race.get("results")):
+        if not isinstance(item, dict):
+            continue
+        pos = enrich_to_int(item.get("finishingPosition") or item.get("position"))
+        if pos is None or pos < 0:
+            continue
+        item_number = enrich_to_int(item.get("runnerNumber"))
+        item_name = enrich_norm_text(item.get("runnerName"))
+        if (number is not None and item_number == number) or (name and item_name == name):
+            matches.append(pos)
+    return matches[0] if len(matches) == 1 else None
 
 
 def race_enrichment(meeting, race, api, event_date, race_number):
@@ -1671,15 +1695,14 @@ def enrich_one_bet(bet, api, store):
         event_date = str(bet.get("eventDate"))
         race_number = enrich_to_int(bet.get("raceNumber"))
         enrichment = race_enrichment(meeting, race, api, event_date, race_number)
-        if bet.get("betType") in ("TRIFECTA", "FIRST_4"):
-            if valid_scheduled_race_time(enrichment.get("raceTime"), event_date) is None:
-                inferred, method = estimate_missing_trifecta_race_time(bet, meeting, race, api)
-                enrichment["raceTime"] = inferred
-                enrichment["raceTimeSource"] = "ESTIMATED" if inferred else "UNAVAILABLE"
-                enrichment["raceTimeMethod"] = method
-                print(f"      [RECOVERY] Race time {inferred or 'unavailable'} ({method})")
-            else:
-                enrichment["raceTimeSource"] = "TAB"
+        if valid_scheduled_race_time(enrichment.get("raceTime"), event_date) is None:
+            inferred, method = estimate_missing_trifecta_race_time(bet, meeting, race, api)
+            enrichment["raceTime"] = inferred
+            enrichment["raceTimeSource"] = "ESTIMATED" if inferred else "UNAVAILABLE"
+            enrichment["raceTimeMethod"] = method
+            print(f"      [RECOVERY] Race time {inferred or 'unavailable'} ({method})")
+        else:
+            enrichment["raceTimeSource"] = "TAB"
         enrichment.update({
             "status": "ENRICHED",
             "required": required,
