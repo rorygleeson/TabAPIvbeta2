@@ -64,7 +64,8 @@ class RaceRecoveryTests(unittest.TestCase):
             self.assertEqual(request.call_count, 1)
 
     def test_legitimate_fixed_only_not_rejected(self):
-        valid_fixed = dict(DEGRADED, raceStartTime="2026-09-18T07:20:00+00:00")
+        valid_fixed = dict(DEGRADED, raceStartTime="2026-09-18T07:20:00+00:00",
+                           resultedTime="2026-09-18T07:23:00+00:00")
         self.assertIsNone(self.client()._race_response_warning(valid_fixed))
 
     def test_unplaced_zero_is_not_missing(self):
