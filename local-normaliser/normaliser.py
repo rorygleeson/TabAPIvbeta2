@@ -1589,7 +1589,7 @@ def resolve_meeting_and_race(bet, api, store):
     # TAB tote CSVs use meetingType=SR while the same fixed-odds meeting
     # commonly has no meetingType. Reuse an UNKNOWN alias only when the CSV
     # explicitly identifies Gallops and date-level identity proves one target.
-    if not mappings and enrich_norm_text(source_meeting_type) == "SR" and enrich_norm_text(bet.get("meetingRacingType")) == "GALLOPS":
+    if not mappings and enrich_norm_text(source_meeting_type) in {"SR", "CR"} and enrich_norm_text(bet.get("meetingRacingType")) == "GALLOPS":
         inherited, _ = store.lookup(source_meeting, None)
         if inherited:
             mappings = inherited
