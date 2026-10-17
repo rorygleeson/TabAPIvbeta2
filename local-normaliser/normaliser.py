@@ -671,6 +671,7 @@ class TabHistoricalApi:
         headers = {"Accept": "application/json", "User-Agent": "Mozilla/5.0"}
         last_error = None
         partial = None
+        partial_score = -1
         # Existing --retries continues to govern connection/HTTP failures.
         # Degraded but HTTP-200 race responses receive five further attempts.
         attempts = attempts_override if attempts_override is not None else (6 if kind == "race" else self.retries + 1)
@@ -691,7 +692,13 @@ class TabHistoricalApi:
                     # Never reuse a record whose race number contradicts the URL.
                     # It can be retried, but is not safe fallback evidence.
                     if not warning.startswith("race number mismatch:"):
-                        partial = data
+                        # Select one internally consistent response; never merge conflicting snapshots.
+                        score = sum(1 for v in data.values() if v not in (None, "", [], {}))
+                        score += sum(1 for r in enrich_as_list(data.get("runners")) if isinstance(r, dict) and r.get("finishingPosition") is not None)
+                        score += 5 if data.get("resultedTime") else 0
+                        score += 5 if choose_replay_url(data) else 0
+                        if score > partial_score:
+                            partial, partial_score = data, score
                     if attempts_override != 1:
                         print(f"      [API] Incomplete {attempt + 1}/{attempts}: {warning}")
                     if attempt < attempts - 1:
@@ -1258,7 +1265,8 @@ def find_replay_urls(value, key_path=""):
 
 
 def choose_replay_url(race):
-    urls = find_replay_urls(race)
+    # No unverified URL construction. Only source-provided HTTPS replay/video URLs.
+    urls = [u for u in find_replay_urls(race) if urllib.parse.urlsplit(u).scheme.lower() == "https" and urllib.parse.urlsplit(u).netloc]
     for url in urls:
         if ".mp4" in url.lower():
             return url
@@ -1521,7 +1529,9 @@ def recovery_finishing_position(race, runner):
             continue
         item_number = enrich_to_int(item.get("runnerNumber"))
         item_name = enrich_norm_text(item.get("runnerName"))
-        if (number is not None and item_number == number) or (name and item_name == name):
+        number_matches = number is not None and item_number == number
+        name_matches = bool(name and item_name == name)
+        if (number_matches or name_matches) and not (number is not None and item_number is not None and number != item_number) and not (name and item_name and name != item_name):
             matches.append(pos)
     return matches[0] if len(matches) == 1 else None
 
@@ -1566,6 +1576,7 @@ def resolve_meeting_and_race(bet, api, store):
                     return meeting, race, "DIRECT", direct_reason
             except Exception as ex:
                 direct_reason = f"{direct_reason}; race lookup failed: {ex}"
+                return meeting, None, "DIRECT", direct_reason
 
     # 2. Persistent local learned mappings. Multiple worldwide targets may be stored.
     mappings, lookup_reason = store.lookup(source_meeting, source_meeting_type)
@@ -1596,6 +1607,7 @@ def resolve_meeting_and_race(bet, api, store):
                     return meeting, race, "LOCAL_LOOKUP", lookup_reason
             except Exception as ex:
                 lookup_reason = f"{lookup_reason}; mapped race lookup failed: {ex}"
+                return meeting, None, "LOCAL_LOOKUP", lookup_reason
         elif len(valid) > 1:
             store.ambiguous += 1
             lookup_reason = f"LOCAL_LOOKUP_AMBIGUOUS_FOR_DATE_RACE:{len(valid)}"
@@ -2716,8 +2728,11 @@ def kubrick_poll_until_terminal(job_id, api_url, api_key, evidence_dir, poll_int
     url = api_url.rstrip("/") + "/jobs/" + urllib.parse.quote(job_id)
     last_status = None
     poll_count = 0
+    deadline = time.monotonic() + 900  # 15-minute upper bound
 
     while True:
+        if time.monotonic() >= deadline:
+            raise RuntimeError(f"Kubrick polling timed out after 15 minutes; jobId={job_id}. Check status later.")
         poll_count += 1
         request = urllib.request.Request(
             url,
@@ -2764,7 +2779,7 @@ def kubrick_poll_until_terminal(job_id, api_url, api_key, evidence_dir, poll_int
         if status not in ("RECEIVED", "PLANNING", "RENDERING"):
             raise RuntimeError(f"Kubrick returned unexpected job status {status!r}.")
 
-        time.sleep(max(1, poll_interval))
+        time.sleep(min(max(1, poll_interval), max(0, deadline - time.monotonic())))
 
 
 def process_selected_day(
@@ -2929,7 +2944,7 @@ def process_selected_day(
         print("\n============================================================")
         print("CANDIDATE KUBRICK PAYLOAD")
         print("============================================================")
-        print(json.dumps(candidate, indent=2, ensure_ascii=False))
+        print(f"Bets: {len(candidate['bets'])} | Staked: {candidate['summary']['totalStaked']} | Returned: {candidate['summary']['totalReturned']}")
         print("\n============================================================")
         print("READY TO SEND TO KUBRICK")
         print("============================================================")
