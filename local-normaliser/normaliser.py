@@ -1580,6 +1580,14 @@ def resolve_meeting_and_race(bet, api, store):
 
     # 2. Persistent local learned mappings. Multiple worldwide targets may be stored.
     mappings, lookup_reason = store.lookup(source_meeting, source_meeting_type)
+    # TAB tote CSVs use meetingType=SR while the same fixed-odds meeting
+    # commonly has no meetingType. Reuse an UNKNOWN alias only when the CSV
+    # explicitly identifies Gallops and date-level identity proves one target.
+    if not mappings and enrich_norm_text(source_meeting_type) == "SR" and enrich_norm_text(bet.get("meetingRacingType")) == "GALLOPS":
+        inherited, _ = store.lookup(source_meeting, None)
+        if inherited:
+            mappings = inherited
+            lookup_reason = "LOCAL_LOOKUP_CROSS_TYPE_GALLOPS"
     if mappings:
         valid = []
         for mapping in mappings:
