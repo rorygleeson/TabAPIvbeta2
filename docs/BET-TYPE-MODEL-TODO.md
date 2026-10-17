@@ -6,7 +6,7 @@ Enhance the **existing Normaliser** to understand TAB horse-racing bet types act
 
 **Do not build a new wagering model.** Keep Kubrick's existing `contracts/bettings.schema.json` and `betType`, plus the established race, runner, financial and summary fields wherever they work. Start with **Normaliser-only** changes; allow small Kubrick changes only when required to represent an exotic honestly. Kubrick must not implement TAB bet rules.
 
-This document tracks **planned release coverage**, not a claim that the code already works for every listed bet.
+This document distinguishes implemented CSV parser cases from proven end-to-end release coverage. **Current executable:** `local-normaliser/normaliser.py` (audited 17 October 2026). Existing 'Support now' decisions below are intended release scope, not blanket confirmation of every settlement variation.
 
 ## Bet types — the one scope and status table
 
@@ -14,12 +14,12 @@ This document tracks **planned release coverage**, not a claim that the code alr
 |---|---|---|---|
 | Win | **Support now** | Standard cases recognised | Existing single-runner model; special settlements deferred |
 | Place | **Support now** | Standard cases recognised | Existing single-runner model |
-| Each Way / Win and Place | **Support now** | Partial | One source bet with WIN and PLACE components; reconcile correctly |
+| Each Way / Win and Place | **Support now** | Fixed and Tote component parsers implemented; edge cases constrained | One source bet with WIN and PLACE components; reconcile correctly |
 | Quinella | **Not yet supported** | Not supported | No Quinella example in the supplied August/September CSVs; revisit when a real sample is available |
 | Exacta | **Not yet supported** | Not supported | No Exacta example in the supplied August/September CSVs; defer until a real sample is available |
 | Duet | **Not yet supported** | Not supported | No Duet example in the supplied August/September CSVs; defer until a real sample is available |
-| Trifecta (including Boxed) | **Support now** | Partial | Handle multiple selections, ordering and verified outcomes |
-| First 4 | **Support now** | Partial | Handle positional selections, combinations and verified outcomes |
+| Trifecta (including Boxed) | **Support now** | Tote parser implemented for losing cases; winning settlements not source-validated | Handle multiple selections, ordering and verified outcomes |
+| First 4 | **Support now** | Tote parser implemented for losing cases; winning settlements not source-validated | Handle positional selections, combinations and verified outcomes |
 | Running Double | **Not yet supported** | Not supported | Multi-race wager |
 | Daily Double | **Not yet supported** | Not supported | Multi-race wager |
 | Treble | **Not yet supported** | Not supported | Multi-race wager |
@@ -30,9 +30,15 @@ This document tracks **planned release coverage**, not a claim that the code alr
 | All-ups | **Not yet supported** | Not supported | Multi-leg reinvestment |
 | Mystery Bet | **Not yet supported** | Not supported | System-generated selections; underlying type may vary |
 | 3UP Betting | **Not yet supported** | Not supported | Composite mystery wager |
-| Fixed Odds Multi | **Not yet supported** | Parser recognises some | Multi-leg wager cannot be faithfully represented by current Kubrick input |
+| Fixed Odds Multi | **Not yet end-to-end supported** | Parser recognises summary and legs, but final Kubrick compatibility is not established | Multi-leg wager cannot be faithfully represented by current Kubrick input |
 
 **Boxed Trifecta is a Trifecta variation**, not an extra underlying bet type. “Support now” means **in scope to implement**, not yet production-ready. A bet type can be in scope while a particular structure or unusual settlement is still unsupported.
+
+## Current implementation evidence — 17 October 2026
+
+The local parser's `SUPPORTED` input-pair set is precisely: Fixed Odds × Win, Place, Win and Place, Multi; Parimutuel × Win, Place, Win and Place, Trifecta, First 4. **This is a parser dispatch allowlist, NOT a claim of end-to-end support for every format/settlement.** Fixed W&P reconciliation accepts a composite payout split only when a unique combination matches source potential returns; special multipliers remain deferred. Tote exotics explicitly reject *winning* settlement cases as `UNSUPPORTED_BET_STRUCTURE` pending source validation. Fixed Multi has leg parsing but remains outside committed end-to-end coverage. Other bet types (including Quinella, Exacta, Duet, Quadrella) are not in the dispatch allowlist.
+
+Live tests on 17 October showed Newcastle R8 Win/Trifecta/First 4 (three losing bets) pass canonical validation and Kubrick READY in 8 runs; the mixed 12-bet 19 September day also passed in one run. This verifies those particular records, **not** boxed/winning exotics, multiplier bonuses, refunded bets, bonus bets, unsettled races or arbitrary multi legs. The 17 October API recovery audit lives in `docs/NORMALISER-LOGIC-SPEC.md`; there is no new separate historical API fallback, because the normaliser already uses that service.
 
 ## What we are *not* modelling now
 
