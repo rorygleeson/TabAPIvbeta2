@@ -933,7 +933,7 @@ def match_meeting_exact(date_payload, csv_meeting_name, race_number):
     with_race = [m for m in matches if race_number in meeting_race_numbers(m)]
     # A unique exact venue may have an incomplete date-level race list. Allow
     # its race endpoint to verify the number rather than searching worldwide.
-    if not with_race and len(matches) == 1 and not meeting_race_numbers(matches[0]):
+    if not with_race and len(matches) == 1:
         return matches[0], "DIRECT_EXACT_MEETING_NO_DATE_RACES"
     if len(with_race) == 1:
         reason = "DIRECT_EXACT_MEETING" if len(matches) == 1 else "DIRECT_EXACT_MEETING_PLUS_RACE"
@@ -965,8 +965,7 @@ def find_meeting_from_mapping(date_payload, mapping, race_number):
             continue
         if wanted_type and enrich_norm_text(m.get("raceType")) != wanted_type:
             continue
-        if race_number not in meeting_race_numbers(m):
-            continue
+        # Date-level race lists may be incomplete; verify on the race endpoint.
         matches.append(m)
     return matches[0] if len(matches) == 1 else None
 
@@ -1053,6 +1052,10 @@ def verify_ambiguous_racing_domain(date_payload, bet, api):
         and enrich_norm_text(m.get("raceType")) in {"R", "G", "H"}
         and race_number in meeting_race_numbers(m)
     ]
+    wanted = enrich_norm_text(bet.get("meeting"))
+    meetings = [m for m in meetings if wanted and enrich_norm_text(m.get("meetingName")) == wanted]
+    if len(meetings) > 3:
+        return None, None, "ambiguous same-name meetings; discovery limit exceeded"
     candidates = []
     race_errors = []
 
@@ -1128,6 +1131,10 @@ def deep_resolve_meeting(date_payload, bet, api):
         and enrich_norm_text(m.get("raceType")) == "R"
         and race_number in meeting_race_numbers(m)
     ]
+    wanted = enrich_norm_text(bet.get("meeting"))
+    meetings = [m for m in meetings if wanted and enrich_norm_text(m.get("meetingName")) == wanted]
+    if len(meetings) > 3:
+        return None, None, "ambiguous same-name meetings; discovery limit exceeded"
     candidates = []
     race_errors = []
     for meeting in meetings:
@@ -1384,7 +1391,9 @@ def estimate_missing_trifecta_race_time(bet, meeting, race, api):
 
     known = {}
     # Look at nearby races only. The API caches repeat requests within this run.
-    for neighbour in range(max(1, number - 4), number + 5):
+    for neighbour in (number - 1, number + 1):
+        if neighbour < 1:
+            continue
         try:
             item = race if neighbour == number else api.race(date, str(venue), str(race_type), neighbour)
             if isinstance(item, dict) and enrich_to_int(item.get("raceNumber")) == neighbour:
@@ -1650,13 +1659,13 @@ def enrich_one_bet(bet, api, store):
         event_date = str(bet.get("eventDate"))
         race_number = enrich_to_int(bet.get("raceNumber"))
         enrichment = race_enrichment(meeting, race, api, event_date, race_number)
-        if bet.get("betType") == "TRIFECTA":
+        if bet.get("betType") in ("TRIFECTA", "FIRST_4"):
             if valid_scheduled_race_time(enrichment.get("raceTime"), event_date) is None:
                 inferred, method = estimate_missing_trifecta_race_time(bet, meeting, race, api)
                 enrichment["raceTime"] = inferred
                 enrichment["raceTimeSource"] = "ESTIMATED" if inferred else "UNAVAILABLE"
                 enrichment["raceTimeMethod"] = method
-                print(f"      [TRIFECTA RACE TIME] {bet.get('meeting')} R{race_number}: {inferred or 'unavailable'} ({method})")
+                print(f"      [RECOVERY] Race time {inferred or 'unavailable'} ({method})")
             else:
                 enrichment["raceTimeSource"] = "TAB"
         enrichment.update({
@@ -1792,6 +1801,7 @@ def enrich_normalised_payload(normalised, api, store):
     enriched_bets, exceptions, counts = [], [], Counter()
     api_non_horse_excluded = 0
     for bet in normalised.get("bets", []):
+        print(f"      [BET] {bet.get('meeting') or 'UNKNOWN'} R{bet.get('raceNumber') or '?'} / {bet.get('betType')}")
         enriched_bet, enrichment_exception = enrich_one_bet(bet, api, store)
         status = enriched_bet.get("enrichment", {}).get("status", "UNRESOLVED")
         counts[status] += 1
