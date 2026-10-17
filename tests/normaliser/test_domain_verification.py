@@ -219,6 +219,35 @@ def test_method_three_recovers_supported_facts():
     assert normaliser.valid_scheduled_race_time(facts["raceTime"], "2026-09-18"), facts
     print("OK: method 3 recovers Win race time and official result position.")
 
+
+def test_audit_hardening():
+    from unittest.mock import patch
+    import json
+    class Response:
+        def __init__(self, d): self.d=d
+        def __enter__(self): return self
+        def __exit__(self,*args): return False
+        def read(self): return json.dumps(self.d).encode()
+    rich={"raceNumber":8,"raceStartTime":"2026-09-18T00:00:00","fixedOddsOnly":True,
+          "runners":[{"runnerNumber":5,"runnerName":"MOTOSCAFO","finishingPosition":0}],
+          "resultedTime":"2026-09-18T07:40:00+00:00"}
+    poor={"raceNumber":8,"raceStartTime":"2026-09-18T00:00:00","fixedOddsOnly":True,
+          "runners":[{"runnerNumber":5,"runnerName":"MOTOSCAFO","finishingPosition":None}]}
+    responses=[rich]+[poor]*5
+    def get(*args,**kwargs): return Response(responses.pop(0))
+    api=normaliser.TabHistoricalApi("https://test.example","VIC",1,2)
+    with patch.object(normaliser.urllib.request,"urlopen",get), patch.object(normaliser.time,"sleep"):
+        result=api.race("2026-09-18","S","R",8)
+    assert result["runners"][0]["finishingPosition"] == 0, result
+    assert not responses, responses
+    race={"results":[{"runnerNumber":6,"runnerName":"MOTOSCAFO","finishingPosition":1}]}
+    runner={"runnerNumber":5,"runnerName":"MOTOSCAFO"}
+    assert normaliser.recovery_finishing_position(race,runner) is None
+    assert normaliser.choose_replay_url({"mediaUrl":"http://test.example/race.mp4"}) is None
+    assert normaliser.choose_replay_url({"mediaUrl":"https://test.example/race.mp4"}) == "https://test.example/race.mp4"
+    print("OK: best partial snapshot, conflicting runner identity and safe replay URL.")
+
+
 def main() -> None:
     api = DummyApi()
     store = DummyStore()
@@ -253,6 +282,7 @@ def main() -> None:
     test_newcastle_degraded_cache_and_quarantine()
     test_quarantine_does_not_block_other_transactions()
     test_method_three_recovers_supported_facts()
+    test_audit_hardening()
     print("OK: ambiguous racing domain is proven across R/G/H; NANDO BLAST is excluded as greyhound.")
 
 
