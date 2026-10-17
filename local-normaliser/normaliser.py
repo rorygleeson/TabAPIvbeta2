@@ -300,36 +300,42 @@ def parse_fixed_wp(group):
     bets=[parse_fixed(cand["WIN"][0],"WIN"),parse_fixed(cand["PLACE"][0],"PLACE")]
     win_bet, place_bet = bets
 
-    # Preserve the authoritative settled payout for the composite. TAB can mark
-    # both W&P source rows Pay/Won even when only one component actually returned
-    # money. Reconcile against source potential returns without guessing: enumerate
-    # every non-empty component subset and accept a split only when exactly one
-    # subset sums to the authoritative composite payout. Unmatched components then
-    # have an actual return of zero. If no subset or more than one subset matches,
-    # leave both component payouts unknown.
+    # TAB can record a separately itemised Pay Multiplier bonus alongside the
+    # base fixed-odds payout. Match components using the base settlement first.
+    # Never allocate a shared bonus when multiple components are returning.
     composite_payout = payout_total(group)
     for b in bets:
         b["sourceCompositePayout"] = composite_payout
     if composite_payout is not None:
-        matching_subsets = []
-        for mask in range(1, 1 << len(bets)):
-            subset = [i for i in range(len(bets)) if mask & (1 << i)]
-            returns = [bets[i].get("potentialReturn") for i in subset]
-            if any(value is None for value in returns):
-                continue
-            if q2(sum(returns, Decimal("0"))) == composite_payout:
-                matching_subsets.append(set(subset))
+        bonus_rows = [
+            r for r in group
+            if r.get("Transaction Category") == "Payout"
+            and r.get("Transaction Type") == "Account"
+            and re.search(r"\bPay Multiplier\b", r.get("Description") or "", re.I)
+        ]
+        bonus_amounts = [money(r.get("Amount")) for r in bonus_rows]
+        # An invalid bonus amount must not be silently treated as zero.
+        multiplier_bonus = q2(sum(bonus_amounts, Decimal("0"))) if bonus_rows and all(x is not None and x > 0 for x in bonus_amounts) else Decimal("0.00") if not bonus_rows else None
+        if multiplier_bonus is not None:
+            base_payout = q2(composite_payout - multiplier_bonus)
+            matching_subsets = []
+            for mask in range(1, 1 << len(bets)):
+                subset = [i for i in range(len(bets)) if mask & (1 << i)]
+                returns = [bets[i].get("potentialReturn") for i in subset]
+                if any(value is None for value in returns):
+                    continue
+                if q2(sum(returns, Decimal("0"))) == base_payout:
+                    matching_subsets.append(set(subset))
 
-        if len(matching_subsets) == 1:
-            matched = matching_subsets[0]
-            for i, b in enumerate(bets):
-                is_returning_component = i in matched
-                b["payout"] = b.get("potentialReturn") if is_returning_component else Decimal("0.00")
-                # The statement repeats Pay/Won on both source rows for some composite
-                # W&P transactions. Once the payout uniquely proves which component(s)
-                # returned money, use that deterministic component settlement in the
-                # canonical split so recap win/loss counts and replay flags stay correct.
-                b["betResult"] = "WIN" if is_returning_component else "LOSS"
+            if len(matching_subsets) == 1:
+                matched = matching_subsets[0]
+                if multiplier_bonus == 0 or len(matched) == 1:
+                    for i, b in enumerate(bets):
+                        returning = i in matched
+                        base_return = b.get("potentialReturn") if returning else Decimal("0.00")
+                        b["payout"] = q2(base_return + multiplier_bonus) if returning else Decimal("0.00")
+                        # TAB sometimes marks both W&P rows Pay/Won.
+                        b["betResult"] = "WIN" if returning else "LOSS"
     identity_fields = ("eventDate", "meeting", "raceNumber", "selectionText", "runnerName")
     mismatches = [f for f in identity_fields if win_bet.get(f) != place_bet.get(f)]
     if mismatches:
