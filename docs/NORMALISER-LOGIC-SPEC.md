@@ -1,12 +1,36 @@
 # TAB CSV Normaliser Logic Specification
 
-Last updated: 2026-09-18
+Last updated: 2026-10-17 (current-code audit; legacy specification preserved below)
 
-Status: **LOCAL-ONLY INTEGRATION DESIGN / v0.9 READY FOR RUN 2**  
+Status: **CURRENT LOCAL CLIENT OPERATIONAL; legacy sections below retained for design history**  
 Repository: `rorygleeson/TabAPIvbeta2`  
-Canonical runnable script: `tests/normaliser/normaliser.py`
+Canonical runnable script: `local-normaliser/normaliser.py`
 
 > This is the current integrated Normaliser design for vbeta2. The component documents under `lambda/normaliser/` are retained as lower-level Pass 1 / Pass 2 design history and must not override this file where they differ.
+
+## October 17, 2026 — current implementation and live-test audit
+
+**Authority / executable:** `local-normaliser/normaliser.py` on `main`, the same file used for the work-laptop trials. Older references below to `tests/normaliser/normaliser.py`, pre-POST milestones, or separate components describe historical designs, not today's executable. Stage 0 selects one racing day from multiple monthly CSVs; Pass 1 parses and reconciles customer facts; Pass 2 resolves and enriches horse races; finalisation validates canonical `bettings.json`; the local client POSTs to Kubrick and polls until READY/FAILED. No test-only flags, mock modes or extra files are wanted in the production normaliser.
+
+### Actual API resolution and recovery (not additional historical method)
+
+- The live normaliser **already uses** `https://api.beta.tab.com.au/v1/historical-results-service/VIC/racing/{date}` and the individual `/{venueMnemonic}/{raceType}/races/{raceNumber}` path. The jurisdiction path is VIC even for meetings resolved elsewhere; do not equate the jurisdiction segment with race location.
+- Meeting resolution: exact matching, proven persisted aliases, carefully constrained R/G/H domain verification, then horse-only deep resolution. Discovery candidate probes are single-shot; a confirmed race gets the full response policy. Do not mislabel meeting-resolution branches as the three response-recovery methods.
+- **Method 1:** accept a confirmed race response passing `TabHistoricalApi._race_response_warning`. That validator checks race number, nonempty runners, strong skeleton signals including fixed-odds-only midnight placeholder, missing start/result timestamps and absent finishing data. It does **not** require every optional enrichment field (notably replay).
+- **Method 2:** retry degraded HTTP-200 race responses up to **six attempts total**, with bounded sleeps; ordinary transport/HTTP errors use configured retry limits, deterministic 4xx (except 408/429) are not retried. Successful validated response wins. Cache the result per run; cache-hit counts are not unique fetched races.
+- **Method 3:** on six degraded responses, select the **best internally consistent partial snapshot**, never merge contradictory snapshots or use a wrong race-number response. Mark it degraded and retain it only in the run's partial cache. Pass 2 may estimate missing scheduled race time using adjacent same-meeting TAB race starts, explicitly tagging ESTIMATED/UNAVAILABLE; may recover a finishing position only from explicit compatible official result objects; and uses source-provided HTTPS replay links only. Missing required enrichment can be PARTIAL or UNRESOLVED. This method has **not been exercised in the supplied live runs**. It is not a promise that all missing fields are restored.
+- `resultedTime` is tested as a signal of API quality, but `race_enrichment()` currently maps `raceStartTime` to `raceTime`; the mere presence of `resultedTime` in raw JSON does not mean it is carried into Kubrick. `replayUrl` may remain absent even when the initial response passes the skeleton check.
+- Manual browser probes to the *same* historical service (Rosehill R1 on 2025-10-01 and Randwick R1 on 2026-09-19) showed real schema variation: fixed-odds-only data could lack dividends/media, while the later full result contained `skyRacing.video`, `skyRacing.audio`, `resultedTime`, `results` and exotic dividends. The `winBook` field contained an internal-looking ELB hostname; treat it as untrusted infrastructure metadata, **not** a usable integration URL.
+- Source of truth: statement CSV owns stake, credited return and settlement; TAB historical data owns race, runner, result and replay evidence. No generated payout/result/runner facts. No arbitrary multi-response merge. Historical availability and undocumented API behaviour remain risks.
+
+### Observed live regressions (17 Oct 2026)
+
+| Exercise | Runs | Outcome | API evidence |
+|---|---:|---|---|
+| Newcastle R8, Fri 18 Sep (3 bets: Win, Trifecta, First 4) | 8 | 8/8 Kubrick READY, 3/3 enriched each run, 0 degraded | Race HTTP calls per run: 3,1,1,1,1,2,2,1. Incomplete warnings: 2 in first run, 1 in sixth and seventh; all recovered before exhaustion |
+| Randwick R2/R4 and Caulfield R6/R7/R9, Sat 19 Sep (12 bets) | 1 | 12/12 Kubrick-ready, 0 partial, 0 degraded, READY | 5 race requests, 18 reported cache hits, no retry warnings |
+
+These outcomes prove end-to-end processing and observed retry recovery, **not** that every replay/timestamp/selection field in the produced payload was independently inspected, nor that six-failure Method 3 works. Before release: examine representative emitted payloads, audit Method 3 by reading code, and assess acceptance criteria for missing-but-useful fields. Keep production code free of test-only switches.
 
 ## 1. Locked execution model
 
