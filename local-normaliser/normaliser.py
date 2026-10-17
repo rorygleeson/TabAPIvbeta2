@@ -672,7 +672,10 @@ class TabHistoricalApi:
                     data = json.loads(response.read().decode("utf-8"))
                 warning = self._race_response_warning(data, expected_race_number=int(url.rsplit("/", 1)[-1])) if kind == "race" else None
                 if warning:
-                    partial = data
+                    # Never reuse a record whose race number contradicts the URL.
+                    # It can be retried, but is not safe fallback evidence.
+                    if not warning.startswith("race number mismatch:"):
+                        partial = data
                     print(f"      [API] DEGRADED response {attempt + 1}/{attempts}: {warning}")
                     if attempt < attempts - 1:
                         time.sleep(min(attempt + 1, 3))
