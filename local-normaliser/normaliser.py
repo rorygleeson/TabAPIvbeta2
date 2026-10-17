@@ -612,6 +612,7 @@ class TabHistoricalApi:
         self.failure_cache_hits = 0
         self.discovery_calls = 0
         self.discovery_cache = {}
+        self.discovery_errors = {}
         self.degraded_races = 0
 
     @staticmethod
@@ -720,8 +721,14 @@ class TabHistoricalApi:
         cached = self.response_cache.get(url) or self.partial_response_cache.get(url) or self.discovery_cache.get(url)
         if cached is not None:
             return cached
+        if url in self.discovery_errors:
+            raise RuntimeError(self.discovery_errors[url])
         self.discovery_calls += 1
-        result = self._get(url, "race", attempts_override=1)
+        try:
+            result = self._get(url, "race", attempts_override=1)
+        except Exception as ex:
+            self.discovery_errors[url] = str(ex)
+            raise
         self.discovery_cache[url] = result
         return result
 
