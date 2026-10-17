@@ -1053,9 +1053,15 @@ def verify_ambiguous_racing_domain(date_payload, bet, api):
         and race_number in meeting_race_numbers(m)
     ]
     wanted = enrich_norm_text(bet.get("meeting"))
-    meetings = [m for m in meetings if wanted and enrich_norm_text(m.get("meetingName")) == wanted]
-    if len(meetings) > 3:
-        return None, None, "ambiguous same-name meetings; discovery limit exceeded"
+    # Prefer exact identity; abbreviations can only be proven by a unique exact
+    # runner (and runner number) across a strictly limited candidate set.
+    exact = [m for m in meetings if wanted and enrich_norm_text(m.get("meetingName")) == wanted]
+    if exact:
+        meetings = exact
+    elif wanted and len(meetings) <= 8:
+        pass  # Bounded cross-domain proof; never use runner-number-only guessing.
+    else:
+        return None, None, "no exact meeting and too many candidates for safe discovery"
     candidates = []
     race_errors = []
 
@@ -1065,7 +1071,7 @@ def verify_ambiguous_racing_domain(date_payload, bet, api):
         if not venue or not race_type:
             continue
         try:
-            race = api.probe_race(str(bet.get("eventDate")), str(venue), str(race_type), race_number)
+            race = (api.probe_race if hasattr(api, "probe_race") else api.race)(str(bet.get("eventDate")), str(venue), str(race_type), race_number)
         except Exception as ex:
             race_errors.append(f"{meeting.get('meetingName') or venue}: {str(ex)[:240]}")
             continue
@@ -1132,9 +1138,15 @@ def deep_resolve_meeting(date_payload, bet, api):
         and race_number in meeting_race_numbers(m)
     ]
     wanted = enrich_norm_text(bet.get("meeting"))
-    meetings = [m for m in meetings if wanted and enrich_norm_text(m.get("meetingName")) == wanted]
-    if len(meetings) > 3:
-        return None, None, "ambiguous same-name meetings; discovery limit exceeded"
+    # Prefer exact identity; abbreviations can only be proven by a unique exact
+    # runner (and runner number) across a strictly limited candidate set.
+    exact = [m for m in meetings if wanted and enrich_norm_text(m.get("meetingName")) == wanted]
+    if exact:
+        meetings = exact
+    elif wanted and len(meetings) <= 8:
+        pass  # Bounded cross-domain proof; never use runner-number-only guessing.
+    else:
+        return None, None, "no exact meeting and too many candidates for safe discovery"
     candidates = []
     race_errors = []
     for meeting in meetings:
@@ -1143,7 +1155,7 @@ def deep_resolve_meeting(date_payload, bet, api):
         if not venue or not race_type:
             continue
         try:
-            race = api.probe_race(str(bet.get("eventDate")), str(venue), str(race_type), race_number)
+            race = (api.probe_race if hasattr(api, "probe_race") else api.race)(str(bet.get("eventDate")), str(venue), str(race_type), race_number)
         except Exception as ex:
             race_errors.append(f"{meeting.get('meetingName') or venue}: {str(ex)[:240]}")
             continue
