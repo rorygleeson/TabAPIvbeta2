@@ -68,7 +68,8 @@ class RaceRecoveryTests(unittest.TestCase):
         self.assertIsNone(self.client()._race_response_warning(valid_fixed))
 
     def test_unplaced_zero_is_not_missing(self):
-        record = dict(DEGRADED, runners=[{"runnerNumber": 8, "finishingPosition": 0}])
+        record = dict(DEGRADED, raceStartTime="2026-09-18T07:20:00+00:00",
+                      runners=[{"runnerNumber": 8, "finishingPosition": 0}])
         self.assertIsNone(self.client()._race_response_warning(record))
 
     def test_rejects_wrong_race_number_then_recovers(self):
