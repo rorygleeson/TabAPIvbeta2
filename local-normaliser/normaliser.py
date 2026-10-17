@@ -605,6 +605,7 @@ class TabHistoricalApi:
         # This is deliberately per-run memory only; nothing is persisted to disk.
         self.response_cache = {}
         self.error_cache = {}
+        self.partial_response_cache = {}
         self.date_calls = 0
         self.race_calls = 0
         self.cache_hits = 0
@@ -616,10 +617,41 @@ class TabHistoricalApi:
         # meetings) only repeats the same request. 408/429 may be transient.
         return isinstance(ex, urllib.error.HTTPError) and 400 <= ex.code < 500 and ex.code not in (408, 429)
 
+    @staticmethod
+    def _race_response_warning(data):
+        """Identify clearly degraded historical race representations.
+
+        Do not reject a legitimate fixed-odds-only race, a dead heat, an
+        unplaced runner (position 0), or an unavailable replay on its own.
+        """
+        if not isinstance(data, dict):
+            return "race response is not a JSON object"
+        if data.get("raceNumber") is None or not isinstance(data.get("runners"), list):
+            return "race identity or runner list missing"
+        fixed_only = data.get("fixedOddsOnly") is True or (
+            isinstance(data.get("meeting"), dict)
+            and data["meeting"].get("fixedOddsOnly") is True
+        )
+        raw_start = data.get("raceStartTime")
+        placeholder = isinstance(raw_start, str) and bool(re.fullmatch(
+            r"\\d{4}-\\d{2}-\\d{2}T00:00:00(?:\\.0+)?", raw_start
+        ))
+        positions_missing = any(
+            isinstance(runner, dict) and runner.get("finishingPosition") is None
+            for runner in data["runners"]
+        )
+        if fixed_only and placeholder and positions_missing:
+            return "fixed-odds-only placeholder race with missing finishing positions"
+        return None
+
     def _get(self, url, kind):
         headers = {"Accept": "application/json", "User-Agent": "Mozilla/5.0"}
         last_error = None
-        for attempt in range(self.retries + 1):
+        partial = None
+        # Existing --retries continues to govern connection/HTTP failures.
+        # Degraded but HTTP-200 race responses receive five further attempts.
+        attempts = max(self.retries + 1, 6) if kind == "race" else self.retries + 1
+        for attempt in range(attempts):
             try:
                 if kind == "date":
                     self.date_calls += 1
@@ -628,19 +660,34 @@ class TabHistoricalApi:
                 print(f"      [API] GET {url}")
                 request = urllib.request.Request(url, headers=headers, method="GET")
                 with urllib.request.urlopen(request, timeout=self.timeout) as response:
-                    return json.loads(response.read().decode("utf-8"))
+                    data = json.loads(response.read().decode("utf-8"))
+                warning = self._race_response_warning(data) if kind == "race" else None
+                if warning:
+                    partial = data
+                    print(f"      [API] DEGRADED response {attempt + 1}/{attempts}: {warning}")
+                    if attempt < attempts - 1:
+                        time.sleep(min(attempt + 1, 3))
+                    continue
+                return data
             except Exception as ex:
                 last_error = ex
                 if self._non_retryable_http_error(ex):
                     break
-                if attempt < self.retries:
-                    time.sleep(attempt + 1)
+                if attempt < attempts - 1:
+                    time.sleep(min(attempt + 1, 3))
+        if partial is not None:
+            # Preserve source evidence for Stage 3 fallback; never call it complete.
+            print("      [API] Complete race unavailable; retaining partial source evidence")
+            return partial
         raise RuntimeError(f"TAB API request failed: {last_error}")
 
     def _cached_get(self, url, kind):
         if url in self.response_cache:
             self.cache_hits += 1
             return self.response_cache[url]
+        if url in self.partial_response_cache:
+            self.cache_hits += 1
+            return self.partial_response_cache[url]
         if url in self.error_cache:
             self.cache_hits += 1
             self.failure_cache_hits += 1
@@ -655,7 +702,10 @@ class TabHistoricalApi:
                 self.error_cache[url] = message
             raise RuntimeError(message) from ex
 
-        self.response_cache[url] = data
+        if kind == "race" and self._race_response_warning(data):
+            self.partial_response_cache[url] = data
+        else:
+            self.response_cache[url] = data
         return data
 
     def date(self, event_date):
