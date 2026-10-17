@@ -610,6 +610,8 @@ class TabHistoricalApi:
         self.race_calls = 0
         self.cache_hits = 0
         self.failure_cache_hits = 0
+        self.discovery_calls = 0
+        self.degraded_races = 0
 
     @staticmethod
     def _non_retryable_http_error(ex):
@@ -663,13 +665,13 @@ class TabHistoricalApi:
             return "resulted race lacks official results and runner positions"
         return None
 
-    def _get(self, url, kind):
+    def _get(self, url, kind, attempts_override=None):
         headers = {"Accept": "application/json", "User-Agent": "Mozilla/5.0"}
         last_error = None
         partial = None
         # Existing --retries continues to govern connection/HTTP failures.
         # Degraded but HTTP-200 race responses receive five further attempts.
-        attempts = max(self.retries + 1, 6) if kind == "race" else self.retries + 1
+        attempts = attempts_override if attempts_override is not None else (max(self.retries + 1, 6) if kind == "race" else self.retries + 1)
         errors = 0
         for attempt in range(attempts):
             try:
@@ -677,7 +679,8 @@ class TabHistoricalApi:
                     self.date_calls += 1
                 else:
                     self.race_calls += 1
-                print(f"      [API] GET {url}")
+                if attempt == 0:
+                    print(f"      [API] {'PROBE' if attempts_override == 1 else 'GET'} {url.rsplit('/', 4)[-4:] if kind == 'race' else url}")
                 request = urllib.request.Request(url, headers=headers, method="GET")
                 with urllib.request.urlopen(request, timeout=self.timeout) as response:
                     data = json.loads(response.read().decode("utf-8"))
@@ -687,7 +690,8 @@ class TabHistoricalApi:
                     # It can be retried, but is not safe fallback evidence.
                     if not warning.startswith("race number mismatch:"):
                         partial = data
-                    print(f"      [API] DEGRADED response {attempt + 1}/{attempts}: {warning}")
+                    if attempts_override != 1:
+                        print(f"      [API] Incomplete {attempt + 1}/{attempts}: {warning}")
                     if attempt < attempts - 1:
                         time.sleep(min(attempt + 1, 3))
                     continue
@@ -701,9 +705,22 @@ class TabHistoricalApi:
                     time.sleep(min(attempt + 1, 3))
         if partial is not None:
             # Preserve source evidence for Stage 3 fallback; never call it complete.
-            print("      [API] Complete race unavailable; retaining partial source evidence")
+            if attempts_override != 1:
+                self.degraded_races += 1
+                print("      [RECOVERY] Six attempts exhausted; using best partial response")
             return partial
         raise RuntimeError(f"TAB API request failed: {last_error}")
+
+    def probe_race(self, event_date, venue_mnemonic, race_type, race_number):
+        """Single-shot discovery, never six retries for an unconfirmed venue."""
+        url = (f"{self.base_url}/{urllib.parse.quote(self.jurisdiction)}/racing/"
+               f"{urllib.parse.quote(str(event_date))}/{urllib.parse.quote(str(venue_mnemonic))}/"
+               f"{urllib.parse.quote(str(race_type))}/races/{race_number}")
+        cached = self.response_cache.get(url) or self.partial_response_cache.get(url)
+        if cached is not None:
+            return cached
+        self.discovery_calls += 1
+        return self._get(url, "race", attempts_override=1)
 
     def _cached_get(self, url, kind):
         if url in self.response_cache:
@@ -911,6 +928,10 @@ def match_meeting_exact(date_payload, csv_meeting_name, race_number):
     meetings = [m for m in enrich_as_list(date_payload.get("meetings")) if isinstance(m, dict)]
     matches = [m for m in meetings if enrich_norm_text(m.get("meetingName")) == wanted]
     with_race = [m for m in matches if race_number in meeting_race_numbers(m)]
+    # A unique exact venue may have an incomplete date-level race list. Allow
+    # its race endpoint to verify the number rather than searching worldwide.
+    if not with_race and len(matches) == 1 and not meeting_race_numbers(matches[0]):
+        return matches[0], "DIRECT_EXACT_MEETING_NO_DATE_RACES"
     if len(with_race) == 1:
         reason = "DIRECT_EXACT_MEETING" if len(matches) == 1 else "DIRECT_EXACT_MEETING_PLUS_RACE"
         return with_race[0], reason
@@ -1038,7 +1059,7 @@ def verify_ambiguous_racing_domain(date_payload, bet, api):
         if not venue or not race_type:
             continue
         try:
-            race = api.race(str(bet.get("eventDate")), str(venue), str(race_type), race_number)
+            race = api.probe_race(str(bet.get("eventDate")), str(venue), str(race_type), race_number)
         except Exception as ex:
             race_errors.append(f"{meeting.get('meetingName') or venue}: {str(ex)[:240]}")
             continue
@@ -1112,7 +1133,7 @@ def deep_resolve_meeting(date_payload, bet, api):
         if not venue or not race_type:
             continue
         try:
-            race = api.race(str(bet.get("eventDate")), str(venue), str(race_type), race_number)
+            race = api.probe_race(str(bet.get("eventDate")), str(venue), str(race_type), race_number)
         except Exception as ex:
             race_errors.append(f"{meeting.get('meetingName') or venue}: {str(ex)[:240]}")
             continue
@@ -1485,7 +1506,7 @@ def resolve_meeting_and_race(bet, api, store):
         if venue and race_type:
             try:
                 race = api.race(str(event_date), str(venue), str(race_type), race_number)
-                if isinstance(race, dict):
+                if isinstance(race, dict) and enrich_to_int(race.get("raceNumber")) == race_number:
                     return meeting, race, "DIRECT", direct_reason
             except Exception as ex:
                 direct_reason = f"{direct_reason}; race lookup failed: {ex}"
@@ -1515,7 +1536,7 @@ def resolve_meeting_and_race(bet, api, store):
             venue, race_type = meeting.get("venueMnemonic"), meeting.get("raceType")
             try:
                 race = api.race(str(event_date), str(venue), str(race_type), race_number)
-                if isinstance(race, dict):
+                if isinstance(race, dict) and enrich_to_int(race.get("raceNumber")) == race_number:
                     return meeting, race, "LOCAL_LOOKUP", lookup_reason
             except Exception as ex:
                 lookup_reason = f"{lookup_reason}; mapped race lookup failed: {ex}"
@@ -1543,6 +1564,13 @@ def resolve_meeting_and_race(bet, api, store):
         except Exception as ex:
             print(f"      [LOOKUP WARNING] proven meeting was not persisted: {ex}")
             domain_reason = f"{domain_reason}; local lookup persist failed: {ex}"
+        # Discovery probes are deliberately single-shot; now apply the full
+        # six-attempt rule only to the uniquely identified race.
+        try:
+            domain_race = api.race(str(event_date), str(domain_meeting.get("venueMnemonic")),
+                                   str(domain_meeting.get("raceType")), race_number)
+        except Exception:
+            pass
         return domain_meeting, domain_race, "DOMAIN_API", domain_reason
 
     # 4. Existing expensive fallback: horse candidates only.
@@ -1558,8 +1586,14 @@ def resolve_meeting_and_race(bet, api, store):
         except Exception as ex:
             print(f"      [LOOKUP WARNING] proven meeting was not persisted: {ex}")
             deep_reason = f"{deep_reason}; local lookup persist failed: {ex}"
+        try:
+            race = api.race(str(event_date), str(meeting.get("venueMnemonic")),
+                            str(meeting.get("raceType")), race_number)
+        except Exception:
+            pass
         return meeting, race, "DEEP_API", deep_reason
 
+    print(f"      [RESOLVE] No uniquely verified meeting for {source_meeting!r} R{race_number}; keeping unresolved")
     return None, None, "UNRESOLVED", (
         f"direct={direct_reason}; localLookup={lookup_reason}; "
         f"domain={domain_reason}; deep={deep_reason}"
@@ -1767,6 +1801,8 @@ def enrich_normalised_payload(normalised, api, store):
         if enrichment_exception:
             exceptions.append(enrichment_exception)
 
+    print(f"      [API SUMMARY] {api.race_calls} race requests, {api.discovery_calls} single-shot discovery requests, "
+          f"{api.cache_hits} cache hits, {api.degraded_races} degraded races")
     payload = {
         "enrichmentSchemaVersion": "0.9-local-test",
         "normaliserSchemaVersion": normalised.get("normaliserSchemaVersion"),
