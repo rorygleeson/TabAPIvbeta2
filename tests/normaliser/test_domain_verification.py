@@ -109,6 +109,53 @@ def make_bet():
     }
 
 
+
+def test_newcastle_degraded_cache_and_quarantine():
+    """Exercise six attempts, shared race cache, partial fallback and quarantine."""
+    import json
+    import tempfile
+    from unittest.mock import patch
+
+    class Response:
+        def __init__(self, payload):
+            self.payload = payload
+        def __enter__(self): return self
+        def __exit__(self, *args): return False
+        def read(self): return json.dumps(self.payload).encode("utf-8")
+
+    meeting = {"meetingName": "NEWCASTLE", "location": "NSW",
+               "venueMnemonic": "S", "raceType": "R", "races": [{"raceNumber": 8}]}
+    date = {"meetings": [meeting]}
+    partial = {"raceNumber": 8, "raceName": "NEWCASTLE R08 18/09",
+               "raceStartTime": "2026-09-18T00:00:00", "fixedOddsOnly": True,
+               "runners": [{"runnerNumber": 5, "runnerName": "MOTOSCAFO",
+                            "finishingPosition": None}]}
+    calls = []
+    def urlopen(request, timeout=None):
+        calls.append(request.full_url)
+        return Response(date if request.full_url.endswith("/2026-09-18") else partial)
+
+    api = normaliser.TabHistoricalApi("https://test.example", "VIC", 1, 2)
+    with tempfile.TemporaryDirectory() as folder, patch.object(normaliser.urllib.request, "urlopen", urlopen), patch.object(normaliser.time, "sleep"):
+        store = normaliser.MeetingResolutionStore(normaliser.Path(folder) / "mapping.json")
+        bets = [
+            {"canonicalId": "win", "eventDate": "2026-09-18", "meeting": "NEWCASTLE",
+             "raceNumber": 8, "runnerName": "MOTOSCAFO", "betType": "WIN",
+             "pricingType": "FIXED", "stake": 40, "odds": 4,
+             "betResult": "LOSS", "domainClassification": "HORSE_CANDIDATE"},
+            {"canonicalId": "place", "eventDate": "2026-09-18", "meeting": "NEWCASTLE",
+             "raceNumber": 8, "runnerName": "MOTOSCAFO", "betType": "PLACE",
+             "pricingType": "FIXED", "stake": 10, "odds": 3,
+             "betResult": "LOSS", "domainClassification": "HORSE_CANDIDATE"},
+        ]
+        results = [normaliser.enrich_one_bet(b, api, store) for b in bets]
+        assert len(calls) == 7, (len(calls), calls)
+        assert api.discovery_calls == 0, api.discovery_calls
+        assert api.degraded_races == 1, api.degraded_races
+        assert all(item[0]["enrichment"]["status"] == "PARTIAL" for item in results)
+        assert all(item[0]["enrichment"]["finishingPosition"] is None for item in results)
+        print("OK: Newcastle mock made one date + six race calls, reused partial across bets.")
+
 def main() -> None:
     api = DummyApi()
     store = DummyStore()
@@ -140,6 +187,7 @@ def main() -> None:
     assert race is None, race
     assert method == "UNRESOLVED", method
 
+    test_newcastle_degraded_cache_and_quarantine()
     print("OK: ambiguous racing domain is proven across R/G/H; NANDO BLAST is excluded as greyhound.")
 
 
