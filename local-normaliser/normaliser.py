@@ -1756,6 +1756,10 @@ def enrich_one_bet(bet, api, store):
             }
 
         raw_position = enrich_to_int(runner.get("finishingPosition"))
+        if raw_position is None:
+            raw_position = recovery_finishing_position(race, runner)
+            if raw_position is not None:
+                print(f"      [RECOVERY] Official result position {raw_position}")
         enrichment.update({
             "runnerId": get_runner_id(runner),
             "runnerNumber": enrich_to_int(runner.get("runnerNumber")),
