@@ -672,7 +672,7 @@ class TabHistoricalApi:
         partial = None
         # Existing --retries continues to govern connection/HTTP failures.
         # Degraded but HTTP-200 race responses receive five further attempts.
-        attempts = attempts_override if attempts_override is not None else (max(self.retries + 1, 6) if kind == "race" else self.retries + 1)
+        attempts = attempts_override if attempts_override is not None else (6 if kind == "race" else self.retries + 1)
         errors = 0
         for attempt in range(attempts):
             try:
