@@ -1,6 +1,5 @@
 """Deterministic TAB race response retry and cache tests (no live API)."""
 import importlib.util
-import io
 import json
 import unittest
 from pathlib import Path
@@ -71,6 +70,35 @@ class RaceRecoveryTests(unittest.TestCase):
     def test_unplaced_zero_is_not_missing(self):
         record = dict(DEGRADED, runners=[{"runnerNumber": 8, "finishingPosition": 0}])
         self.assertIsNone(self.client()._race_response_warning(record))
+
+    def test_rejects_wrong_race_number_then_recovers(self):
+        wrong = dict(COMPLETE, raceNumber=9)
+        api = self.client()
+        with patch.object(normaliser.urllib.request, "urlopen", side_effect=[
+            FakeHTTPResponse(wrong), FakeHTTPResponse(COMPLETE),
+        ]) as request, patch.object(normaliser.time, "sleep"):
+            result = api.race("2026-09-18", "S", "R", 8)
+            self.assertEqual(result["raceNumber"], 8)
+            self.assertEqual(request.call_count, 2)
+
+    def test_fixed_only_placeholder_without_null_positions_is_degraded(self):
+        record = dict(DEGRADED, runners=[{"runnerNumber": 8, "finishingPosition": 0}])
+        self.assertIsNotNone(self.client()._race_response_warning(record))
+
+    def test_http_error_retries_still_bounded(self):
+        api = self.client()
+        with patch.object(normaliser.urllib.request, "urlopen", side_effect=TimeoutError("timeout")) as request, patch.object(normaliser.time, "sleep"):
+            with self.assertRaises(RuntimeError):
+                api.race("2026-09-18", "S", "R", 8)
+            self.assertEqual(request.call_count, 3)
+
+    def test_partial_cache_shared_across_three_bets(self):
+        api = self.client()
+        with patch.object(normaliser.urllib.request, "urlopen", return_value=FakeHTTPResponse(DEGRADED)) as request, patch.object(normaliser.time, "sleep"):
+            for _ in range(3):
+                self.assertEqual(api.race("2026-09-18", "S", "R", 8), DEGRADED)
+            self.assertEqual(request.call_count, 6)
+            self.assertEqual(api.cache_hits, 2)
 
     def test_catalogue_untouched(self):
         api = self.client()
