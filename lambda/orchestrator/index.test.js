@@ -37,6 +37,15 @@ assert.strictEqual(
   null
 );
 
+// Verify additive CORS headers on success and failure without changing response bodies.
+const corsOk = orchestrator.__test.jsonResponse(202, { jobId: 'test', status: 'RECEIVED' });
+assert.strictEqual(corsOk.headers['Access-Control-Allow-Origin'], 'https://d1dcueurs1xl4v.cloudfront.net');
+assert.strictEqual(corsOk.statusCode, 202);
+assert.deepStrictEqual(JSON.parse(corsOk.body), { jobId: 'test', status: 'RECEIVED' });
+const corsFail = orchestrator.__test.apiErrorResponse(new orchestrator.__test.ApiError(400, 'BAD', 'Bad request'), 'req');
+assert.strictEqual(corsFail.headers['Access-Control-Allow-Origin'], 'https://d1dcueurs1xl4v.cloudfront.net');
+assert.strictEqual(corsFail.statusCode, 400);
+
 const parsed = orchestrator.__test.parseCanonicalBettings(
   postEvent(JSON.stringify(baseline))
 );
