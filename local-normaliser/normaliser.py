@@ -2059,7 +2059,7 @@ def candidate_stake(bet):
 
 
 def build_candidate_kubrick_payload(enriched_payload, selected_date, first_name="Customer", timezone_name="Australia/Melbourne"):
-    bets = sorted(enriched_payload.get("bets", []), key=lambda b: b.get("sequence") or 999999)
+    bets = sorted(enriched_payload.get("bets", []), key=lambda b: (datetime.fromisoformat(b["enrichment"]["raceTime"].replace("Z", "+00:00")), b.get("sequence") or 999999))
     final_bets = []
     running = 0.0
     for sequence, bet in enumerate(bets, 1):
