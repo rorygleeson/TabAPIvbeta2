@@ -50,6 +50,42 @@ class RaceRetrievalTests(unittest.TestCase):
         self.assertEqual(result, full)
         self.assertEqual(self.api.decisions[-1]["route"], "NSW")
 
+    def test_number_only_is_not_verified(self):
+        self.assertFalse(self.api.verified({"raceNumber": 4, "runners": [{"runnerNumber": 1}]},
+                                            self.meeting, 4, "E", "R", True))
+
+    def test_matching_name_is_positive_identity(self):
+        self.assertTrue(self.api.verified({"raceNumber": 4, "meetingName": "ECHUCA"},
+                                           self.meeting, 4, "E", "R", True))
+
+    def test_missing_meeting_never_calls_legacy(self):
+        self.api.meetings_by_day["2025-11-04"] = []
+        with patch.object(v2.v1.TabHistoricalApi, "race", side_effect=AssertionError("unsafe legacy fallback")):
+            with self.assertRaisesRegex(RuntimeError, "unique date-level meeting"):
+                self.api.race("2025-11-04", "E", "R", 4)
+
+    def test_missing_race_listing_allows_unique_meeting(self):
+        self.meeting["races"] = []
+        self.assertEqual(self.api.meeting("2025-11-04", "E", "R", 4), self.meeting)
+
+    def test_jurisdiction_probe_is_bounded(self):
+        self.assertEqual(self.api.JURISDICTIONS if hasattr(self.api, "JURISDICTIONS") else (), ())
+        incomplete = {"raceNumber": 4, "meetingName": "ECHUCA",
+                      "raceStartTime": "2025-11-04T00:00:00",
+                      "runners": [{"runnerNumber": 1, "finishingPosition": None}]}
+        with patch.object(self.api, "request_once", return_value=incomplete) as req:
+            with patch.object(v2.v1.TabHistoricalApi, "race", side_effect=RuntimeError("offline")):
+                self.api.race("2025-11-04", "E", "R", 4)
+        self.assertLessEqual(req.call_count, 4)
+
+    def test_legacy_fallback_rejects_number_only_response(self):
+        bad = {"raceNumber": 4, "runners": [{"runnerNumber": 1, "finishingPosition": 1}],
+               "raceStartTime": "2025-11-04T04:30:00Z"}
+        with patch.object(self.api, "request_once", return_value=None):
+            with patch.object(v2.v1.TabHistoricalApi, "race", return_value=bad):
+                with self.assertRaisesRegex(RuntimeError, "No verified race"):
+                    self.api.race("2025-11-04", "E", "R", 4)
+
     def test_external_self_link_rejected(self):
         self.assertIsNone(self.api.safe_url("https://example.org/evil"))
         self.assertIsNone(self.api.safe_url("http://api.beta.tab.com.au/v1/historical-results-service/VIC/racing/2025-11-04"))

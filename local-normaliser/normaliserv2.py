@@ -16,7 +16,6 @@ import normaliser as v1
 
 
 class TabHistoricalApiV2(v1.TabHistoricalApi):
-    JURISDICTIONS = ("VIC", "NSW", "QLD", "SA", "WA", "TAS", "ACT", "NT")
 
     def __init__(self, base_url, jurisdiction, timeout, retries):
         super().__init__(base_url, jurisdiction, timeout, retries)
@@ -47,42 +46,53 @@ class TabHistoricalApiV2(v1.TabHistoricalApi):
         return data
 
     def meeting(self, date, venue, typ, number):
+        # Race listings are often incomplete. Identity may still be proven by
+        # unique venue + type, but an explicit list excluding the race is
+        # never treated as evidence of its existence.
         matches = [m for m in self.meetings_by_day.get(str(date), [])
                    if isinstance(m, dict) and str(m.get("venueMnemonic")) == str(venue)
-                   and v1.enrich_norm_text(m.get("raceType")) == v1.enrich_norm_text(typ)
-                   and any(v1.enrich_to_int(r.get("raceNumber")) == number
-                           for r in v1.enrich_as_list(m.get("races")) if isinstance(r, dict))]
-        return matches[0] if len(matches) == 1 else None
+                   and v1.enrich_norm_text(m.get("raceType")) == v1.enrich_norm_text(typ)]
+        if len(matches) != 1:
+            return None
+        meeting = matches[0]
+        listed = [v1.enrich_to_int(r.get("raceNumber"))
+                  for r in v1.enrich_as_list(meeting.get("races"))
+                  if isinstance(r, dict)]
+        return meeting if not listed or number in listed else None
 
     def verified(self, payload, meeting, number, venue, typ, alternative):
         if not isinstance(payload, dict) or v1.enrich_to_int(payload.get("raceNumber")) != number:
             return False
-        if payload.get("raceType") and v1.enrich_norm_text(payload["raceType"]) != v1.enrich_norm_text(typ):
-            return False
         nested = payload.get("meeting") if isinstance(payload.get("meeting"), dict) else {}
-        given_name = v1.enrich_norm_text(payload.get("meetingName") or nested.get("meetingName"))
-        wanted_name = v1.enrich_norm_text(meeting.get("meetingName"))
-        if given_name and given_name != wanted_name:
+        def norm(v):
+            return v1.enrich_norm_text(v)
+        actual_type = norm(payload.get("raceType") or nested.get("raceType"))
+        if actual_type and actual_type != norm(typ):
             return False
-        given_loc = v1.enrich_norm_text(payload.get("location") or nested.get("location"))
-        wanted_loc = v1.enrich_norm_text(meeting.get("location"))
-        if given_loc and wanted_loc and given_loc != wanted_loc:
+        name = norm(payload.get("meetingName") or nested.get("meetingName"))
+        expected = norm(meeting.get("meetingName"))
+        loc = norm(payload.get("location") or nested.get("location"))
+        expected_loc = norm(meeting.get("location"))
+        venue_actual = norm(payload.get("venueMnemonic") or nested.get("venueMnemonic"))
+        if name and name != expected:
             return False
-        given_venue = v1.enrich_norm_text(payload.get("venueMnemonic"))
-        if given_venue and given_venue not in {v1.enrich_norm_text(venue), wanted_name}:
+        if loc and expected_loc and loc != expected_loc:
             return False
-        # Cross-jurisdiction probes need independent identity evidence.
-        if alternative and not (given_name or given_loc or given_venue):
+        if venue_actual and venue_actual not in {norm(venue), expected}:
             return False
-        return True
+        # Positive identity: matching name, or matching venue PLUS another
+        # independent identifier. Race number alone is never sufficient.
+        return bool(name == expected and name or
+                    venue_actual == norm(venue) and venue_actual and
+                    (actual_type == norm(typ) or loc == expected_loc and loc))
 
     def incomplete(self, data, number):
         warning = self._race_response_warning(data, number)
         if warning:
             return warning
         start = str(data.get("raceStartTime") or "")
-        if "T00:00:00" in start and not data.get("resultedTime"):
-            return "placeholder race time without resultedTime"
+        if "T00:00:00" in start:
+            return "placeholder race start"
         runners = [r for r in v1.enrich_as_list(data.get("runners")) if isinstance(r, dict)]
         if runners and all(r.get("finishingPosition") is None for r in runners) and not data.get("results"):
             return "no official results or finishing positions"
@@ -91,13 +101,15 @@ class TabHistoricalApiV2(v1.TabHistoricalApi):
     @staticmethod
     def score(data):
         runners = [r for r in v1.enrich_as_list(data.get("runners")) if isinstance(r, dict)]
-        # Validating against an empty event date is always false; use a simple
-        # placeholder check for ranking, with V1 checking chronology later.
         start = str(data.get("raceStartTime") or "")
         timed = bool(start and "T00:00:00" not in start)
+        tote = sum(bool((r.get("parimutuel") or {}).get(k))
+                   for r in runners if isinstance(r.get("parimutuel"), dict)
+                   for k in ("returnWin", "returnPlace"))
         return (len(runners) + 3 * sum(r.get("finishingPosition") is not None for r in runners)
                 + 5 * int(timed) + 4 * int(bool(data.get("resultedTime")))
-                + 3 * int(bool(data.get("results"))) + 2 * int(bool(v1.choose_replay_url(data))))
+                + 3 * int(bool(data.get("results"))) + 2 * int(bool(v1.choose_replay_url(data)))
+                + 2 * tote)
 
     def request_once(self, url, meeting, number, venue, typ, alternative):
         try:
@@ -116,36 +128,49 @@ class TabHistoricalApiV2(v1.TabHistoricalApi):
 
     def resolve(self, event_date, venue, typ, race_number, probe=False):
         number = v1.enrich_to_int(race_number)
+        if number is None:
+            raise RuntimeError("Missing race number")
         key = (str(event_date), str(venue), str(typ), number)
         if key in self.v2_cache:
             self.cache_hits += 1
             return self.v2_cache[key]
         meeting = self.meeting(event_date, venue, typ, number)
         if meeting is None:
-            # Candidate discovery may lack unique date-level identity: preserve
-            # V1's existing proof rules instead of guessing a meeting.
-            return (super().probe_race if probe else super().race)(event_date, venue, typ, number)
-        matches = [r for r in v1.enrich_as_list(meeting.get("races"))
-                   if isinstance(r, dict) and v1.enrich_to_int(r.get("raceNumber")) == number]
-        self_url = self.safe_url(self.self_link(matches[0])) if len(matches) == 1 else None
+            # V1's URL must not be accepted without independently verifiable
+            # meeting identity. Prefer unresolved to contaminating Kubrick.
+            self.decisions.append({"race": number, "result": "NO_UNIQUE_MEETING"})
+            raise RuntimeError("Cannot verify a unique date-level meeting for this race")
+        listed = [r for r in v1.enrich_as_list(meeting.get("races"))
+                  if isinstance(r, dict) and v1.enrich_to_int(r.get("raceNumber")) == number]
+        self_url = self.safe_url(self.self_link(listed[0])) if len(listed) == 1 else None
+        # A meeting-level self link is useful only if it already names the exact
+        # requested race; never append a speculative path to a meeting URL.
+        if not self_url:
+            meeting_link = self.safe_url(self.self_link(meeting))
+            if meeting_link and meeting_link.rstrip("/").endswith(f"/races/{number}"):
+                self_url = meeting_link
         suffix = (f"/racing/{urllib.parse.quote(str(event_date))}/"
                   f"{urllib.parse.quote(str(venue))}/{urllib.parse.quote(str(typ))}/races/{number}")
         routes = ([("SELF_LINK", self_url)] if self_url else [])
-        for jur in (self.jurisdiction,) + tuple(j for j in self.JURISDICTIONS if j != self.jurisdiction):
+        preferred = (self.jurisdiction, "NSW", "QLD")
+        for jur in preferred:
             url = f"{self.base_url}/{jur}{suffix}"
             if url not in [u for _, u in routes]:
                 routes.append((jur, url))
+        # No blanket search of all states. Other jurisdictions are for a later
+        # evidence-backed iteration, never a first-line discovery mechanism.
         best = None
         best_score = -1
+        best_label = None
         for label, url in routes:
             data = self.request_once(url, meeting, number, venue, typ,
-                                     alternative=(label not in ("SELF_LINK", self.jurisdiction)))
+                                     alternative=(label != "SELF_LINK"))
             if data is None:
                 continue
             value = self.score(data)
+            warning = self.incomplete(data, number)
             if value > best_score:
                 best, best_score, best_label = data, value, label
-            warning = self.incomplete(data, number)
             self.decisions.append({"meeting": meeting.get("meetingName"), "race": number,
                                    "route": label, "result": "COMPLETE" if not warning else "PARTIAL",
                                    "warning": warning, "score": value})
@@ -156,14 +181,17 @@ class TabHistoricalApiV2(v1.TabHistoricalApi):
             if probe:
                 break
         if not probe:
-            # Keep existing six-attempt V1 recovery if alternative probes remain incomplete.
+            # V1 recovery remains available but its output is NOT exempt
+            # from V2 positive meeting identity checks.
             try:
                 old = super().race(event_date, venue, typ, number)
-                if self.verified(old, meeting, number, venue, typ, alternative=False):
-                    if best is None or self.score(old) > best_score:
-                        best, best_label = old, "V1_RETRY"
-            except Exception:
-                pass
+                if self.verified(old, meeting, number, venue, typ, alternative=True):
+                    score = self.score(old)
+                    if best is None or score > best_score:
+                        best, best_score, best_label = old, score, "V1_RETRY"
+            except Exception as ex:
+                self.decisions.append({"race": number, "route": "V1_RETRY",
+                                       "result": "FAILED", "error": str(ex)[:150]})
         if best is not None:
             self.decisions.append({"meeting": meeting.get("meetingName"), "race": number,
                                    "route": best_label, "result": "BEST_VERIFIED_PARTIAL"})
@@ -226,7 +254,9 @@ def main():
             no_kubrick=args.no_kubrick)
         return 0 if ok else 2
     finally:
-        diagnostics = isolated_root / "v2-api-diagnostics.json"
+        # Preserve diagnostics per job/run rather than replacing previous evidence.
+        from datetime import datetime
+        diagnostics = isolated_root / "working" / ("v2-api-diagnostics-" + datetime.now().strftime("%Y%m%d-%H%M%S-%f") + ".json")
         v1.write_json(diagnostics, {"requests": api.decisions,
                                     "raceRequests": api.race_calls,
                                     "cacheHits": api.cache_hits})
