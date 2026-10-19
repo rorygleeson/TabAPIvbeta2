@@ -68,6 +68,33 @@ class RaceRetrievalTests(unittest.TestCase):
         self.meeting["races"] = []
         self.assertEqual(self.api.meeting("2025-11-04", "E", "R", 4), self.meeting)
 
+    def test_unique_meeting_with_incomplete_race_list_is_probed(self):
+        # Matches the V1 fast path when TAB's date race list omits a race.
+        for name, venue, number in (("LOS ALAMITOS", "E", 4),
+                                     ("GOLD COAST", "L", 2),
+                                     ("CARNARVON", "J", 1),
+                                     ("KEMBLA GRANGE", "P", 7)):
+            with self.subTest(name=name):
+                meeting = {"meetingName": name, "venueMnemonic": venue, "raceType": "R",
+                           "location": "NSW", "races": [{"raceNumber": 99}]}
+                self.api.meetings_by_day["2025-11-04"] = [meeting]
+                self.assertIs(self.api.meeting("2025-11-04", venue, "R", number), meeting)
+                response = {"raceNumber": number, "meetingName": name, "raceType": "R",
+                            "raceStartTime": "2025-11-04T04:30:00Z",
+                            "resultedTime": "2025-11-04T04:45:00Z",
+                            "runners": [{"runnerNumber": 1, "finishingPosition": 1}]}
+                with patch.object(self.api, "request_once", return_value=response) as request:
+                    self.assertEqual(self.api.race("2025-11-04", venue, "R", number), response)
+                    self.assertIn("/races/" + str(number), request.call_args.args[0])
+
+    def test_incomplete_listing_does_not_accept_wrong_meeting(self):
+        self.meeting["races"] = [{"raceNumber": 99}]
+        wrong = {"raceNumber": 4, "meetingName": "OTHER TRACK", "raceType": "R"}
+        with patch.object(self.api, "request_once", return_value=None):
+            with self.assertRaisesRegex(RuntimeError, "No verified race"):
+                self.api.race("2025-11-04", "E", "R", 4)
+        self.assertFalse(self.api.verified(wrong, self.meeting, 4, "E", "R", True))
+
     def test_jurisdiction_probe_is_bounded(self):
         self.assertEqual(self.api.JURISDICTIONS if hasattr(self.api, "JURISDICTIONS") else (), ())
         incomplete = {"raceNumber": 4, "meetingName": "ECHUCA",

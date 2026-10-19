@@ -77,19 +77,16 @@ class TabHistoricalApiV2(v1.TabHistoricalApi):
         return data
 
     def meeting(self, date, venue, typ, number):
-        # Race listings are often incomplete. Identity may still be proven by
-        # unique venue + type, but an explicit list excluding the race is
-        # never treated as evidence of its existence.
+        # Mirror V1's unique-meeting behaviour: TAB day-level race lists can
+        # be incomplete even when the meeting is unambiguous. A missing race
+        # number blocks self-link lookup, NOT verified race endpoint probing.
+        # The endpoint response must still pass V2's identity checks.
         matches = [m for m in self.meetings_by_day.get(str(date), [])
                    if isinstance(m, dict) and str(m.get("venueMnemonic")) == str(venue)
                    and v1.enrich_norm_text(m.get("raceType")) == v1.enrich_norm_text(typ)]
         if len(matches) != 1:
             return None
-        meeting = matches[0]
-        listed = [v1.enrich_to_int(r.get("raceNumber"))
-                  for r in v1.enrich_as_list(meeting.get("races"))
-                  if isinstance(r, dict)]
-        return meeting if not listed or number in listed else None
+        return matches[0]
 
     def verified(self, payload, meeting, number, venue, typ, alternative):
         if not isinstance(payload, dict) or v1.enrich_to_int(payload.get("raceNumber")) != number:
@@ -197,6 +194,9 @@ class TabHistoricalApiV2(v1.TabHistoricalApi):
         suffix = (f"/racing/{urllib.parse.quote(str(event_date))}/"
                   f"{urllib.parse.quote(str(venue))}/{urllib.parse.quote(str(typ))}/races/{number}")
         routes = ([("SELF_LINK", self_url)] if self_url else [])
+        if not self_url:
+            self.decisions.append({"meeting": meeting.get("meetingName"), "race": number,
+                                   "result": "RACE_NOT_LISTED_TRY_VERIFIED_URL"})
         preferred = (self.jurisdiction, "NSW", "QLD")
         for jur in preferred:
             url = f"{self.base_url}/{jur}{suffix}"
