@@ -86,6 +86,37 @@ class RaceRetrievalTests(unittest.TestCase):
                 with self.assertRaisesRegex(RuntimeError, "No verified race"):
                     self.api.race("2025-11-04", "E", "R", 4)
 
+    def test_self_link_race_coordinates_checked(self):
+        correct = self.meeting["races"][0]["_links"]["self"]["href"]
+        self.assertEqual(self.api.race_self_url(correct, "2025-11-04", "E", "R", 4), correct)
+        self.assertIsNone(self.api.race_self_url(correct.replace("/races/4", "/races/5"), "2025-11-04", "E", "R", 4))
+        self.assertIsNone(self.api.race_self_url(correct.replace("/VIC/racing/", "/VIC/other/"), "2025-11-04", "E", "R", 4))
+
+    def test_probe_continues_after_partial_self_link(self):
+        partial = {"raceNumber": 4, "meetingName": "ECHUCA", "raceStartTime": "2025-11-04T00:00:00",
+                   "runners": [{"runnerNumber": 1, "finishingPosition": None}]}
+        full = {"raceNumber": 4, "meetingName": "ECHUCA", "raceStartTime": "2025-11-04T04:00:00Z",
+                "resultedTime": "2025-11-04T04:10:00Z", "runners": [{"runnerNumber": 1, "finishingPosition": 1}]}
+        with patch.object(self.api, "request_once", side_effect=lambda url, *_a, **_k: full if "/NSW/" in url else partial):
+            self.assertEqual(self.api.probe_race("2025-11-04", "E", "R", 4), full)
+
+    def test_bet_specific_dividend_changes_completeness(self):
+        race = {"raceNumber": 4, "meetingName": "ECHUCA", "raceStartTime": "2025-11-04T04:00:00Z",
+                "resultedTime": "2025-11-04T04:10:00Z",
+                "runners": [{"runnerNumber": 1, "finishingPosition": 1}]}
+        self.assertIsNone(self.api.incomplete(race, 4))
+        self.assertEqual(self.api.incomplete(race, 4, {"dividends": {(1, "returnWin")}}),
+                         "required tote dividend missing")
+
+    def test_duplicate_url_attempt_reused(self):
+        race = {"raceNumber": 4, "meetingName": "ECHUCA"}
+        with patch("urllib.request.urlopen") as get:
+            get.return_value.__enter__.return_value.read.return_value = __import__("json").dumps(race).encode()
+            url = self.meeting["races"][0]["_links"]["self"]["href"]
+            self.assertEqual(self.api.request_once(url, self.meeting, 4, "E", "R", False), race)
+            self.assertEqual(self.api.request_once(url, self.meeting, 4, "E", "R", False), race)
+            self.assertEqual(get.call_count, 1)
+
     def test_external_self_link_rejected(self):
         self.assertIsNone(self.api.safe_url("https://example.org/evil"))
         self.assertIsNone(self.api.safe_url("http://api.beta.tab.com.au/v1/historical-results-service/VIC/racing/2025-11-04"))
