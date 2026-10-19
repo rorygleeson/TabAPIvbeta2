@@ -2060,6 +2060,20 @@ def candidate_stake(bet):
 
 def build_candidate_kubrick_payload(enriched_payload, selected_date, first_name="Customer", timezone_name="Australia/Melbourne"):
     bets = sorted(enriched_payload.get("bets", []), key=lambda b: b.get("sequence") or 999999)
+    # Transaction validation also calls this builder before invalid race times are quarantined.
+    # Only sort a fully time-enriched set; let existing validation reject incomplete sets.
+    race_times = []
+    for bet in bets:
+        try:
+            value = bet.get("enrichment", {}).get("raceTime")
+            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+            if parsed.tzinfo is None:
+                break
+            race_times.append(parsed.astimezone(timezone.utc))
+        except (AttributeError, TypeError, ValueError):
+            break
+    if len(race_times) == len(bets):
+        bets = [bet for _, bet in sorted(zip(race_times, bets), key=lambda item: item[0])]
     final_bets = []
     running = 0.0
     for sequence, bet in enumerate(bets, 1):
