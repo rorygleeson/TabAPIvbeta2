@@ -296,6 +296,26 @@ def main():
     if not lookup_path.is_absolute():
         lookup_path = isolated_root / lookup_path
     store = v1.MeetingResolutionStore(lookup_path)
+    # Pre-index requirements from this same CSV before API selection. This
+    # only reads local CSV data; source processing and contract logic remain V1.
+    try:
+        selected_day = selection["selectedDate"]
+        raw, _, _ = v1.normalise_csv(selection["sourceCsvPath"], "v2-requirements")
+        selected_bets = v1.filter_normalised_to_day(raw, selected_day).get("bets", [])
+        by_date = {str(b.get("eventDate")) for b in selected_bets if b.get("eventDate")}
+        for day in sorted(by_date):
+            api.date(day)
+        for bet in selected_bets:
+            day = str(bet.get("eventDate"))
+            num = v1.enrich_to_int(bet.get("raceNumber"))
+            if num is None:
+                continue
+            meeting, _ = v1.match_meeting_exact(
+                {"meetings": api.meetings_by_day.get(day, [])}, bet.get("meeting"), num)
+            if meeting is not None:
+                api.require_bet(bet, meeting)
+    except Exception as ex:
+        print(f"[V2] Requirement pre-index unavailable: {ex}")
     try:
         ok = v1.process_selected_day(
             selection["sourceCsvPath"], selection["selectedDate"], isolated_root,
