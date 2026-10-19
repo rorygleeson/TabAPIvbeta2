@@ -37,6 +37,16 @@ assert.strictEqual(
   null
 );
 
+// Response headers are additive; status codes and bodies remain unchanged.
+const corsResponse = orchestrator.__test.jsonResponse(202, { jobId: 'test', status: 'RECEIVED' });
+assert.strictEqual(corsResponse.headers['Access-Control-Allow-Origin'], 'https://d1dcueurs1xl4v.cloudfront.net');
+assert.strictEqual(corsResponse.headers['Content-Type'], 'application/json');
+assert.strictEqual(corsResponse.statusCode, 202);
+assert.deepStrictEqual(JSON.parse(corsResponse.body), { jobId: 'test', status: 'RECEIVED' });
+const corsError = orchestrator.__test.apiErrorResponse(new orchestrator.__test.ApiError(400, 'BAD', 'Bad request'), 'req-1');
+assert.strictEqual(corsError.headers['Access-Control-Allow-Origin'], 'https://d1dcueurs1xl4v.cloudfront.net');
+assert.strictEqual(corsError.statusCode, 400);
+
 const parsed = orchestrator.__test.parseCanonicalBettings(
   postEvent(JSON.stringify(baseline))
 );
