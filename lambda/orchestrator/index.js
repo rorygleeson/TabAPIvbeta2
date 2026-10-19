@@ -50,7 +50,9 @@ function jsonResponse(statusCode, body) {
     statusCode,
     headers: {
       'Content-Type': 'application/json',
-      'Cache-Control': 'no-store'
+      'Cache-Control': 'no-store',
+      'Access-Control-Allow-Origin': 'https://d1dcueurs1xl4v.cloudfront.net',
+      'Vary': 'Origin'
     },
     body: JSON.stringify(body)
   };
