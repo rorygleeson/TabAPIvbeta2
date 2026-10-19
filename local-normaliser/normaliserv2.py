@@ -76,10 +76,21 @@ class TabHistoricalApiV2(v1.TabHistoricalApi):
             return False
         return True
 
+    def incomplete(self, data, number):
+        warning = self._race_response_warning(data, number)
+        if warning:
+            return warning
+        start = str(data.get("raceStartTime") or "")
+        if "T00:00:00" in start and not data.get("resultedTime"):
+            return "placeholder race time without resultedTime"
+        runners = [r for r in v1.enrich_as_list(data.get("runners")) if isinstance(r, dict)]
+        if runners and all(r.get("finishingPosition") is None for r in runners) and not data.get("results"):
+            return "no official results or finishing positions"
+        return None
+
     @staticmethod
     def score(data):
         runners = [r for r in v1.enrich_as_list(data.get("runners")) if isinstance(r, dict)]
-        valid_start = bool(v1.valid_scheduled_race_time(data.get("raceStartTime"), ""))
         # Validating against an empty event date is always false; use a simple
         # placeholder check for ranking, with V1 checking chronology later.
         start = str(data.get("raceStartTime") or "")
@@ -134,7 +145,7 @@ class TabHistoricalApiV2(v1.TabHistoricalApi):
             value = self.score(data)
             if value > best_score:
                 best, best_score, best_label = data, value, label
-            warning = self._race_response_warning(data, number)
+            warning = self.incomplete(data, number)
             self.decisions.append({"meeting": meeting.get("meetingName"), "race": number,
                                    "route": label, "result": "COMPLETE" if not warning else "PARTIAL",
                                    "warning": warning, "score": value})
