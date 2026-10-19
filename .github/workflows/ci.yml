@@ -65,6 +65,9 @@ jobs:
       - name: Run builder independent planner-invariant regression tests
         run: node lambda/builder-recap/builder-plan-guard.test.js
 
+      - name: Verify V2 normaliser routing offline
+        run: python3 -m unittest discover -s local-normaliser -p 'test_normaliserv2.py' -v
+
       - name: Validate JSON files
         run: |
           node <<'NODE'
