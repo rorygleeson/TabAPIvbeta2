@@ -22,6 +22,8 @@ class TabHistoricalApiV2(v1.TabHistoricalApi):
         self.meetings_by_day = {}
         self.decisions = []
         self.v2_cache = {}
+        self.url_attempts = {}
+        self.active_requirements = {}
 
     @staticmethod
     def self_link(record):
@@ -39,6 +41,35 @@ class TabHistoricalApiV2(v1.TabHistoricalApi):
                 or not got.path.startswith(expected.path.rstrip("/") + "/")):
             return None
         return url
+
+    def race_self_url(self, href, date, venue, typ, number):
+        url = self.safe_url(href)
+        if not url:
+            return None
+        parts = urllib.parse.urlsplit(url).path.rstrip("/").split("/")
+        # The canonical TAB historical race path must identify this exact race.
+        if len(parts) < 7 or parts[-6] != "racing":
+            return None
+        if (parts[-5] != str(date) or parts[-4] != str(venue)
+                or parts[-3] != str(typ) or parts[-2] != "races"
+                or parts[-1] != str(number)):
+            return None
+        return url
+
+    def require_bet(self, bet, meeting):
+        """Capture specific runner/dividend requirements for this race."""
+        number = v1.enrich_to_int(bet.get("raceNumber"))
+        key = (str(bet.get("eventDate")), str(meeting.get("venueMnemonic")),
+               str(meeting.get("raceType")), number)
+        entry = self.active_requirements.setdefault(key, {"runners": set(), "dividends": set()})
+        runner = v1.enrich_to_int(bet.get("runnerNumber"))
+        if runner is not None:
+            entry["runners"].add(runner)
+            if bet.get("pricingType") == "TOTE":
+                if bet.get("betType") in ("WIN", "TOTE_WIN_PLACE"):
+                    entry["dividends"].add((runner, "returnWin"))
+                if bet.get("betType") in ("PLACE", "TOTE_WIN_PLACE"):
+                    entry["dividends"].add((runner, "returnPlace"))
 
     def date(self, event_date):
         data = super().date(event_date)
@@ -86,7 +117,7 @@ class TabHistoricalApiV2(v1.TabHistoricalApi):
                     venue_actual == norm(venue) and venue_actual and
                     (actual_type == norm(typ) or loc == expected_loc and loc))
 
-    def incomplete(self, data, number):
+    def incomplete(self, data, number, requirements=None):
         warning = self._race_response_warning(data, number)
         if warning:
             return warning
@@ -96,6 +127,15 @@ class TabHistoricalApiV2(v1.TabHistoricalApi):
         runners = [r for r in v1.enrich_as_list(data.get("runners")) if isinstance(r, dict)]
         if runners and all(r.get("finishingPosition") is None for r in runners) and not data.get("results"):
             return "no official results or finishing positions"
+        requirements = requirements or {}
+        indexed = {v1.enrich_to_int(r.get("runnerNumber")): r for r in runners}
+        for runner in requirements.get("runners", ()):
+            if runner not in indexed:
+                return "required runner missing"
+        for runner, dividend in requirements.get("dividends", ()):
+            payout = (indexed.get(runner, {}).get("parimutuel") or {}).get(dividend)
+            if v1.enrich_to_decimal(payout) is None:
+                return "required tote dividend missing"
         return None
 
     @staticmethod
@@ -112,6 +152,10 @@ class TabHistoricalApiV2(v1.TabHistoricalApi):
                 + 2 * tote)
 
     def request_once(self, url, meeting, number, venue, typ, alternative):
+        if url in self.url_attempts:
+            self.cache_hits += 1
+            self.decisions.append({"url": url, "result": "ATTEMPT_REUSED"})
+            return self.url_attempts[url]
         try:
             self.race_calls += 1
             request = __import__("urllib.request", fromlist=["Request"]).Request(
@@ -120,10 +164,13 @@ class TabHistoricalApiV2(v1.TabHistoricalApi):
                 data = json.loads(response.read().decode("utf-8"))
             if not self.verified(data, meeting, number, venue, typ, alternative):
                 self.decisions.append({"url": url, "result": "IDENTITY_REJECTED"})
+                self.url_attempts[url] = None
                 return None
+            self.url_attempts[url] = data
             return data
         except Exception as ex:
             self.decisions.append({"url": url, "result": "FAILED", "error": str(ex)[:150]})
+            self.url_attempts[url] = None
             return None
 
     def resolve(self, event_date, venue, typ, race_number, probe=False):
@@ -142,13 +189,11 @@ class TabHistoricalApiV2(v1.TabHistoricalApi):
             raise RuntimeError("Cannot verify a unique date-level meeting for this race")
         listed = [r for r in v1.enrich_as_list(meeting.get("races"))
                   if isinstance(r, dict) and v1.enrich_to_int(r.get("raceNumber")) == number]
-        self_url = self.safe_url(self.self_link(listed[0])) if len(listed) == 1 else None
+        self_url = self.race_self_url(self.self_link(listed[0]), event_date, venue, typ, number) if len(listed) == 1 else None
         # A meeting-level self link is useful only if it already names the exact
         # requested race; never append a speculative path to a meeting URL.
         if not self_url:
-            meeting_link = self.safe_url(self.self_link(meeting))
-            if meeting_link and meeting_link.rstrip("/").endswith(f"/races/{number}"):
-                self_url = meeting_link
+            self_url = self.race_self_url(self.self_link(meeting), event_date, venue, typ, number)
         suffix = (f"/racing/{urllib.parse.quote(str(event_date))}/"
                   f"{urllib.parse.quote(str(venue))}/{urllib.parse.quote(str(typ))}/races/{number}")
         routes = ([("SELF_LINK", self_url)] if self_url else [])
@@ -162,15 +207,17 @@ class TabHistoricalApiV2(v1.TabHistoricalApi):
         best = None
         best_score = -1
         best_label = None
+        requirements = self.active_requirements.get(key, {})
         for label, url in routes:
             data = self.request_once(url, meeting, number, venue, typ,
                                      alternative=(label != "SELF_LINK"))
             if data is None:
                 continue
             value = self.score(data)
-            warning = self.incomplete(data, number)
-            if value > best_score:
-                best, best_score, best_label = data, value, label
+            warning = self.incomplete(data, number, requirements)
+            ranking = (not bool(warning), value)
+            if best is None or ranking > best_score:
+                best, best_score, best_label = data, ranking, label
             self.decisions.append({"meeting": meeting.get("meetingName"), "race": number,
                                    "route": label, "result": "COMPLETE" if not warning else "PARTIAL",
                                    "warning": warning, "score": value})
@@ -178,20 +225,23 @@ class TabHistoricalApiV2(v1.TabHistoricalApi):
                 print(f"      [V2] {meeting.get('meetingName')} R{number}: {label} verified complete")
                 self.v2_cache[key] = data
                 return data
-            if probe:
-                break
+            # Probe each distinct approved route once; no six-attempt recovery.
         if not probe:
             # V1 recovery remains available but its output is NOT exempt
             # from V2 positive meeting identity checks.
-            try:
-                old = super().race(event_date, venue, typ, number)
-                if self.verified(old, meeting, number, venue, typ, alternative=True):
-                    score = self.score(old)
-                    if best is None or score > best_score:
-                        best, best_score, best_label = old, score, "V1_RETRY"
-            except Exception as ex:
-                self.decisions.append({"race": number, "route": "V1_RETRY",
-                                       "result": "FAILED", "error": str(ex)[:150]})
+            # Legacy retries only when the V1 URL has not already been probed.
+            legacy_url = f"{self.base_url}/{self.jurisdiction}{suffix}"
+            if legacy_url not in self.url_attempts:
+                try:
+                    old = super().race(event_date, venue, typ, number)
+                    if self.verified(old, meeting, number, venue, typ, alternative=True):
+                        warning = self.incomplete(old, number, requirements)
+                        ranking = (not bool(warning), self.score(old))
+                        if best is None or ranking > best_score:
+                            best, best_score, best_label = old, ranking, "V1_RETRY"
+                except Exception as ex:
+                    self.decisions.append({"race": number, "route": "V1_RETRY",
+                                           "result": "FAILED", "error": str(ex)[:150]})
         if best is not None:
             self.decisions.append({"meeting": meeting.get("meetingName"), "race": number,
                                    "route": best_label, "result": "BEST_VERIFIED_PARTIAL"})
