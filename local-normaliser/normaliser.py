@@ -2821,6 +2821,7 @@ def process_selected_day(
     kubrick_api_url,
     kubrick_api_key,
     kubrick_poll_interval,
+    no_kubrick=False,
 ):
     jid = job_id(path)
     job_dir = root / "working" / jid
@@ -2980,6 +2981,11 @@ def process_selected_day(
         if quarantined:
             print(f"Quarantine evidence: {quarantine_path}")
 
+        if no_kubrick:
+            print("\n[NO-KUBRICK] Validated bettings.json saved; Kubrick submission skipped.")
+            print(f"[NO-KUBRICK] Payload: {candidate_path}")
+            return True
+
         stage = "KUBRICK_POST"
         if not kubrick_api_key:
             print("\n============================================================")
@@ -3051,6 +3057,7 @@ def main():
     parser.add_argument("--timeout", type=int, default=ENRICH_TIMEOUT)
     parser.add_argument("--retries", type=int, default=ENRICH_RETRIES)
     parser.add_argument("--lookup-file", default="meeting-resolution.json")
+    parser.add_argument("--no-kubrick", action="store_true", help="Build and validate bettings.json without submitting to Kubrick")
     parser.add_argument("--first-name", default="Customer")
     parser.add_argument("--timezone", default="Australia/Melbourne")
     parser.add_argument("--kubrick-api-url", default=DEFAULT_KUBRICK_API_URL)
@@ -3124,6 +3131,7 @@ def main():
         args.kubrick_api_url,
         os.environ.get("TAB_RECAP_API_KEY", "").strip(),
         args.kubrick_poll_interval,
+        no_kubrick=args.no_kubrick,
     )
     return 0 if ok else 2
 
