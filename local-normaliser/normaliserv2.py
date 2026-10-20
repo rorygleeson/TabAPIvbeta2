@@ -116,7 +116,7 @@ class TabHistoricalApiV2(v1.TabHistoricalApi):
             "WA": "WESTERN AUSTRALIA", "TAS": "TASMANIA",
             "NT": "NORTHERN TERRITORY", "ACT": "AUSTRALIAN CAPITAL TERRITORY",
         }
-        return states.get(raw, raw)
+        return v1.enrich_norm_text(states.get(raw, raw))
 
     def verified(self, payload, meeting, number, venue, typ, alternative):
         if not isinstance(payload, dict) or v1.enrich_to_int(payload.get("raceNumber")) != number:
