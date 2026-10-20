@@ -30,6 +30,32 @@ class RaceRetrievalTests(unittest.TestCase):
             self.assertEqual(result, race)
             self.assertEqual(req.call_args.args[0], self.meeting["races"][0]["_links"]["self"]["href"])
 
+    def test_australian_state_names_match_codes_without_weakening_identity(self):
+        cases = [
+            ("CAULFIELD", "VIC", "Victoria", "M", 2),
+            ("CAULFIELD", "VIC", "Victoria", "M", 7),
+            ("BROOME", "WA", "Western Australia", "J", 7),
+            ("RANDWICK", "NSW", "New South Wales", "R", 1),
+            ("EAGLE FARM", "QLD", "Queensland", "E", 1),
+            ("MORPHETTVILLE", "SA", "South Australia", "S", 1),
+            ("LAUNCESTON", "TAS", "Tasmania", "L", 1),
+            ("ALICE SPRINGS", "NT", "Northern Territory", "A", 1),
+            ("CANBERRA", "ACT", "Australian Capital Territory", "C", 1),
+        ]
+        for name, code, long_name, venue, race_number in cases:
+            with self.subTest(meeting=name, code=code):
+                meeting = {"meetingName": name, "location": code,
+                           "venueMnemonic": venue, "raceType": "R"}
+                actual = {"raceNumber": race_number,
+                          "meeting": {"meetingName": name.title(), "location": long_name,
+                                      "venueMnemonic": venue, "raceType": "R"}}
+                self.assertTrue(self.api.verified(actual, meeting, race_number, venue, "R", True))
+                actual["meeting"]["location"] = "Western Australia" if code != "WA" else "Victoria"
+                self.assertFalse(self.api.verified(actual, meeting, race_number, venue, "R", True))
+                actual["meeting"]["location"] = long_name
+                actual["meeting"]["meetingName"] = "OTHER MEETING"
+                self.assertFalse(self.api.verified(actual, meeting, race_number, venue, "R", True))
+
     def test_wrong_meeting_rejected_even_for_http_200(self):
         wrong = {"raceNumber": 4, "meetingName": "WAGGA", "venueMnemonic": "W",
                  "raceType": "R", "runners": [{"runnerNumber": 1}]}
