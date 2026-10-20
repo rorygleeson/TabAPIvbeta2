@@ -51,9 +51,12 @@ class TabHistoricalApiV2(v1.TabHistoricalApi):
         # The canonical TAB historical race path must identify this exact race.
         if len(parts) < 7 or parts[-6] != "racing":
             return None
+        # TAB's sellCode.scheduledType is the URL routing code and can
+        # differ from meeting.raceType (Los Alamitos: R vs G).
         if (parts[-5] != str(date) or parts[-4] != str(venue)
-                or parts[-3] != str(typ) or parts[-2] != "races"
-                or parts[-1] != str(number)):
+                or parts[-2] != "races" or parts[-1] != str(number)):
+            return None
+        if not parts[-3] or parts[-3] in (".", ".."):
             return None
         return url
 
@@ -175,7 +178,13 @@ class TabHistoricalApiV2(v1.TabHistoricalApi):
             with __import__("urllib.request", fromlist=["urlopen"]).urlopen(request, timeout=self.timeout) as response:
                 data = json.loads(response.read().decode("utf-8"))
             if not self.verified(data, meeting, number, venue, typ, alternative):
-                self.decisions.append({"url": url, "result": "IDENTITY_REJECTED"})
+                actual = data.get("meeting") if isinstance(data.get("meeting"), dict) else data
+                self.decisions.append({"url": url, "result": "IDENTITY_REJECTED",
+                                       "expectedMeeting": meeting.get("meetingName"),
+                                       "returnedMeeting": actual.get("meetingName"),
+                                       "returnedLocation": actual.get("location"),
+                                       "returnedRaceType": actual.get("raceType"),
+                                       "returnedRaceNumber": data.get("raceNumber")})
                 self.url_attempts[url] = None
                 return None
             self.url_attempts[url] = data
@@ -202,6 +211,9 @@ class TabHistoricalApiV2(v1.TabHistoricalApi):
         listed = [r for r in v1.enrich_as_list(meeting.get("races"))
                   if isinstance(r, dict) and v1.enrich_to_int(r.get("raceNumber")) == number]
         self_url = self.race_self_url(self.self_link(listed[0]), event_date, venue, typ, number) if len(listed) == 1 else None
+        if len(listed) == 1 and not self_url and self.self_link(listed[0]):
+            self.decisions.append({"meeting": meeting.get("meetingName"), "race": number,
+                                   "result": "SELF_LINK_REJECTED", "url": self.self_link(listed[0])})
         # A meeting-level self link is useful only if it already names the exact
         # requested race; never append a speculative path to a meeting URL.
         if not self_url:
@@ -234,7 +246,11 @@ class TabHistoricalApiV2(v1.TabHistoricalApi):
             if best is None or ranking > best_score:
                 best, best_score, best_label = data, ranking, label
             self.decisions.append({"meeting": meeting.get("meetingName"), "race": number,
-                                   "route": label, "result": "COMPLETE" if not warning else "PARTIAL",
+                                   "route": label, "url": url,
+                                   "routingCode": urllib.parse.urlsplit(url).path.split("/")[-3],
+                                   "returnedMeeting": (data.get("meeting") or {}).get("meetingName")
+                                   if isinstance(data.get("meeting"), dict) else data.get("meetingName"),
+                                   "result": "COMPLETE" if not warning else "PARTIAL",
                                    "warning": warning, "score": value})
             if not warning:
                 print(f"      [V2] {meeting.get('meetingName')} R{number}: {label} verified complete")
