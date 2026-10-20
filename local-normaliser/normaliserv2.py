@@ -63,7 +63,9 @@ class TabHistoricalApiV2(v1.TabHistoricalApi):
         key = (str(bet.get("eventDate")), str(meeting.get("venueMnemonic")),
                str(meeting.get("raceType")), number)
         entry = self.active_requirements.setdefault(key, {"runners": set(), "dividends": set()})
-        # Reuse the meeting already selected by V1\u2019s exact resolver. A date\n        # can contain two meetings with the same venue mnemonic; only the\n        # CSV-to-meeting match disambiguates them reliably.\n        self.resolved_meetings[key] = meeting
+        # Reuse the meeting already selected by V1's exact resolver. A day
+        # can have multiple meetings sharing a venue mnemonic.
+        self.resolved_meetings[key] = meeting
         runner = v1.enrich_to_int(bet.get("runnerNumber"))
         if runner is not None:
             entry["runners"].add(runner)
