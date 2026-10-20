@@ -173,6 +173,42 @@ class RaceRetrievalTests(unittest.TestCase):
             self.assertEqual(self.api.request_once(url, self.meeting, 4, "E", "R", False), race)
             self.assertEqual(get.call_count, 1)
 
+    def test_authoritative_scheduled_type_differs_from_race_type(self):
+        # Real TAB 2026-09-12 Los Alamitos: raceType=R, scheduledType=G.
+        date, venue, typ, number = "2026-09-12", "E", "R", 4
+        good_url = ("https://api.beta.tab.com.au/v1/historical-results-service/"
+                    "VIC/racing/2026-09-12/E/G/races/4")
+        meeting = {"meetingName": "LOS ALAMITOS", "location": "USA",
+                   "venueMnemonic": "E", "raceType": "R",
+                   "sellCode": {"scheduledType": "G"},
+                   "races": [{"raceNumber": 4, "_links": {"self": good_url}}]}
+        self.api.meetings_by_day[date] = [meeting]
+        self.assertEqual(self.api.race_self_url(good_url, date, venue, typ, number), good_url)
+        self.assertIsNone(self.api.race_self_url(good_url, date, venue, typ, 5))
+        self.assertIsNone(self.api.race_self_url(good_url, date, "X", typ, number))
+        good = {"raceNumber": 4, "raceName": "LOS ALAMITOS CLAIMING",
+                "meeting": {"meetingDate": date, "meetingName": "LOS ALAMITOS",
+                            "location": "USA", "raceType": "R", "venueMnemonic": "E"},
+                "raceStartTime": "2026-09-11T21:43:00+00:00",
+                "resultedTime": "2026-09-11T21:48:36+00:00",
+                "runners": [{"runnerNumber": 3, "runnerName": "POP ROX", "finishingPosition": 3}]}
+        wrong = {"raceNumber": 4, "meeting": {"meetingName": "MACKAY", "location": "QLD",
+                                              "raceType": "R", "venueMnemonic": "E"},
+                 "runners": [{"runnerNumber": 3, "runnerName": "ADMITTED", "finishingPosition": 3}]}
+        self.assertFalse(self.api.verified(wrong, meeting, number, venue, typ, True))
+        self.assertTrue(self.api.verified(good, meeting, number, venue, typ, False))
+        urls = []
+        def request(url, *args, **kwargs):
+            urls.append(url)
+            return good if url == good_url else None
+        with patch.object(self.api, "request_once", side_effect=request):
+            self.assertEqual(self.api.race(date, venue, typ, number), good)
+        self.assertEqual(urls, [good_url])
+
+    def test_self_link_must_stay_on_trusted_tab_host(self):
+        bad = "https://example.com/v1/historical-results-service/VIC/racing/2026-09-12/E/G/races/4"
+        self.assertIsNone(self.api.race_self_url(bad, "2026-09-12", "E", "R", 4))
+
     def test_external_self_link_rejected(self):
         self.assertIsNone(self.api.safe_url("https://example.org/evil"))
         self.assertIsNone(self.api.safe_url("http://api.beta.tab.com.au/v1/historical-results-service/VIC/racing/2025-11-04"))
