@@ -95,6 +95,35 @@ class RaceRetrievalTests(unittest.TestCase):
                 self.api.race("2025-11-04", "E", "R", 4)
         self.assertFalse(self.api.verified(wrong, self.meeting, 4, "E", "R", True))
 
+    def test_v1_selected_meeting_disambiguates_duplicate_venue(self):
+        # Day listing contains two meetings with same mnemonic and type.
+        for name, venue, num in (("LOS ALAMITOS", "E", 4),
+                                  ("GOLD COAST", "L", 2),
+                                  ("CARNARVON", "J", 1),
+                                  ("KEMBLA GRANGE", "P", 7)):
+            with self.subTest(name=name):
+                selected = {"meetingName": name, "venueMnemonic": venue,
+                            "raceType": "R", "location": "NSW", "races": []}
+                other = {"meetingName": "OTHER", "venueMnemonic": venue,
+                         "raceType": "R", "location": "VIC", "races": []}
+                self.api.meetings_by_day["2025-11-04"] = [other, selected]
+                self.assertIsNone(self.api.meeting("2025-11-04", venue, "R", num))
+                self.api.require_bet({"eventDate": "2025-11-04", "raceNumber": num,
+                                      "betType": "WIN", "pricingType": "FIXED"}, selected)
+                self.assertIs(self.api.meeting("2025-11-04", venue, "R", num), selected)
+                expected = {"raceNumber": num, "meetingName": name,
+                            "raceStartTime": "2025-11-04T04:30:00Z",
+                            "resultedTime": "2025-11-04T04:40:00Z",
+                            "runners": [{"runnerNumber": 1, "finishingPosition": 1}]}
+                with patch.object(self.api, "request_once", return_value=expected):
+                    self.assertEqual(self.api.race("2025-11-04", venue, "R", num), expected)
+
+    def test_selected_meeting_must_still_exist_on_day(self):
+        self.api.meetings_by_day["2025-11-04"] = [self.meeting]
+        impostor = {"meetingName": "OTHER", "venueMnemonic": "E", "raceType": "R"}
+        self.api.require_bet({"eventDate": "2025-11-04", "raceNumber": 4}, impostor)
+        self.assertIsNone(self.api.meeting("2025-11-04", "E", "R", 4))
+
     def test_jurisdiction_probe_is_bounded(self):
         self.assertEqual(self.api.JURISDICTIONS if hasattr(self.api, "JURISDICTIONS") else (), ())
         incomplete = {"raceNumber": 4, "meetingName": "ECHUCA",
