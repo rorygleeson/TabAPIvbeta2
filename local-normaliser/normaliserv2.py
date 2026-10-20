@@ -106,6 +106,18 @@ class TabHistoricalApiV2(v1.TabHistoricalApi):
             return None
         return matches[0]
 
+    @staticmethod
+    def canonical_location(value):
+        """Normalise known Australian state codes/names without weakening identity."""
+        raw = v1.enrich_norm_text(value)
+        states = {
+            "VIC": "VICTORIA", "NSW": "NEW SOUTH WALES",
+            "QLD": "QUEENSLAND", "SA": "SOUTH AUSTRALIA",
+            "WA": "WESTERN AUSTRALIA", "TAS": "TASMANIA",
+            "NT": "NORTHERN TERRITORY", "ACT": "AUSTRALIAN CAPITAL TERRITORY",
+        }
+        return states.get(raw, raw)
+
     def verified(self, payload, meeting, number, venue, typ, alternative):
         if not isinstance(payload, dict) or v1.enrich_to_int(payload.get("raceNumber")) != number:
             return False
@@ -117,8 +129,8 @@ class TabHistoricalApiV2(v1.TabHistoricalApi):
             return False
         name = norm(payload.get("meetingName") or nested.get("meetingName"))
         expected = norm(meeting.get("meetingName"))
-        loc = norm(payload.get("location") or nested.get("location"))
-        expected_loc = norm(meeting.get("location"))
+        loc = self.canonical_location(payload.get("location") or nested.get("location"))
+        expected_loc = self.canonical_location(meeting.get("location"))
         venue_actual = norm(payload.get("venueMnemonic") or nested.get("venueMnemonic"))
         if name and name != expected:
             return False
