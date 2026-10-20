@@ -24,6 +24,7 @@ class TabHistoricalApiV2(v1.TabHistoricalApi):
         self.v2_cache = {}
         self.url_attempts = {}
         self.active_requirements = {}
+        self.resolved_meetings = {}
 
     @staticmethod
     def self_link(record):
@@ -62,6 +63,7 @@ class TabHistoricalApiV2(v1.TabHistoricalApi):
         key = (str(bet.get("eventDate")), str(meeting.get("venueMnemonic")),
                str(meeting.get("raceType")), number)
         entry = self.active_requirements.setdefault(key, {"runners": set(), "dividends": set()})
+        # Reuse the meeting already selected by V1\u2019s exact resolver. A date\n        # can contain two meetings with the same venue mnemonic; only the\n        # CSV-to-meeting match disambiguates them reliably.\n        self.resolved_meetings[key] = meeting
         runner = v1.enrich_to_int(bet.get("runnerNumber"))
         if runner is not None:
             entry["runners"].add(runner)
@@ -84,6 +86,17 @@ class TabHistoricalApiV2(v1.TabHistoricalApi):
         matches = [m for m in self.meetings_by_day.get(str(date), [])
                    if isinstance(m, dict) and str(m.get("venueMnemonic")) == str(venue)
                    and v1.enrich_norm_text(m.get("raceType")) == v1.enrich_norm_text(typ)]
+        key = (str(date), str(venue), str(typ), number)
+        selected = self.resolved_meetings.get(key)
+        if selected is not None:
+            if any(m is selected or (
+                v1.enrich_norm_text(m.get("meetingName")) == v1.enrich_norm_text(selected.get("meetingName"))
+                and v1.enrich_norm_text(m.get("location")) == v1.enrich_norm_text(selected.get("location"))
+                and str(m.get("venueMnemonic")) == str(venue)
+                and v1.enrich_norm_text(m.get("raceType")) == v1.enrich_norm_text(typ)
+            ) for m in matches):
+                return selected
+            return None
         if len(matches) != 1:
             return None
         return matches[0]
